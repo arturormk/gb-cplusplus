@@ -142,7 +142,32 @@ void print_json(const gb::container::Inspection &inspection) {
     }
     std::cout << json_string(inspection.identity.compatible_brands[index]);
   }
-  std::cout << "]\n  },\n  \"boxes\": [";
+  std::cout << "]\n  },\n  \"tracks\": [";
+  if (!inspection.tracks.empty()) {
+    std::cout << '\n';
+  }
+  for (std::size_t index = 0; index < inspection.tracks.size(); ++index) {
+    const auto &track = inspection.tracks[index];
+    std::cout << "    {\n"
+              << "      \"id\": " << track.id << ",\n"
+              << "      \"handler_type\": " << json_string(track.handler_type) << ",\n"
+              << "      \"handler_name\": " << json_string(track.handler_name) << ",\n"
+              << "      \"codec\": " << json_string(track.codec) << ",\n"
+              << "      \"time_base\": {\"numerator\": " << track.time_base.numerator
+              << ", \"denominator\": " << track.time_base.denominator << "},\n"
+              << "      \"duration_ticks\": " << track.duration_ticks << ",\n"
+              << "      \"sample_count\": " << track.sample_count << ",\n"
+              << "      \"width\": " << track.width << ",\n"
+              << "      \"height\": " << track.height << ",\n"
+              << "      \"channel_count\": " << track.channel_count << ",\n"
+              << "      \"bits_per_sample\": " << track.bits_per_sample << ",\n"
+              << "      \"sample_rate\": " << track.sample_rate << "\n"
+              << "    }" << (index + 1U == inspection.tracks.size() ? "\n" : ",\n");
+  }
+  if (!inspection.tracks.empty()) {
+    std::cout << "  ";
+  }
+  std::cout << "],\n  \"boxes\": [";
   if (!inspection.boxes.empty()) {
     std::cout << '\n';
     for (std::size_t index = 0; index < inspection.boxes.size(); ++index) {
@@ -176,6 +201,24 @@ void print_text(const gb::container::Inspection &inspection) {
   std::cout << "\nboxes:\n";
   for (const auto &box : inspection.boxes) {
     print_box_text(box, 0U);
+  }
+  std::cout << "tracks:\n";
+  for (const auto &track : inspection.tracks) {
+    std::cout << "  id=" << track.id << " handler=" << display_fourcc(track.handler_type)
+              << " codec=" << display_fourcc(track.codec) << " time_base="
+              << track.time_base.numerator << '/' << track.time_base.denominator
+              << " duration_ticks=" << track.duration_ticks << " samples=" << track.sample_count;
+    if (track.width != 0U || track.height != 0U) {
+      std::cout << " geometry=" << track.width << 'x' << track.height;
+    }
+    if (track.channel_count != 0U) {
+      std::cout << " audio=" << track.sample_rate << "Hz/" << track.channel_count
+                << "ch/" << track.bits_per_sample << "bit";
+    }
+    if (!track.handler_name.empty()) {
+      std::cout << " name=" << track.handler_name;
+    }
+    std::cout << '\n';
   }
 }
 

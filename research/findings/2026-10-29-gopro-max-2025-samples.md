@@ -16,3 +16,17 @@ canvas.
 
 Follow-up: `gb-inspect` 0.2.0 now validates the JPEG marker/codestream structure directly and
 reproduces the primary and dependent-preview geometry without ExifTool or ImageMagick.
+
+M1 follow-up: the in-tree container parser now independently reproduces all seven `.360` tracks
+and all five MP4 tracks, including codec FourCC, exact integer time base/duration, sample count,
+video geometry, audio fields, handler name, `gpmd`, and unknown `fdsc`. `gb-metadata` maps all 464
+and 523 `gpmd` samples respectively and inventories GPMF without FFmpeg or ExifTool. Its `GPS5`
+record counts are 8,771 and 9,841, exactly matching ExifTool's embedded GPS occurrences (the MP4
+also has one separate top-level location tag). GPMF accelerometer and gyroscope tuple occurrences
+match ExifTool's 464/464 and 523/523 groups. No coordinate or sensor value was copied into this
+finding.
+
+Both videos encode `GPS5` as repeated big-endian `int32[5]` records with observed divisors
+`[10000000, 10000000, 1000, 1000, 100]` and units `[deg, deg, m, m/s, m/s]`. The documented
+components are latitude, longitude, altitude, 2D speed, and 3D speed. Fix, precision, and UTC are
+carried separately; this storage finding does not itself establish validity or clock alignment.

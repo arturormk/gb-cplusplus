@@ -1,6 +1,6 @@
 # Dependencies
 
-## Required now (M0 / first `gb-inspect` slice)
+## Required now (M0/M1 laboratory tools)
 
 The supported baseline is Ubuntu 22.04 or newer with:
 
@@ -34,3 +34,11 @@ Qt/FFmpeg packages should not be installed merely to build `gb-inspect`.
 
 The project license remains under review as directed by the blueprint. No third-party source code
 is currently vendored or linked.
+
+## GPMF reference review
+
+M1's native parser was checked against the official GoPro GPMF parser at commit
+[`9a7150632892c7356c91145c889016f07b0ed48d`](https://github.com/gopro/gpmf-parser/commit/9a7150632892c7356c91145c889016f07b0ed48d),
+reviewed 2026-10-29. The reference reports parser version 2.1.0 in `GPMF_common.h` and is offered
+under MIT or Apache-2.0. It is a format/behavior reference only: no source is vendored, linked, or
+required to build. FFprobe 4.4.2 and ExifTool 12.40 remain optional independent diagnostic tools.

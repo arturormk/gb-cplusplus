@@ -26,6 +26,151 @@ void append_fourcc(Bytes &bytes, const std::string &value) {
   bytes.insert(bytes.end(), value.begin(), value.end());
 }
 
+void append(Bytes &destination, const Bytes &source) {
+  destination.insert(destination.end(), source.begin(), source.end());
+}
+
+Bytes box(const std::string &type, const Bytes &payload) {
+  Bytes bytes;
+  append_u32(bytes, static_cast<std::uint32_t>(payload.size() + 8U));
+  append_fourcc(bytes, type);
+  append(bytes, payload);
+  return bytes;
+}
+
+Bytes gpmf(const std::string &key, const std::uint8_t type, const std::uint8_t structure_size,
+           const std::uint16_t repeat, const Bytes &payload) {
+  Bytes bytes;
+  append_fourcc(bytes, key);
+  bytes.push_back(type);
+  bytes.push_back(structure_size);
+  append_u16(bytes, repeat);
+  append(bytes, payload);
+  while ((bytes.size() % 4U) != 0U) {
+    bytes.push_back(0U);
+  }
+  return bytes;
+}
+
+Bytes metadata_payload() {
+  Bytes stream;
+  append(stream, gpmf("STNM", 'c', 1U, 5U, {'A', 'c', 'c', 'e', 'l'}));
+  Bytes scales;
+  append_u32(scales, 100U);
+  append_u32(scales, 100U);
+  append_u32(scales, 100U);
+  append(stream, gpmf("SCAL", 'l', 4U, 3U, scales));
+  append(stream, gpmf("SIUN", 'c', 3U, 3U, {'m', '/', 's', 'm', '/', 's', 'm', '/', 's'}));
+  Bytes acceleration;
+  for (const std::uint16_t value :
+       std::vector<std::uint16_t>{100U, 200U, 300U, 400U, 500U, 600U}) {
+    append_u16(acceleration, value);
+  }
+  append(stream, gpmf("ACCL", 's', 6U, 2U, acceleration));
+  append(stream, gpmf("ZZZZ", 'B', 1U, 2U, {0xaaU, 0xbbU}));
+
+  Bytes gps_stream;
+  append(gps_stream, gpmf("STNM", 'c', 1U, 3U, {'G', 'P', 'S'}));
+  Bytes gps_scales;
+  for (const std::uint32_t value :
+       std::vector<std::uint32_t>{10'000'000U, 10'000'000U, 1000U, 1000U, 100U}) {
+    append_u32(gps_scales, value);
+  }
+  append(gps_stream, gpmf("SCAL", 'l', 4U, 5U, gps_scales));
+  append(gps_stream,
+         gpmf("UNIT", 'c', 3U, 5U,
+              {'d', 'e', 'g', 'd', 'e', 'g', 'm', 0U, 0U, 'm', '/', 's', 'm', '/', 's'}));
+  Bytes gps;
+  append_u32(gps, 401'234'567U);
+  append_u32(gps, static_cast<std::uint32_t>(-31'234'567));
+  append_u32(gps, 721'304U);
+  append_u32(gps, 2'184U);
+  append_u32(gps, 230U);
+  append(gps_stream, gpmf("GPS5", 'l', 20U, 1U, gps));
+
+  Bytes device;
+  Bytes id;
+  append_u32(id, 1U);
+  append(device, gpmf("DVID", 'L', 4U, 1U, id));
+  append(device, gpmf("STRM", 0U, 1U, static_cast<std::uint16_t>(stream.size()), stream));
+  append(device,
+         gpmf("STRM", 0U, 1U, static_cast<std::uint16_t>(gps_stream.size()), gps_stream));
+  return gpmf("DEVC", 0U, 1U, static_cast<std::uint16_t>(device.size()), device);
+}
+
+Bytes metadata_mp4() {
+  Bytes file;
+  Bytes ftyp;
+  append_fourcc(ftyp, "isom");
+  append_u32(ftyp, 0U);
+  append_fourcc(ftyp, "isom");
+  append(file, box("ftyp", ftyp));
+
+  const auto payload = metadata_payload();
+  append(file, box("mdat", payload));
+  const auto sample_offset = 28U;
+
+  Bytes tkhd(84U, 0U);
+  tkhd[15] = 1U;
+
+  Bytes mdhd(24U, 0U);
+  mdhd[14] = 3U;
+  mdhd[15] = 0xe8U;
+  mdhd[18] = 3U;
+  mdhd[19] = 0xe8U;
+
+  Bytes hdlr(24U, 0U);
+  hdlr[8] = 'm';
+  hdlr[9] = 'e';
+  hdlr[10] = 't';
+  hdlr[11] = 'a';
+
+  Bytes entry;
+  append_u32(entry, 16U);
+  append_fourcc(entry, "gpmd");
+  entry.resize(16U, 0U);
+  Bytes stsd(4U, 0U);
+  append_u32(stsd, 1U);
+  append(stsd, entry);
+
+  Bytes stts(4U, 0U);
+  append_u32(stts, 1U);
+  append_u32(stts, 1U);
+  append_u32(stts, 1000U);
+
+  Bytes stsc(4U, 0U);
+  append_u32(stsc, 1U);
+  append_u32(stsc, 1U);
+  append_u32(stsc, 1U);
+  append_u32(stsc, 1U);
+
+  Bytes stsz(4U, 0U);
+  append_u32(stsz, 0U);
+  append_u32(stsz, 1U);
+  append_u32(stsz, static_cast<std::uint32_t>(payload.size()));
+
+  Bytes stco(4U, 0U);
+  append_u32(stco, 1U);
+  append_u32(stco, sample_offset);
+
+  Bytes stbl;
+  append(stbl, box("stsd", stsd));
+  append(stbl, box("stts", stts));
+  append(stbl, box("stsc", stsc));
+  append(stbl, box("stsz", stsz));
+  append(stbl, box("stco", stco));
+  Bytes minf = box("stbl", stbl);
+  Bytes mdia;
+  append(mdia, box("mdhd", mdhd));
+  append(mdia, box("hdlr", hdlr));
+  append(mdia, box("minf", minf));
+  Bytes trak;
+  append(trak, box("tkhd", tkhd));
+  append(trak, box("mdia", mdia));
+  append(file, box("moov", box("trak", trak)));
+  return file;
+}
+
 void write(const std::filesystem::path &path, const Bytes &bytes) {
   std::ofstream output(path, std::ios::binary);
   output.write(reinterpret_cast<const char *>(bytes.data()),
@@ -80,6 +225,7 @@ int main(const int argc, char **argv) {
 
     write(directory / "valid-image.bin", minimal_jpeg());
     write(directory / "corrupt-image.bin", {0xffU, 0xd8U, 0xffU, 0xe1U, 0xffU, 0xffU});
+    write(directory / "metadata.mp4", metadata_mp4());
     return 0;
   } catch (const std::exception &error) {
     std::cerr << error.what() << '\n';

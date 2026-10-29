@@ -17,7 +17,14 @@ box extending to the end of its parent. No camera media or location data is stor
 and an appended preview codestream. It covers valid geometry/signatures, truncated and malicious
 segment sizes, and a missing end-of-image marker.
 
-The test suite also invokes `gb-inspect --help` and `--version`, generates isolated ISO BMFF and
-JPEG CLI fixtures, checks both JSON schema IDs, and verifies that corrupt inputs fail. Future work
-should add full JSON Schema validation, fuzzing, sanitizers, and curated public or fingerprint-only
-regression cases derived from real camera evidence.
+`gb_metadata_tests` covers nested KLV parsing, big-endian primitive decoding, component scaling and
+units, unknown-key raw preservation, and truncated-record rejection. The CLI fixture builds a
+complete synthetic `gpmd` track with `stsd`/`stts`/`stsc`/`stsz`/`stco`; integration tests verify
+both inventory and detailed-sample JSON schemas without private media.
+Friendly-text integration fixtures also verify labeled `GPS5` components, explicit unknown-key
+marking, key filtering, and opt-in whole-track value output.
+
+The test suite also invokes both tools' `--help` and `--version`, generates isolated ISO BMFF,
+GPMF, and JPEG CLI fixtures, checks all JSON schema IDs, and verifies that corrupt inputs fail.
+Future work should add full JSON Schema validation, fuzzing, sanitizers, and curated public or
+fingerprint-only regression cases derived from real camera evidence.

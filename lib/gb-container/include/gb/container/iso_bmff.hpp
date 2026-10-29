@@ -24,11 +24,40 @@ struct FileIdentity {
   std::vector<std::string> compatible_brands;
 };
 
+struct Rational {
+  std::uint64_t numerator{1};
+  std::uint64_t denominator{1};
+};
+
+struct SampleReference {
+  std::uint64_t offset{};
+  std::uint32_t size{};
+  std::uint64_t decode_time{};
+  std::uint32_t duration{};
+};
+
+struct Track {
+  std::uint32_t id{};
+  std::string handler_type;
+  std::string handler_name;
+  std::string codec;
+  Rational time_base;
+  std::uint64_t duration_ticks{};
+  std::uint32_t sample_count{};
+  std::uint16_t width{};
+  std::uint16_t height{};
+  std::uint16_t channel_count{};
+  std::uint16_t bits_per_sample{};
+  std::uint32_t sample_rate{};
+  std::vector<SampleReference> samples;
+};
+
 struct Inspection {
   std::filesystem::path path;
   std::uint64_t file_size{};
   FileIdentity identity;
   std::vector<Box> boxes;
+  std::vector<Track> tracks;
 };
 
 enum class ErrorKind { missing, io, unsupported, corrupt };
@@ -46,6 +75,9 @@ private:
 };
 
 [[nodiscard]] Inspection inspect_iso_bmff(const std::filesystem::path &path);
+[[nodiscard]] std::vector<std::uint8_t> read_sample(const std::filesystem::path &path,
+                                                    const SampleReference &sample,
+                                                    std::uint32_t maximum_size = 16U * 1024U * 1024U);
 [[nodiscard]] std::string error_kind_name(ErrorKind kind);
 
 } // namespace gb::container

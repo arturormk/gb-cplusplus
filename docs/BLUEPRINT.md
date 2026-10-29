@@ -363,12 +363,22 @@ For each finding, cite the tool version/commit, test file fingerprint (hash wher
 
 ### M0 — Build/repository baseline
 
+**Status: Complete (2026-10-29).** The fresh-checkout gate is covered by the pinned Ubuntu 22.04
+CI build and was independently reverified with an out-of-tree GCC 11.4 build, warnings as errors,
+and all tests passing without private camera samples. M1 has since completed.
+
 - Working CMake/Ninja C++20 Linux build, test harness (`ctest`), formatter/linter configuration, README and contribution guidance.
 - Dependency discovery and pinned/versioned requirements.
 - Minimal `gb-inspect --help`, CI build, and at least one parser test.
 - **Gate:** fresh checkout builds and tests without private camera samples.
 
 ### M1 — Container + metadata laboratory (highest priority)
+
+**Status: Complete (2026-10-29).** `gb-inspect` independently reproduces the fingerprinted MAX
+2025 video track topologies checked against FFprobe. `gb-metadata` maps every `gpmd` payload,
+preserves raw/unknown GPMF, reports normalized primitives and timing provenance, and matches
+ExifTool's privacy-safe embedded GPS and sensor occurrence counts. Synthetic fixtures cover
+unknown, scaled, truncated, and sample-table behavior without private media. M2 is next.
 
 - Independently usable `gb-inspect` and `gb-metadata`.
 - Real .360 structure documented and checked against `ffprobe`.

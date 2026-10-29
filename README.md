@@ -1,12 +1,14 @@
 # gb-cplusplus
 
 `gb-cplusplus` is the C++20/Linux implementation of an independent open-source toolkit for
-advanced GoPro camera users. The first deliverable is `gb-inspect`, a read-only ISO Base Media
-File Format (ISO BMFF) and JPEG structure inspector. GoBro is a provisional public-facing name and
-is not affiliated with, endorsed by, or sponsored by GoPro.
+advanced GoPro camera users. Its current laboratory tools are `gb-inspect`, a read-only ISO Base
+Media File Format (ISO BMFF) and JPEG structure inspector, and `gb-metadata`, a loss-aware timed
+GPMF inspector. GoBro is a provisional public-facing name and is not affiliated with, endorsed by,
+or sponsored by GoPro.
 
-The project is at its first laboratory milestone. It does **not** yet claim support for the GoPro
-MAX (2025) `.360` stream topology; that requires evidence from original sample media.
+The M0 baseline and M1 container/metadata laboratory are complete; M2 telemetry and timing is
+next. Support claims remain limited to the fingerprinted GoPro MAX (2025) samples documented
+under `research/` and do not yet include native video reconstruction or playback.
 
 ## Build and test
 
@@ -38,11 +40,19 @@ No Qt, FFmpeg, camera SDK, network access, or private media is required for this
 build/dev/tools/gb-inspect/gb-inspect recording.360
 build/dev/tools/gb-inspect/gb-inspect --json recording.360
 build/dev/tools/gb-inspect/gb-inspect --help
+build/dev/tools/gb-metadata/gb-metadata recording.360
+build/dev/tools/gb-metadata/gb-metadata --sample 0 --key GPS5 recording.360
+build/dev/tools/gb-metadata/gb-metadata --values --key GPS5 recording.360
+build/dev/tools/gb-metadata/gb-metadata --json --sample 0 recording.360
 ```
 
 The tool reads the source only, reports checked byte offsets and lengths, and never extracts or
 modifies payloads. ISO BMFF JSON uses `gb.inspect/v1`; JPEG JSON uses `gb.inspect.jpeg/v1`.
 Diagnostics go to stderr.
+
+Metadata inventory JSON uses `gb.metadata/v1`; selected GPMF samples use
+`gb.metadata.sample/v1`. See [`tools/gb-metadata/README.md`](tools/gb-metadata/README.md) for raw
+payload export and current limitations.
 
 ## Scope and project guidance
 

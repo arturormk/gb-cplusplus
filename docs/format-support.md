@@ -8,6 +8,14 @@
   container boxes.
 - UUID box header accounting.
 - Lossless FourCC bytes, byte offsets, total sizes, and header sizes in JSON.
+- ISO BMFF track IDs, handler types/names, codecs, integer duration/time bases, sample counts,
+  video geometry, and basic audio sample-entry fields.
+- Bounded `stsd`, `stts`, `stsc`, `stsz`, `stco`, and `co64` parsing; byte-accurate `gpmd` sample
+  references.
+- Nested GPMF KLV records, primitive big-endian types, raw bytes, `SCAL` normalization,
+  `SIUN`/`UNIT`, occurrence/record counts, sample ranges, estimated rates, and unknown keys.
+- Friendly per-sample and key-filtered value rendering, including documented `GPS5` component
+  labels, encoded values, normalized values, units, and explicit unknown-semantics warnings.
 - Content-based JPEG detection with checked marker and entropy termination parsing.
 - JPEG dimensions, precision, component count, and directly appended codestream enumeration.
 - Structural detection of JFIF, EXIF, XMP, MPF and APP6 payloads without interpreting private
@@ -24,8 +32,10 @@ evidence, not a claim that the current library decodes those streams or supports
 ## Not implemented
 
 - Native decoding/reconstruction of the observed GoPro MAX (2025) `.360` topology.
-- Track, codec, sample table, timing, GPMF, EXIF, XMP, MPF, or APP6 metadata decoding.
-- Payload extraction, fragmented-media semantics, HEIF item interpretation, or file repair.
+- Fragmented-media sample mapping, edit lists, composition timing, multiple sample descriptions,
+  compressed/complex GPMF values, EXIF, XMP, MPF, or APP6 metadata decoding.
+- General payload extraction, HEIF item interpretation, or file repair. Raw `gpmd` sample export is
+  explicitly supported by `gb-metadata`.
 
 The observed topology has been independently cross-checked with FFprobe and ExifTool. General MAX
 support remains unverified beyond the fingerprinted samples, and playback/reconstruction is not

@@ -136,9 +136,31 @@ ExifTool's embedded scan (`-ee`) confirms both `gpmd` tracks carry:
 | `GH050083.MP4` | 523 | 9,841 | 523 | 523 | 9,414 |
 
 An “accelerometer group” or “gyroscope group” may contain an array of readings, so these counts
-are not sensor sample rates. Precise GPMF types, scales, units, nesting, gaps, and clock mapping
-still need a loss-aware parser. GPS coordinates were inspected only to establish presence and
-were not copied into this report.
+are not sensor sample rates. M1 now inventories precise GPMF types, scales, units, nesting, and
+integer media timing; gap policy and capture/UTC clock mapping remain M2 work. GPS coordinates
+were inspected only to establish presence and were not copied into this report.
+
+#### Verified `GPS5` storage layout
+
+The native M1 parser establishes the same `GPS5` storage layout in both video samples. Each record
+is a 20-byte structure containing five big-endian signed 32-bit integers. The enclosing stream
+supplies these `SCAL` divisors and units, in order:
+
+| Component | Meaning | Divisor | Unit |
+|---:|---|---:|---|
+| 0 | latitude | 10,000,000 | degrees |
+| 1 | longitude | 10,000,000 | degrees |
+| 2 | altitude | 1,000 | metres |
+| 3 | 2D speed | 1,000 | metres/second |
+| 4 | 3D speed | 100 | metres/second |
+
+The component meanings follow the reviewed
+[official GoPro GPMF reference](../dependencies.md#gpmf-reference-review); the raw type, structure
+size, divisors, units, and repetition were independently observed in both fingerprinted samples.
+For example, their first payloads contain 18 and 19 `GPS5` records respectively. The record count
+varies between payloads, so it must not be assumed to be constant. `GPSF`, `GPSP`, and `GPSU` are
+separate sibling records; `GPS5` alone does not establish fix validity, precision, UTC alignment,
+or a gap policy. Those interpretations belong to the M2 telemetry/timing work.
 
 ## JPEG findings
 
@@ -227,3 +249,37 @@ sha256sum __stuff/GS040047.360 __stuff/GH050083.MP4 \
    reporting discrepancy from raw sample descriptions.
 8. Acquire additional files for other resolutions, frame rates, GPS-disabled cases, chapter
    boundaries, low-light modes, and firmware versions before generalizing.
+
+## M1 native-tool validation
+
+The M1 implementation completed the first four implementation consequences above. On both videos,
+`gb-inspect` now reproduces FFprobe's track count, track order, codec FourCC, time base, integer
+duration, sample count, handler role/name, and video geometry. It preserves `fdsc` as an unknown
+metadata track and reports the raw PCM sample-entry value (16 bits), leaving the previously noted
+FFprobe/ExifTool interpretation disagreement unresolved rather than choosing one report.
+
+`gb-metadata` maps `gpmd` through the ISO BMFF sample tables and parsed every payload in both files.
+The privacy-safe count comparison was:
+
+| File | GPMF payloads | `GPS5` records | ExifTool embedded GPS | ACCL/GYRO tuple occurrences |
+|---|---:|---:|---:|---:|
+| `GS040047.360` | 464 | 8,771 | 8,771 | 464 / 464 |
+| `GH050083.MP4` | 523 | 9,841 | 9,841 | 523 / 523 |
+
+ExifTool also reports one MP4-level location value for `GH050083.MP4`; it is not part of the GPMF
+count. The native inventory additionally preserves unknown keys and complex/compressed raw values,
+reports `SCAL`-normalized primitives with units, and exposes integer sample ticks. Approximate
+warm-cache inventory measurements were 2.7 seconds / 4.7 MiB for the `.360` and 1.5 seconds /
+4.5 MiB for the MP4 on the development machine. These measurements are not performance promises.
+
+Reproduction:
+
+```sh
+build/dev/tools/gb-inspect/gb-inspect __stuff/GS040047.360
+build/dev/tools/gb-metadata/gb-metadata __stuff/GS040047.360
+build/dev/tools/gb-metadata/gb-metadata --json --sample 0 __stuff/GS040047.360
+build/dev/tools/gb-metadata/gb-metadata --sample 0 --key GPS5 __stuff/GS040047.360
+```
+
+The last command prints private coordinates to the terminal. Do not capture or publish its output
+without an explicit privacy review. Use the default inventory when values are not required.
