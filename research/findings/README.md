@@ -1,7 +1,9 @@
 # Research findings
 
-No real GoPro MAX (2025) sample has been inspected yet. Consequently, all claims about its `.360`
-container, streams, codecs, metadata, timing, and projection remain **unverified**.
+Five private GoPro MAX (2025) samples have been inspected read-only. Confirmed, privacy-safe
+findings and evidence hashes are maintained in
+[`2026-10-29-gopro-max-2025-samples.md`](2026-10-29-gopro-max-2025-samples.md); claims remain
+limited to those files and their observed modes/firmware.
 
 For each future finding, create a focused Markdown report containing:
 

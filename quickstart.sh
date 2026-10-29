@@ -53,6 +53,12 @@ missing_packages=()
 command -v c++ >/dev/null 2>&1 || missing_packages+=(build-essential)
 command -v cmake >/dev/null 2>&1 || missing_packages+=(cmake)
 command -v ninja >/dev/null 2>&1 || missing_packages+=(ninja-build)
+command -v pkg-config >/dev/null 2>&1 || missing_packages+=(pkg-config)
+command -v ffmpeg >/dev/null 2>&1 || missing_packages+=(ffmpeg)
+if ! command -v pkg-config >/dev/null 2>&1 ||
+   ! pkg-config --exists libavformat libavcodec libavutil libswscale; then
+  missing_packages+=(libavformat-dev libavcodec-dev libavutil-dev libswscale-dev)
+fi
 
 if ((${#missing_packages[@]} > 0)); then
   printf 'Missing required build packages: %s\n' "${missing_packages[*]}"
@@ -63,7 +69,7 @@ if ((${#missing_packages[@]} > 0)); then
   fi
   if ! command -v apt-get >/dev/null 2>&1; then
     printf 'Automatic installation currently supports apt-get-based systems only.\n' >&2
-    printf 'Install a C++20 compiler, CMake 3.22+, and Ninja 1.10+, then rerun.\n' >&2
+    printf 'Install a C++20 compiler, CMake 3.22+, Ninja 1.10+, pkg-config, and FFmpeg development libraries, then rerun.\n' >&2
     exit 1
   fi
 

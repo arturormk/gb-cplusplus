@@ -37,3 +37,16 @@ reports one-record timing uncertainty for the uniform within-payload assignment.
 sample tables are decode-continuous; adjacent GPSU versus media deltas differ by at most 61 ms in
 both samples. Selected beginning, middle, and ending ticks were checked without copying private
 positions or UTC values into this finding.
+
+M3 `gb-frames` follow-up (2026-10-30): FFmpeg 4.4.2 software-decodes both 4096×1344 HEVC streams
+directly from the original `.360`. At media times 5 s and 120 s, both selected frames have the
+exact requested PTS (`450000` and `10800000` respectively), duration 3600 ticks, and time base
+1/90000. PNG extraction preserves the reported full-range BT.709 source description.
+
+The CPU pseudo-EAC reference was visually checked at both times. It produces continuous mapped
+content for the available faces but exposes a large missing BACK region. A diagnostic thirds scan
+of the decoded stream-5 frame at 5 s found its center third essentially black while its outer
+thirds contain image data; this is present before projection and is not caused by PNG encoding.
+Swapping the stream order does not recover the face. The cause may be capture-mode/layout metadata
+or an unavailable source face; it is not yet established. `gb-frames` deliberately leaves the
+region visible instead of synthesizing pixels, so the full M3 panorama gate remains open.

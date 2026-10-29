@@ -6,9 +6,8 @@ timestamped GPS telemetry, and diagnose media/GPS clock relationships. GoBro is 
 public-facing name and is not affiliated with, endorsed by, or sponsored by GoPro.
 
 The M0 baseline, M1 container/metadata laboratory, and M2 telemetry/timing laboratory are
-complete; M3 native video reconstruction is next. Support claims remain limited to the
-fingerprinted GoPro MAX (2025) samples documented under `research/` and do not yet include native
-video reconstruction or playback.
+complete. The `gb-frames` slice of M3 now provides native stream decoding and an experimental CPU
+reconstruction reference; the full M3 navigable-panorama gate and `gb-project` remain open.
 
 ## Build and test
 
@@ -24,7 +23,8 @@ and prints their paths relative to the directory from which it was invoked. Use
 `./quickstart.sh --help` for automation-friendly options.
 
 To run the individual build steps manually on Ubuntu 22.04 or newer, install `build-essential`,
-`cmake`, and `ninja-build`, then run:
+`cmake`, `ninja-build`, `pkg-config`, `ffmpeg`, and the FFmpeg development packages listed in
+[`docs/dependencies.md`](docs/dependencies.md), then run:
 
 ```sh
 cmake --preset dev
@@ -32,8 +32,8 @@ cmake --build --preset dev
 ctest --preset dev
 ```
 
-No Qt, FFmpeg, camera SDK, network access, or private media is required for these milestones. See
-[`docs/dependencies.md`](docs/dependencies.md) for exact current requirements.
+No Qt, camera SDK, network access, or private media is required. FFmpeg is now required for
+`gb-frames`; see [`docs/dependencies.md`](docs/dependencies.md) for exact versions and packages.
 
 ## Use
 
@@ -48,6 +48,10 @@ build/dev/tools/gb-metadata/gb-metadata --json --sample 0 recording.360
 build/dev/tools/gb-telemetry/gb-telemetry --format json recording.360
 build/dev/tools/gb-telemetry/gb-telemetry --format gpx recording.360 > route.gpx
 build/dev/tools/gb-time/gb-time --json --at 5000 recording.360
+build/dev/tools/gb-frames/gb-frames --list --json recording.360
+build/dev/tools/gb-frames/gb-frames --stream 0 --time 5 --output stream-0.png recording.360
+build/dev/tools/gb-frames/gb-frames --reconstruct --stream 0 --stream 5 \
+  --time 5 --output panorama.png recording.360
 ```
 
 The tool reads the source only, reports checked byte offsets and lengths, and never extracts or
@@ -61,6 +65,10 @@ payload export and current limitations.
 Telemetry JSON uses `gb.telemetry/v1`; timing diagnostics use `gb.time/v1`. GPS exports preserve
 integer media ticks, units, fix validity, DOP, provenance, gaps, and timing uncertainty. See the
 individual tool READMEs for the policies used by GPX/GeoJSON and media-to-UTC mapping.
+
+Frame reports use `gb.frames.streams/v1` and `gb.frames/v1`, retaining integer PTS/time bases and
+source color metadata. The CPU reconstruction is diagnostic and does not yet satisfy M3's full
+navigable-panorama gate; see [`tools/gb-frames/README.md`](tools/gb-frames/README.md).
 
 ## Scope and project guidance
 

@@ -13,9 +13,13 @@ target_link_libraries(gb_test_fixture_writer PRIVATE gb_project_options)
 add_executable(gb_telemetry_tests unit/telemetry_test.cpp)
 target_link_libraries(gb_telemetry_tests PRIVATE gb::telemetry gb_project_options)
 
+add_executable(gb_media_tests unit/media_test.cpp)
+target_link_libraries(gb_media_tests PRIVATE gb::media gb_project_options)
+
 add_test(NAME gb_container_tests COMMAND gb_container_tests)
 add_test(NAME gb_image_tests COMMAND gb_image_tests)
 add_test(NAME gb_metadata_tests COMMAND gb_metadata_tests)
+add_test(NAME gb_media_tests COMMAND gb_media_tests)
 add_test(NAME gb_inspect_help COMMAND gb_inspect --help)
 add_test(NAME gb_inspect_version COMMAND gb_inspect --version)
 add_test(NAME gb_metadata_help COMMAND gb_metadata_tool --help)
@@ -24,11 +28,56 @@ add_test(NAME gb_telemetry_help COMMAND gb_telemetry_tool --help)
 add_test(NAME gb_telemetry_version COMMAND gb_telemetry_tool --version)
 add_test(NAME gb_time_help COMMAND gb_time_tool --help)
 add_test(NAME gb_time_version COMMAND gb_time_tool --version)
+add_test(NAME gb_frames_help COMMAND gb_frames --help)
+add_test(NAME gb_frames_version COMMAND gb_frames --version)
 
 set(GB_CLI_FIXTURE_DIR "${CMAKE_CURRENT_BINARY_DIR}/cli-fixtures")
 add_test(NAME gb_cli_fixture_setup
   COMMAND gb_test_fixture_writer "${GB_CLI_FIXTURE_DIR}")
 set_tests_properties(gb_cli_fixture_setup PROPERTIES FIXTURES_SETUP gb_cli_media)
+
+find_program(GB_FFMPEG_EXECUTABLE ffmpeg REQUIRED)
+add_test(NAME gb_frames_fixture_setup
+  COMMAND "${GB_FFMPEG_EXECUTABLE}" -v error
+    -f lavfi -i color=c=red:s=96x32:r=2:d=1
+    -f lavfi -i color=c=blue:s=96x32:r=2:d=1
+    -map 0:v -map 1:v -c:v mpeg4 -y "${GB_CLI_FIXTURE_DIR}/two-video.mp4")
+set_tests_properties(gb_frames_fixture_setup PROPERTIES
+  FIXTURES_REQUIRED gb_cli_media
+  FIXTURES_SETUP gb_frames_media)
+
+add_test(NAME gb_frames_list_json
+  COMMAND gb_frames --list --json "${GB_CLI_FIXTURE_DIR}/two-video.mp4")
+set_tests_properties(gb_frames_list_json PROPERTIES
+  FIXTURES_REQUIRED gb_frames_media
+  PASS_REGULAR_EXPRESSION
+    "gb.frames.streams/v1.*video_streams.*index.*0.*index.*1")
+
+add_test(NAME gb_frames_extract_json
+  COMMAND gb_frames --json --stream 1 --time 00:00:00.5 --force
+    --output "${GB_CLI_FIXTURE_DIR}/stream-1.png"
+    "${GB_CLI_FIXTURE_DIR}/two-video.mp4")
+set_tests_properties(gb_frames_extract_json PROPERTIES
+  FIXTURES_REQUIRED gb_frames_media
+  PASS_REGULAR_EXPRESSION
+    "gb.frames/v1.*stream_index.*1.*pixel_format.*rgb24")
+
+add_test(NAME gb_frames_reconstruct_json
+  COMMAND gb_frames --json --reconstruct --time 0.5 --width 64 --height 32 --overlap 1
+    --force --output "${GB_CLI_FIXTURE_DIR}/panorama.ppm"
+    "${GB_CLI_FIXTURE_DIR}/two-video.mp4")
+set_tests_properties(gb_frames_reconstruct_json PROPERTIES
+  FIXTURES_REQUIRED gb_frames_media
+  PASS_REGULAR_EXPRESSION
+    "max_eac_to_equirectangular_cpu_reference.*stream_index.*0.*stream_index.*1.*equirectangular")
+
+add_test(NAME gb_frames_refuses_source_overwrite
+  COMMAND gb_frames --force --stream 0
+    --output "${GB_CLI_FIXTURE_DIR}/two-video.mp4"
+    "${GB_CLI_FIXTURE_DIR}/two-video.mp4")
+set_tests_properties(gb_frames_refuses_source_overwrite PROPERTIES
+  FIXTURES_REQUIRED gb_frames_media
+  WILL_FAIL TRUE)
 
 add_test(NAME gb_telemetry_tests
   COMMAND gb_telemetry_tests "${GB_CLI_FIXTURE_DIR}/metadata.mp4")

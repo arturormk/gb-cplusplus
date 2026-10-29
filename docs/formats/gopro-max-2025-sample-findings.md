@@ -250,6 +250,33 @@ sha256sum __stuff/GS040047.360 __stuff/GH050083.MP4 \
 8. Acquire additional files for other resolutions, frame rates, GPS-disabled cases, chapter
    boundaries, low-light modes, and firmware versions before generalizing.
 
+## M3 frame-decode follow-up (2026-10-30)
+
+`gb-frames` 0.5.0 directly enumerates and software-decodes both HEVC streams through FFmpeg 4.4.2.
+At 5 s and 120 s, both tracks select the exact requested integer PTS and report equal 3600-tick
+frame durations on their 1/90000 time bases. Separate PNGs, raw RGB24, and schema-versioned color
+and timing reports require no intermediate conversion.
+
+The tested CPU pseudo-EAC transform follows the documented 4096×1344 strip geometry and 64-pixel
+overlap. Visual checks at both timestamps reveal a missing BACK region because the center third of
+decoded stream 5 is already near-black; its outer thirds contain data. Swapping stream order does
+not restore the region. This observation is confirmed for this file, but its cause is not: capture
+mode, calibration/layout metadata, and decoder behavior remain candidates. The implementation
+does not fill the region, and no complete-panorama support claim is made.
+
+Reproduction without publishing images:
+
+```sh
+build/dev/tools/gb-frames/gb-frames --list --json __stuff/GS040047.360
+build/dev/tools/gb-frames/gb-frames --json --stream 0 --time 5 \
+  --output /tmp/stream0.png __stuff/GS040047.360
+build/dev/tools/gb-frames/gb-frames --json --stream 5 --time 5 \
+  --output /tmp/stream5.png __stuff/GS040047.360
+build/dev/tools/gb-frames/gb-frames --json --reconstruct --stream 0 --stream 5 \
+  --time 120 --width 2048 --height 1024 --output /tmp/panorama.png \
+  __stuff/GS040047.360
+```
+
 ## M1 native-tool validation
 
 The M1 implementation completed the first four implementation consequences above. On both videos,

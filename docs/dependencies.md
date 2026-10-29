@@ -1,22 +1,27 @@
 # Dependencies
 
-## Required now (M0/M1/M2 laboratory tools)
+## Required now (M0/M1/M2 and the `gb-frames` M3 slice)
 
 The supported baseline is Ubuntu 22.04 or newer with:
 
 - a C++20 compiler: GCC 11.4+ or Clang 14+;
 - CMake 3.22+;
 - Ninja 1.10+; and
+- pkg-config; and
+- FFmpeg 4.4+ development/runtime packages providing libavformat 58+, libavcodec 58+, libavutil
+  56+, and libswscale 5+; and
 - the C++ standard library supplied with the compiler.
 
 Exact Ubuntu packages:
 
 ```sh
 sudo apt update
-sudo apt install build-essential cmake ninja-build
+sudo apt install build-essential cmake ninja-build pkg-config ffmpeg \
+  libavformat-dev libavcodec-dev libavutil-dev libswscale-dev
 ```
 
-The build has no downloaded dependencies and the executable has no non-system runtime dependency.
+The build has no downloaded dependencies. The M0-M2 tools retain no non-system runtime
+dependency; `gb-frames` dynamically uses the packaged FFmpeg libraries.
 The versions above match the initial verified development environment; CI should continuously
 exercise the oldest supported baseline.
 
@@ -27,13 +32,24 @@ infrastructure only and is not a build or runtime dependency of `gb-inspect`.
 
 ## Explicitly not required yet
 
-Qt, FFmpeg, ExifTool, the GoPro GPMF parser, and map/rendering libraries are candidates for later
-milestones, not M0 dependencies. Their current APIs, versions, build requirements, enabled
-features, and licenses must be reviewed and recorded before they enter the build. In particular,
-Qt/FFmpeg packages should not be installed merely to build `gb-inspect`.
+Qt, ExifTool, the GoPro GPMF parser, and map/rendering libraries are not runtime dependencies.
+FFmpeg is required by the current all-target build for `gb-frames`, but remains unnecessary when
+building the earlier library/tool targets in isolation.
 
 The project license remains under review as directed by the blueprint. No third-party source code
-is currently vendored or linked.
+is vendored. `gb_media` links the system FFmpeg shared libraries; binary redistribution must
+review the selected FFmpeg build configuration and LGPL/GPL obligations.
+
+## FFmpeg review
+
+The implementation is compiled and tested against Ubuntu 22.04 FFmpeg 4.4.2. It uses only public
+libavformat/libavcodec/libavutil/libswscale APIs and the packaged PNG/HEVC/MPEG-4 decoders or
+encoder exercised by tests and private validation. The 2024 `gopromax_opencl` proposal was
+reviewed as format research; it is not present in that build and no FFmpeg source is vendored.
+Primary references reviewed: the
+[FFmpeg v4 filter proposal](https://ffmpeg.org/pipermail/ffmpeg-devel/2024-August/331984.html),
+[GoPro's EAC packing description](https://gopro.com/en/ca/news/max-tech-specs-stitching-resolution),
+and the Apache-2.0 [max2sphere reference](https://github.com/trek-view/max2sphere).
 
 ## GPMF reference review
 

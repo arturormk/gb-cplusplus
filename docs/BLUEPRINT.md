@@ -403,6 +403,13 @@ next.
 
 ### M3 — Native video reconstruction laboratory
 
+**Status: In progress (2026-10-30).** `gb-frames` now directly enumerates and decodes either
+fingerprinted HEVC stream with exact integer PTS/color reporting and provides a tested CPU
+pseudo-EAC reconstruction reference. Real-sample inspection found a near-black packed face in
+the second stream, which the reference transform exposes as a missing BACK region. The cause,
+complete navigable panorama, and `gb-project` visual laboratory remain open; the M3 gate is not
+yet satisfied.
+
 - `gb-frames` extracts both original video streams; reconstructed panoramic stills from multiple timestamps.
 - `gb-project` visual comparison of raw, reconstructed and virtual-camera views.
 - Document projection transforms, stitching seams, limitations and whether `.360` photos require distinct handling.

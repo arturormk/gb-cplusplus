@@ -30,7 +30,12 @@ metadata track with no GPS. Integration tests exercise JSON, CSV, GPX, GeoJSON, 
 and nearest-record lookup. Invalid points are retained in loss-aware JSON/CSV and omitted from GPS
 route formats by default.
 
-The test suite also invokes all four tools' `--help` and `--version`, generates isolated ISO BMFF,
+`gb_media_tests` checks bounded pseudo-EAC reconstruction, both source-strip participation, color
+preservation for constant synthetic faces, and geometry rejection. FFmpeg generates a two-video
+MPEG-4 fixture during CTest; integration tests list both streams, select stream 1 at a timestamp,
+encode PNG, and reconstruct a PPM without requiring private media.
+
+The test suite also invokes all five tools' `--help` and `--version`, generates isolated ISO BMFF,
 GPMF, and JPEG CLI fixtures, checks all JSON schema IDs, and verifies that corrupt inputs fail.
 Future work should add full JSON Schema validation, fuzzing, sanitizers, and curated public or
 fingerprint-only regression cases derived from real camera evidence.
