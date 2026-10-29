@@ -283,3 +283,27 @@ build/dev/tools/gb-metadata/gb-metadata --sample 0 --key GPS5 __stuff/GS040047.3
 
 The last command prints private coordinates to the terminal. Do not capture or publish its output
 without an explicit privacy review. Use the default inventory when values are not required.
+
+## M2 telemetry/timing validation
+
+The native telemetry layer reproduces the established 8,771 and 9,841 `GPS5` records from the two
+video samples. Every payload supplies a parseable `GPSU` anchor; the observed `GPSF` values classify
+all records in these two captures as valid. Selected beginning, middle, and ending media ticks were
+cross-checked against `gb-metadata` normalized GPS5 records without recording coordinates in this
+report. `gb-time --at` returns the nearest recorded position and its integer-tick uncertainty; it
+does not interpolate a route.
+
+All mapped sample tables in both files have continuous decode timelines. The maximum absolute
+difference between adjacent GPSU-anchor deltas and the corresponding media-time deltas was 61 ms
+in each sample. This is a diagnostic observation, not a clock-accuracy guarantee. GPS5 records are
+uniformly assigned within each GPMF payload, with one derived record interval reported as timing
+uncertainty. No sensor capture-time or TimeWarp mapping is claimed.
+
+Privacy-safe reproduction:
+
+```sh
+build/dev/tools/gb-telemetry/gb-telemetry --format json __stuff/GS040047.360 \
+  | jq '{points: (.points | length), valid: ([.points[] | select(.validity == "valid")] | length)}'
+build/dev/tools/gb-time/gb-time --json --at 5000 __stuff/GS040047.360 \
+  | jq '{tracks: (.tracks | length), anchors: (.gps_clock.anchors | length), query_validity: .query.nearest.validity}'
+```

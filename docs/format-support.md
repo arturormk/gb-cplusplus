@@ -16,6 +16,12 @@
   `SIUN`/`UNIT`, occurrence/record counts, sample ranges, estimated rates, and unknown keys.
 - Friendly per-sample and key-filtered value rendering, including documented `GPS5` component
   labels, encoded values, normalized values, units, and explicit unknown-semantics warnings.
+- `ctts` composition offsets and bounded sample mapping for ordinary-sized tracks; count-only
+  reporting for exceptionally large fixed-size tracks.
+- GPS5 latitude/longitude, WGS 84 altitude, 2D/3D speed, GPSF validity, GPSP DOP, GPSU UTC anchors,
+  integer presentation ticks, uncertainty, and missing/invalid gap reporting.
+- Schema-versioned JSON/CSV telemetry, validity-filtered GPX/GeoJSON, and media/UTC timing
+  diagnostics with nearest-record queries.
 - Content-based JPEG detection with checked marker and entropy termination parsing.
 - JPEG dimensions, precision, component count, and directly appended codestream enumeration.
 - Structural detection of JFIF, EXIF, XMP, MPF and APP6 payloads without interpreting private
@@ -32,11 +38,12 @@ evidence, not a claim that the current library decodes those streams or supports
 ## Not implemented
 
 - Native decoding/reconstruction of the observed GoPro MAX (2025) `.360` topology.
-- Fragmented-media sample mapping, edit lists, composition timing, multiple sample descriptions,
-  compressed/complex GPMF values, EXIF, XMP, MPF, or APP6 metadata decoding.
+- Fragmented-media sample mapping, edit lists, multiple sample descriptions, compressed/complex
+  GPMF values, GPS9, sensor-series export, EXIF, XMP, MPF, or APP6 metadata decoding.
 - General payload extraction, HEIF item interpretation, or file repair. Raw `gpmd` sample export is
   explicitly supported by `gb-metadata`.
 
-The observed topology has been independently cross-checked with FFprobe and ExifTool. General MAX
-support remains unverified beyond the fingerprinted samples, and playback/reconstruction is not
-implemented.
+GPS5 record counts were independently cross-checked with ExifTool. Individual GPS record times
+are uniformly assigned within their containing GPMF sample and therefore carry a one-record
+interval uncertainty; no capture-time mapping is claimed. General MAX support remains unverified
+beyond the fingerprinted samples, and playback/reconstruction is not implemented.

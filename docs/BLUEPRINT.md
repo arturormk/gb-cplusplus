@@ -378,7 +378,8 @@ and all tests passing without private camera samples. M1 has since completed.
 2025 video track topologies checked against FFprobe. `gb-metadata` maps every `gpmd` payload,
 preserves raw/unknown GPMF, reports normalized primitives and timing provenance, and matches
 ExifTool's privacy-safe embedded GPS and sensor occurrence counts. Synthetic fixtures cover
-unknown, scaled, truncated, and sample-table behavior without private media. M2 is next.
+unknown, scaled, truncated, and sample-table behavior without private media. M2 has since
+completed.
 
 - Independently usable `gb-inspect` and `gb-metadata`.
 - Real .360 structure documented and checked against `ffprobe`.
@@ -387,6 +388,14 @@ unknown, scaled, truncated, and sample-table behavior without private media. M2 
 - **Gate:** reproducible reports from original MAX 2025 files, with clear unsupported behavior.
 
 ### M2 — Telemetry and timing laboratory
+
+**Status: Complete (2026-10-29).** `gb-telemetry` exports recorded `GPS5` position, altitude,
+speeds, fix and DOP as JSON, CSV, GPX, and GeoJSON, with invalid/missing handling and explicit
+gaps. `gb-time` reports integer decode/presentation timing, UTC anchors, discontinuities, drift,
+and nearest-record queries. Both fingerprinted videos reproduce the M1 GPS counts and have been
+checked at selected media ticks without publishing private routes. Synthetic tests cover absent
+GPS, invalid fixes, non-integral record spacing, composition offsets, and malformed input. M3 is
+next.
 
 - `gb-telemetry` and `gb-time` with GPS extraction, units, validity, and media/GPS time mapping.
 - GPX/GeoJSON/CSV/JSON, missing GPS cases, gaps, corruption and sample jitter tests.

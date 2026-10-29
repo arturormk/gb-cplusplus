@@ -33,6 +33,7 @@ struct SampleReference {
   std::uint64_t offset{};
   std::uint32_t size{};
   std::uint64_t decode_time{};
+  std::int64_t presentation_time{};
   std::uint32_t duration{};
 };
 

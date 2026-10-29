@@ -24,7 +24,13 @@ both inventory and detailed-sample JSON schemas without private media.
 Friendly-text integration fixtures also verify labeled `GPS5` components, explicit unknown-key
 marking, key filtering, and opt-in whole-track value output.
 
-The test suite also invokes both tools' `--help` and `--version`, generates isolated ISO BMFF,
+`gb_telemetry_tests` and CLI fixtures cover GPS5 units, GPSU conversion, GPSF validity, GPSP DOP,
+integer media ticks, non-integral record spacing, composition offsets, invalid-fix gaps, and a
+metadata track with no GPS. Integration tests exercise JSON, CSV, GPX, GeoJSON, timing diagnostics,
+and nearest-record lookup. Invalid points are retained in loss-aware JSON/CSV and omitted from GPS
+route formats by default.
+
+The test suite also invokes all four tools' `--help` and `--version`, generates isolated ISO BMFF,
 GPMF, and JPEG CLI fixtures, checks all JSON schema IDs, and verifies that corrupt inputs fail.
 Future work should add full JSON Schema validation, fuzzing, sanitizers, and curated public or
 fingerprint-only regression cases derived from real camera evidence.

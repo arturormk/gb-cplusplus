@@ -1,14 +1,14 @@
 # gb-cplusplus
 
 `gb-cplusplus` is the C++20/Linux implementation of an independent open-source toolkit for
-advanced GoPro camera users. Its current laboratory tools are `gb-inspect`, a read-only ISO Base
-Media File Format (ISO BMFF) and JPEG structure inspector, and `gb-metadata`, a loss-aware timed
-GPMF inspector. GoBro is a provisional public-facing name and is not affiliated with, endorsed by,
-or sponsored by GoPro.
+advanced GoPro camera users. Its current laboratory tools inspect containers and GPMF, extract
+timestamped GPS telemetry, and diagnose media/GPS clock relationships. GoBro is a provisional
+public-facing name and is not affiliated with, endorsed by, or sponsored by GoPro.
 
-The M0 baseline and M1 container/metadata laboratory are complete; M2 telemetry and timing is
-next. Support claims remain limited to the fingerprinted GoPro MAX (2025) samples documented
-under `research/` and do not yet include native video reconstruction or playback.
+The M0 baseline, M1 container/metadata laboratory, and M2 telemetry/timing laboratory are
+complete; M3 native video reconstruction is next. Support claims remain limited to the
+fingerprinted GoPro MAX (2025) samples documented under `research/` and do not yet include native
+video reconstruction or playback.
 
 ## Build and test
 
@@ -20,7 +20,8 @@ For the quickest setup, run:
 
 The script detects missing Ubuntu build packages, installs them through
 `apt-get`, builds and tests the project, installs user-facing binaries under `build/dev/install`,
-and prints their absolute paths. Use `./quickstart.sh --help` for automation-friendly options.
+and prints their paths relative to the directory from which it was invoked. Use
+`./quickstart.sh --help` for automation-friendly options.
 
 To run the individual build steps manually on Ubuntu 22.04 or newer, install `build-essential`,
 `cmake`, and `ninja-build`, then run:
@@ -31,7 +32,7 @@ cmake --build --preset dev
 ctest --preset dev
 ```
 
-No Qt, FFmpeg, camera SDK, network access, or private media is required for this milestone. See
+No Qt, FFmpeg, camera SDK, network access, or private media is required for these milestones. See
 [`docs/dependencies.md`](docs/dependencies.md) for exact current requirements.
 
 ## Use
@@ -44,6 +45,9 @@ build/dev/tools/gb-metadata/gb-metadata recording.360
 build/dev/tools/gb-metadata/gb-metadata --sample 0 --key GPS5 recording.360
 build/dev/tools/gb-metadata/gb-metadata --values --key GPS5 recording.360
 build/dev/tools/gb-metadata/gb-metadata --json --sample 0 recording.360
+build/dev/tools/gb-telemetry/gb-telemetry --format json recording.360
+build/dev/tools/gb-telemetry/gb-telemetry --format gpx recording.360 > route.gpx
+build/dev/tools/gb-time/gb-time --json --at 5000 recording.360
 ```
 
 The tool reads the source only, reports checked byte offsets and lengths, and never extracts or
@@ -53,6 +57,10 @@ Diagnostics go to stderr.
 Metadata inventory JSON uses `gb.metadata/v1`; selected GPMF samples use
 `gb.metadata.sample/v1`. See [`tools/gb-metadata/README.md`](tools/gb-metadata/README.md) for raw
 payload export and current limitations.
+
+Telemetry JSON uses `gb.telemetry/v1`; timing diagnostics use `gb.time/v1`. GPS exports preserve
+integer media ticks, units, fix validity, DOP, provenance, gaps, and timing uncertainty. See the
+individual tool READMEs for the policies used by GPX/GeoJSON and media-to-UTC mapping.
 
 ## Scope and project guidance
 

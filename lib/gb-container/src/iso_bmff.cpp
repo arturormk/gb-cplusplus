@@ -1,6 +1,7 @@
 #include "gb/container/iso_bmff.hpp"
 
 #include <array>
+#include <bit>
 #include <fstream>
 #include <limits>
 #include <set>
@@ -15,6 +16,7 @@ constexpr std::uint64_t kBasicHeaderSize = 8;
 constexpr std::uint64_t kExtendedHeaderSize = 16;
 constexpr std::uint64_t kUuidExtraSize = 16;
 constexpr std::uint32_t kMaxTableEntries = 10'000'000;
+constexpr std::uint32_t kMaxOptionalMappedSamples = 1'000'000;
 
 std::uint16_t read_u16(std::ifstream &input, const std::uint64_t offset) {
   std::array<unsigned char, 2> bytes{};
@@ -191,6 +193,11 @@ struct SampleTables {
     std::uint32_t duration{};
   };
   std::vector<TimeRun> time_runs;
+  struct CompositionRun {
+    std::uint32_t count{};
+    std::int64_t offset{};
+  };
+  std::vector<CompositionRun> composition_runs;
 };
 
 void parse_track_header(std::ifstream &input, const Box &box, Track &track) {
@@ -271,30 +278,33 @@ void parse_sample_description(std::ifstream &input, const Box &box, Track &track
   }
 }
 
-SampleTables parse_sample_tables(std::ifstream &input, const Box &stbl, const bool detailed) {
+SampleTables parse_sample_tables(std::ifstream &input, const Box &stbl,
+                                 const bool mapping_required) {
   SampleTables tables;
   if (const auto *stsz = find_child(stbl, "stsz")) {
     const auto payload = stsz->offset + stsz->header_size;
     require_range(*stsz, payload, 12U, "stsz header");
     tables.sample_size = read_u32(input, payload + 4U);
     tables.sample_count = read_u32(input, payload + 8U);
-    if (detailed && tables.sample_count > kMaxTableEntries) {
-      throw InspectionError(ErrorKind::corrupt, payload + 8U, "stsz exceeds entry limit");
+    const auto mapping_limit = mapping_required ? kMaxTableEntries : kMaxOptionalMappedSamples;
+    if (tables.sample_count > mapping_limit) {
+      if (tables.sample_size == 0U) {
+        require_range(*stsz, payload + 12U,
+                      static_cast<std::uint64_t>(tables.sample_count) * 4U, "stsz entries");
+      }
+      if (mapping_required) {
+        throw InspectionError(ErrorKind::corrupt, payload + 8U, "stsz exceeds entry limit");
+      }
+      return tables;
     }
-    if (detailed && tables.sample_size == 0U) {
+    if (tables.sample_size == 0U) {
       require_range(*stsz, payload + 12U, static_cast<std::uint64_t>(tables.sample_count) * 4U,
                     "stsz entries");
       tables.sizes.reserve(tables.sample_count);
       for (std::uint32_t index = 0; index < tables.sample_count; ++index) {
         tables.sizes.push_back(read_u32(input, payload + 12U + static_cast<std::uint64_t>(index) * 4U));
       }
-    } else if (!detailed && tables.sample_size == 0U) {
-      require_range(*stsz, payload + 12U, static_cast<std::uint64_t>(tables.sample_count) * 4U,
-                    "stsz entries");
     }
-  }
-  if (!detailed) {
-    return tables;
   }
   if (const auto *stco = find_child(stbl, "stco")) {
     const auto payload = stco->offset + stco->header_size;
@@ -335,6 +345,25 @@ SampleTables parse_sample_tables(std::ifstream &input, const Box &stbl, const bo
       tables.time_runs.push_back({read_u32(input, entry), read_u32(input, entry + 4U)});
     }
   }
+  if (const auto *ctts = find_child(stbl, "ctts")) {
+    const auto payload = ctts->offset + ctts->header_size;
+    require_range(*ctts, payload, 8U, "ctts header");
+    input.seekg(static_cast<std::streamoff>(payload), std::ios::beg);
+    const auto version = static_cast<unsigned char>(input.get());
+    if (version > 1U) {
+      throw InspectionError(ErrorKind::unsupported, payload, "unsupported ctts version");
+    }
+    const auto count = checked_count(input, *ctts, payload + 4U, 8U, "ctts");
+    tables.composition_runs.reserve(count);
+    for (std::uint32_t index = 0; index < count; ++index) {
+      const auto entry = payload + 8U + static_cast<std::uint64_t>(index) * 8U;
+      const auto raw_offset = read_u32(input, entry + 4U);
+      const auto offset = version == 0U
+                              ? static_cast<std::int64_t>(raw_offset)
+                              : static_cast<std::int64_t>(std::bit_cast<std::int32_t>(raw_offset));
+      tables.composition_runs.push_back({read_u32(input, entry), offset});
+    }
+  }
   return tables;
 }
 
@@ -354,10 +383,21 @@ std::vector<SampleReference> build_sample_references(const SampleTables &tables,
   if (timed_samples != tables.sample_count) {
     throw InspectionError(ErrorKind::corrupt, 0, "stts does not describe every sample");
   }
+  if (!tables.composition_runs.empty()) {
+    std::uint64_t composed_samples = 0;
+    for (const auto &run : tables.composition_runs) {
+      composed_samples += run.count;
+    }
+    if (composed_samples != tables.sample_count) {
+      throw InspectionError(ErrorKind::corrupt, 0, "ctts does not describe every sample");
+    }
+  }
   samples.reserve(tables.sample_count);
   std::size_t run = 0;
   std::size_t time_run = 0;
   std::uint32_t time_run_used = 0;
+  std::size_t composition_run = 0;
+  std::uint32_t composition_run_used = 0;
   std::uint64_t decode_time = 0;
   for (std::size_t chunk_index = 0; chunk_index < tables.chunks.size() &&
                                     samples.size() < tables.sample_count; ++chunk_index) {
@@ -382,7 +422,25 @@ std::vector<SampleReference> build_sample_references(const SampleTables &tables,
       if (offset > file_size || size > file_size - offset) {
         throw InspectionError(ErrorKind::corrupt, offset, "sample extends beyond the file");
       }
-      samples.push_back({offset, size, decode_time, duration});
+      if (decode_time > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
+        throw InspectionError(ErrorKind::corrupt, offset, "sample decode time exceeds signed range");
+      }
+      auto presentation_time = static_cast<std::int64_t>(decode_time);
+      if (composition_run < tables.composition_runs.size()) {
+        const auto composition_offset = tables.composition_runs[composition_run].offset;
+        if ((composition_offset > 0 &&
+             presentation_time > std::numeric_limits<std::int64_t>::max() - composition_offset) ||
+            (composition_offset < 0 &&
+             presentation_time < std::numeric_limits<std::int64_t>::min() - composition_offset)) {
+          throw InspectionError(ErrorKind::corrupt, offset, "sample presentation time overflows");
+        }
+        presentation_time += composition_offset;
+        if (++composition_run_used == tables.composition_runs[composition_run].count) {
+          ++composition_run;
+          composition_run_used = 0;
+        }
+      }
+      samples.push_back({offset, size, decode_time, presentation_time, duration});
       offset += size;
       decode_time += duration;
     }
@@ -420,9 +478,7 @@ std::vector<Track> parse_tracks(std::ifstream &input, const std::vector<Box> &bo
       if (const auto *stbl = find_descendant(trak, {"mdia", "minf", "stbl"})) {
         const auto tables = parse_sample_tables(input, *stbl, track.codec == "gpmd");
         track.sample_count = tables.sample_count;
-        if (track.codec == "gpmd") {
-          track.samples = build_sample_references(tables, file_size);
-        }
+        track.samples = build_sample_references(tables, file_size);
       }
       tracks.push_back(std::move(track));
     }

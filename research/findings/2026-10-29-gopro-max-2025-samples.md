@@ -30,3 +30,10 @@ Both videos encode `GPS5` as repeated big-endian `int32[5]` records with observe
 `[10000000, 10000000, 1000, 1000, 100]` and units `[deg, deg, m, m/s, m/s]`. The documented
 components are latitude, longitude, altitude, 2D speed, and 3D speed. Fix, precision, and UTC are
 carried separately; this storage finding does not itself establish validity or clock alignment.
+
+M2 follow-up: `gb-telemetry` reproduces both GPS5 counts and classifies the observed points using
+the sibling GPSF fix value. `gb-time` maps GPSU anchors to integer media presentation ticks and
+reports one-record timing uncertainty for the uniform within-payload assignment. All mapped track
+sample tables are decode-continuous; adjacent GPSU versus media deltas differ by at most 61 ms in
+both samples. Selected beginning, middle, and ending ticks were checked without copying private
+positions or UTC values into this finding.

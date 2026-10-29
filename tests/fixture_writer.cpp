@@ -52,7 +52,8 @@ Bytes gpmf(const std::string &key, const std::uint8_t type, const std::uint8_t s
   return bytes;
 }
 
-Bytes metadata_payload() {
+Bytes metadata_payload(const bool include_gps = true, const std::uint32_t gps_fix_value = 3U,
+                       const std::uint16_t gps_records = 1U) {
   Bytes stream;
   append(stream, gpmf("STNM", 'c', 1U, 5U, {'A', 'c', 'c', 'e', 'l'}));
   Bytes scales;
@@ -80,25 +81,40 @@ Bytes metadata_payload() {
   append(gps_stream,
          gpmf("UNIT", 'c', 3U, 5U,
               {'d', 'e', 'g', 'd', 'e', 'g', 'm', 0U, 0U, 'm', '/', 's', 'm', '/', 's'}));
+  append(gps_stream,
+         gpmf("GPSU", 'U', 16U, 1U,
+              {'2', '6', '0', '1', '0', '1', '1', '2', '0', '0', '0', '0', '.', '0', '0', '0'}));
+  Bytes gps_fix;
+  append_u32(gps_fix, gps_fix_value);
+  append(gps_stream, gpmf("GPSF", 'L', 4U, 1U, gps_fix));
+  Bytes gps_precision;
+  append_u16(gps_precision, 189U);
+  append(gps_stream, gpmf("GPSP", 'S', 2U, 1U, gps_precision));
   Bytes gps;
-  append_u32(gps, 401'234'567U);
-  append_u32(gps, static_cast<std::uint32_t>(-31'234'567));
-  append_u32(gps, 721'304U);
-  append_u32(gps, 2'184U);
-  append_u32(gps, 230U);
-  append(gps_stream, gpmf("GPS5", 'l', 20U, 1U, gps));
+  for (std::uint16_t record = 0; record < gps_records; ++record) {
+    append_u32(gps, 401'234'567U + record);
+    append_u32(gps, static_cast<std::uint32_t>(-31'234'567 + record));
+    append_u32(gps, 721'304U);
+    append_u32(gps, 2'184U);
+    append_u32(gps, 230U);
+  }
+  append(gps_stream, gpmf("GPS5", 'l', 20U, gps_records, gps));
 
   Bytes device;
   Bytes id;
   append_u32(id, 1U);
   append(device, gpmf("DVID", 'L', 4U, 1U, id));
   append(device, gpmf("STRM", 0U, 1U, static_cast<std::uint16_t>(stream.size()), stream));
-  append(device,
-         gpmf("STRM", 0U, 1U, static_cast<std::uint16_t>(gps_stream.size()), gps_stream));
+  if (include_gps) {
+    append(device,
+           gpmf("STRM", 0U, 1U, static_cast<std::uint16_t>(gps_stream.size()), gps_stream));
+  }
   return gpmf("DEVC", 0U, 1U, static_cast<std::uint16_t>(device.size()), device);
 }
 
-Bytes metadata_mp4() {
+Bytes metadata_mp4(const bool include_gps = true, const std::uint32_t gps_fix = 3U,
+                   const std::uint16_t gps_records = 1U,
+                   const std::int32_t composition_offset = 0) {
   Bytes file;
   Bytes ftyp;
   append_fourcc(ftyp, "isom");
@@ -106,7 +122,7 @@ Bytes metadata_mp4() {
   append_fourcc(ftyp, "isom");
   append(file, box("ftyp", ftyp));
 
-  const auto payload = metadata_payload();
+  const auto payload = metadata_payload(include_gps, gps_fix, gps_records);
   append(file, box("mdat", payload));
   const auto sample_offset = 28U;
 
@@ -138,6 +154,11 @@ Bytes metadata_mp4() {
   append_u32(stts, 1U);
   append_u32(stts, 1000U);
 
+  Bytes ctts(4U, 0U);
+  append_u32(ctts, 1U);
+  append_u32(ctts, 1U);
+  append_u32(ctts, static_cast<std::uint32_t>(composition_offset));
+
   Bytes stsc(4U, 0U);
   append_u32(stsc, 1U);
   append_u32(stsc, 1U);
@@ -156,6 +177,9 @@ Bytes metadata_mp4() {
   Bytes stbl;
   append(stbl, box("stsd", stsd));
   append(stbl, box("stts", stts));
+  if (composition_offset != 0) {
+    append(stbl, box("ctts", ctts));
+  }
   append(stbl, box("stsc", stsc));
   append(stbl, box("stsz", stsz));
   append(stbl, box("stco", stco));
@@ -226,6 +250,10 @@ int main(const int argc, char **argv) {
     write(directory / "valid-image.bin", minimal_jpeg());
     write(directory / "corrupt-image.bin", {0xffU, 0xd8U, 0xffU, 0xe1U, 0xffU, 0xffU});
     write(directory / "metadata.mp4", metadata_mp4());
+    write(directory / "metadata-no-gps.mp4", metadata_mp4(false));
+    write(directory / "metadata-invalid-gps.mp4", metadata_mp4(true, 0U));
+    write(directory / "metadata-jitter.mp4", metadata_mp4(true, 3U, 3U));
+    write(directory / "metadata-ctts.mp4", metadata_mp4(true, 3U, 1U, 100));
     return 0;
   } catch (const std::exception &error) {
     std::cerr << error.what() << '\n';

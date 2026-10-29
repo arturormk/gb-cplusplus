@@ -2,6 +2,7 @@
 
 set -Eeuo pipefail
 
+readonly INVOCATION_DIR="$(pwd -P)"
 readonly SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 readonly PRESET="dev"
 readonly BUILD_DIR="${SCRIPT_DIR}/build/${PRESET}"
@@ -105,7 +106,7 @@ if ((${#executables[@]} == 0)); then
 fi
 
 printf '\nBuild and local installation completed successfully.\n'
-printf 'Executable files:\n'
+printf 'Executable files (relative to %s):\n' "${INVOCATION_DIR}"
 for executable in "${executables[@]}"; do
-  printf '  %s\n' "$executable"
+  printf '  %s\n' "$(realpath --relative-to="${INVOCATION_DIR}" -- "${executable}")"
 done

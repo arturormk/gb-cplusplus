@@ -505,6 +505,7 @@ void print_sample_json(const Options &options, const gb::container::Track &track
             << "  \"offset\": " << sample.offset << ",\n"
             << "  \"size\": " << sample.size << ",\n"
             << "  \"decode_time_ticks\": " << sample.decode_time << ",\n"
+            << "  \"presentation_time_ticks\": " << sample.presentation_time << ",\n"
             << "  \"duration_ticks\": " << sample.duration << ",\n"
             << "  \"time_base\": {\"numerator\": " << track.time_base.numerator
             << ", \"denominator\": " << track.time_base.denominator << "},\n"
@@ -522,6 +523,7 @@ void print_sample_text(const Options &options, const gb::container::Track &track
   std::cout << "file: " << options.path.string() << "\nsource: GPMF\ntrack: " << track.id
             << "\nsample: " << index << " offset=" << sample.offset << " size=" << sample.size
             << " decode_time_ticks=" << sample.decode_time << " duration_ticks=" << sample.duration
+            << " presentation_time_ticks=" << sample.presentation_time
             << " time_base=" << track.time_base.numerator << '/' << track.time_base.denominator
             << "\nmetadata:\n";
   for (const auto &element : elements) {
