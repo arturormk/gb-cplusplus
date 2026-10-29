@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(gb-cplusplus VERSION 0.1.0 LANGUAGES CXX)
+project(gb-cplusplus VERSION 0.2.0 LANGUAGES CXX)
 
 include(CTest)
 
@@ -22,6 +22,7 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
 endif()
 
 add_subdirectory(lib/gb-container)
+add_subdirectory(lib/gb-image)
 add_subdirectory(tools/gb-inspect)
 
 if(BUILD_TESTING)

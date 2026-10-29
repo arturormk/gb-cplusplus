@@ -178,6 +178,17 @@ The extra APP1 segment in the panoramic photos carries XMP GPano data. ExifTool 
 “Geometry Calibrations”, “Back Lens”, and “Front Lens” device containers in all three APP6
 payloads, but the default report does not provide a complete numeric calibration model.
 
+### Follow-up validation with `gb-inspect` 0.2.0
+
+The dependency-free JPEG path added after the initial external-tool inspection identifies all
+three files by their SOI signature rather than extension. It validates every marker boundary,
+finds the two directly appended codestreams in each file, and independently reproduces the primary
+and preview offsets, lengths, dimensions, precision, and component counts above. It also reports
+the structural presence of EXIF, XMP, MPF, and APP6 without exposing their private values.
+
+Measured warm-cache runs took approximately 0.02–0.05 seconds per photo with about 3.6–3.8 MiB
+maximum RSS. This measurement describes these samples and development hardware only.
+
 ## Reproduction commands
 
 Run from the repository root. Full ExifTool output contains private serial and location values;
@@ -208,8 +219,8 @@ sha256sum __stuff/GS040047.360 __stuff/GH050083.MP4 \
    seconds.
 4. Implement GPMF location separately from GPMF interpretation, and test `.360` GPS discovery
    without relying on a `©xyz` user-data box.
-5. Extract small, explicitly requested `stsd`, GPMF, APP6, EXIF, XMP, and MPF fixtures after a
-   privacy review; do not commit these original samples.
+5. Add loss-aware APP6, EXIF, XMP, and MPF field parsers using synthetic fixtures. Extract any
+   real payload fixture only after a privacy review; do not commit these original samples.
 6. Decode representative frames from both HEVC tracks to establish lens ordering, packing, and
    reconstruction requirements. This report did not inspect scene pixels.
 7. Determine the `fdsc`/`GoPro SOS` payload semantics and resolve the 32-bit-versus-16-bit PCM

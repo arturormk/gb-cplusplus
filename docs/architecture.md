@@ -1,29 +1,35 @@
-# Architecture decisions
+# Architecture overview
 
-## ADR-0001: tools-first container inspection
+The project follows a tools-first architecture: laboratory utilities establish reproducible
+format evidence, shared libraries implement confirmed behavior, and later player/export tools use
+those same libraries. See [`BLUEPRINT.md`](BLUEPRINT.md) for the full project direction.
 
-**Status:** accepted for M0 / first M1 slice.
+Architecture decisions are stored as individual records under [`adr/`](adr/):
 
-`gb-inspect` is a thin command-line presentation layer over the dependency-free `gb_container`
-library. This gives tests and future tools the same checked production parser while preserving an
-independently buildable executable. The parser reads fixed-size fields on demand and never loads a
-media payload or the complete file into memory.
+- [ADR-0001: Tools-first container inspection](adr/0001-tools-first-container-inspection.md)
+- [ADR-0002: Content-based JPEG inspection](adr/0002-content-based-jpeg-inspection.md)
 
-Only boxes whose payload is structurally defined as a direct list of child boxes are recursively
-walked. Unknown boxes are retained as FourCC, offset, size, and header size; their payload is not
-guessed. Nesting is limited to 32 levels. Every size is checked against its header and parent
-boundary before offsets advance.
+## Current boundaries
 
-The CLI JSON schema begins at `gb.inspect/v1`. Breaking field semantics require a new schema ID.
-Text output is intended for people; scripts should consume JSON. Exit codes distinguish command
-misuse, I/O/missing input, corruption, and unsupported formats.
+- `gb-inspect` is a presentation layer over dependency-free format libraries.
+- `gb_container` performs bounded, read-only ISO BMFF structural inspection.
+- `gb_image` performs bounded, read-only JPEG marker and codestream inspection.
+- Existing ISO BMFF JSON uses `gb.inspect/v1`; JPEG uses `gb.inspect.jpeg/v1`.
+- Unknown structures remain visible where possible and are not assigned guessed semantics.
 
 ## Unresolved risks
 
-- The actual top-level and nested box topology of GoPro MAX (2025) `.360` files is unverified.
 - Stream/sample description parsing is not implemented, so codecs and data tracks are not yet
-  enumerated.
-- The current parser uses seekable regular files; pipes and remote inputs are out of scope.
-- Some ISO BMFF container-like boxes have internal headers or counted records and intentionally
-  remain opaque until their layouts receive dedicated parsers and fixtures.
+  enumerated by `gb-inspect` itself.
+- The current parsers require seekable regular files; pipes and remote inputs are out of scope.
+- Some ISO BMFF boxes contain internal headers or counted records and intentionally remain opaque
+  until dedicated parsers and fixtures are available.
+- JPEG metadata payloads are identified structurally but EXIF, XMP, MPF, and APP6 fields are not
+  yet interpreted by the project libraries.
 - The project license and later Qt/FFmpeg dependency choices remain unresolved.
+
+## ADR convention
+
+Create one Markdown file per decision in `docs/adr/`, named
+`NNNN-short-kebab-case-title.md`. Each record should contain status, context, decision, and
+consequences. Amend or supersede records explicitly; do not silently rewrite accepted decisions.

@@ -1,9 +1,12 @@
 #include "gb/container/iso_bmff.hpp"
+#include "gb/image/jpeg.hpp"
 
+#include <array>
 #include <cctype>
 #include <cstdint>
 #include <exception>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <optional>
 #include <sstream>
@@ -12,7 +15,41 @@
 
 namespace {
 
-constexpr std::string_view kVersion = "0.1.0";
+constexpr std::string_view kVersion = GB_INSPECT_VERSION;
+
+enum class InputFormat { iso_bmff, jpeg };
+
+InputFormat detect_input_format(const std::filesystem::path &path) {
+  std::error_code error;
+  const auto status = std::filesystem::status(path, error);
+  if (error || !std::filesystem::exists(status)) {
+    throw gb::container::InspectionError(gb::container::ErrorKind::missing, 0,
+                                         "input file does not exist");
+  }
+  if (!std::filesystem::is_regular_file(status)) {
+    throw gb::container::InspectionError(gb::container::ErrorKind::io, 0,
+                                         "input is not a regular file");
+  }
+
+  std::array<unsigned char, 8> prefix{};
+  std::ifstream input(path, std::ios::binary);
+  if (!input) {
+    throw gb::container::InspectionError(gb::container::ErrorKind::io, 0,
+                                         "cannot open input for reading");
+  }
+  input.read(reinterpret_cast<char *>(prefix.data()),
+             static_cast<std::streamsize>(prefix.size()));
+  const auto count = input.gcount();
+  if (count >= 2 && prefix[0] == 0xffU && prefix[1] == 0xd8U) {
+    return InputFormat::jpeg;
+  }
+  if (count >= 8 && prefix[4] == 'f' && prefix[5] == 't' && prefix[6] == 'y' &&
+      prefix[7] == 'p') {
+    return InputFormat::iso_bmff;
+  }
+  throw gb::container::InspectionError(gb::container::ErrorKind::unsupported, 0,
+                                       "unrecognized file signature");
+}
 
 std::string json_string(const std::string_view input) {
   std::ostringstream output;
@@ -142,11 +179,100 @@ void print_text(const gb::container::Inspection &inspection) {
   }
 }
 
+void print_jpeg_segment_json(const gb::image::JpegSegment &segment, std::ostream &output,
+                             const unsigned indent) {
+  const std::string pad(indent, ' ');
+  output << pad << "{\n"
+         << pad << "  \"marker\": " << json_string(segment.name) << ",\n"
+         << pad << "  \"code\": " << static_cast<unsigned>(segment.marker) << ",\n"
+         << pad << "  \"content\": " << json_string(segment.content) << ",\n"
+         << pad << "  \"offset\": " << segment.offset << ",\n"
+         << pad << "  \"size\": " << segment.size << "\n"
+         << pad << '}';
+}
+
+void print_jpeg_json(const gb::image::JpegInspection &inspection) {
+  std::cout << "{\n"
+            << "  \"schema\": \"gb.inspect.jpeg/v1\",\n"
+            << "  \"path\": " << json_string(inspection.path.string()) << ",\n"
+            << "  \"file_size\": " << inspection.file_size << ",\n"
+            << "  \"identity\": {\n"
+            << "    \"format\": \"JPEG\",\n"
+            << "    \"image_count\": " << inspection.images.size() << ",\n"
+            << "    \"has_jfif\": " << (inspection.has_jfif ? "true" : "false") << ",\n"
+            << "    \"has_exif\": " << (inspection.has_exif ? "true" : "false") << ",\n"
+            << "    \"has_xmp\": " << (inspection.has_xmp ? "true" : "false") << ",\n"
+            << "    \"has_mpf\": " << (inspection.has_mpf ? "true" : "false") << ",\n"
+            << "    \"has_app6\": " << (inspection.has_app6 ? "true" : "false") << "\n"
+            << "  },\n"
+            << "  \"trailing_bytes\": " << inspection.trailing_bytes << ",\n"
+            << "  \"images\": [";
+  if (!inspection.images.empty()) {
+    std::cout << '\n';
+  }
+  for (std::size_t image_index = 0; image_index < inspection.images.size(); ++image_index) {
+    const auto &image = inspection.images[image_index];
+    std::cout << "    {\n"
+              << "      \"offset\": " << image.offset << ",\n"
+              << "      \"size\": " << image.size << ",\n"
+              << "      \"width\": " << image.width << ",\n"
+              << "      \"height\": " << image.height << ",\n"
+              << "      \"precision\": " << static_cast<unsigned>(image.precision) << ",\n"
+              << "      \"components\": " << static_cast<unsigned>(image.components) << ",\n"
+              << "      \"complete\": " << (image.complete ? "true" : "false") << ",\n"
+              << "      \"segments\": [";
+    if (!image.segments.empty()) {
+      std::cout << '\n';
+    }
+    for (std::size_t segment_index = 0; segment_index < image.segments.size(); ++segment_index) {
+      print_jpeg_segment_json(image.segments[segment_index], std::cout, 8U);
+      std::cout << (segment_index + 1U == image.segments.size() ? "\n" : ",\n");
+    }
+    if (!image.segments.empty()) {
+      std::cout << "      ";
+    }
+    std::cout << "]\n    }" << (image_index + 1U == inspection.images.size() ? "\n" : ",\n");
+  }
+  if (!inspection.images.empty()) {
+    std::cout << "  ";
+  }
+  std::cout << "]\n}\n";
+}
+
+void print_jpeg_text(const gb::image::JpegInspection &inspection) {
+  std::cout << "file: " << inspection.path.string() << '\n'
+            << "size: " << inspection.file_size << " bytes\n"
+            << "format: JPEG\n"
+            << "images: " << inspection.images.size() << '\n'
+            << "metadata:"
+            << (inspection.has_jfif ? " JFIF" : "") << (inspection.has_exif ? " Exif" : "")
+            << (inspection.has_xmp ? " XMP" : "") << (inspection.has_mpf ? " MPF" : "")
+            << (inspection.has_app6 ? " APP6" : "") << '\n';
+  for (std::size_t index = 0; index < inspection.images.size(); ++index) {
+    const auto &image = inspection.images[index];
+    std::cout << "image[" << index << "]: offset=" << image.offset << " size=" << image.size
+              << " width=" << image.width << " height=" << image.height
+              << " precision=" << static_cast<unsigned>(image.precision)
+              << " components=" << static_cast<unsigned>(image.components) << '\n';
+    for (const auto &segment : image.segments) {
+      std::cout << "  " << segment.name << " offset=" << segment.offset
+                << " size=" << segment.size;
+      if (!segment.content.empty()) {
+        std::cout << " content=" << segment.content;
+      }
+      std::cout << '\n';
+    }
+  }
+  if (inspection.trailing_bytes != 0U) {
+    std::cout << "trailing bytes: " << inspection.trailing_bytes << '\n';
+  }
+}
+
 void print_help(std::ostream &output) {
   output << "Usage: gb-inspect [--json] <file>\n"
             "       gb-inspect --help\n"
             "       gb-inspect --version\n\n"
-            "Inspect a file's validated ISO BMFF identity and top-level box hierarchy.\n\n"
+            "Inspect validated ISO BMFF/MP4 box structure or JPEG marker structure.\n\n"
             "Options:\n"
             "  --json     emit schema-versioned JSON to stdout\n"
             "  --help     show this help and exit\n"
@@ -203,9 +329,24 @@ int main(const int argc, char **argv) {
   }
 
   try {
-    const auto inspection = gb::container::inspect_iso_bmff(*path);
-    json ? print_json(inspection) : print_text(inspection);
+    switch (detect_input_format(*path)) {
+    case InputFormat::iso_bmff: {
+      const auto inspection = gb::container::inspect_iso_bmff(*path);
+      json ? print_json(inspection) : print_text(inspection);
+      break;
+    }
+    case InputFormat::jpeg: {
+      const auto inspection = gb::image::inspect_jpeg(*path);
+      json ? print_jpeg_json(inspection) : print_jpeg_text(inspection);
+      break;
+    }
+    }
     return 0;
+  } catch (const gb::image::JpegError &error) {
+    const auto is_io = error.kind() == gb::image::JpegErrorKind::io;
+    std::cerr << "gb-inspect: " << (is_io ? "io" : "corrupt") << " at byte " << error.offset()
+              << ": " << error.what() << '\n';
+    return is_io ? 3 : 4;
   } catch (const gb::container::InspectionError &error) {
     std::cerr << "gb-inspect: " << gb::container::error_kind_name(error.kind())
               << " at byte " << error.offset() << ": " << error.what() << '\n';

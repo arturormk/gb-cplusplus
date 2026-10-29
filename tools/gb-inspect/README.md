@@ -1,19 +1,25 @@
 # gb-inspect
 
-`gb-inspect` reads a file and reports its validated ISO BMFF identity, byte size, and recognized
-box hierarchy. The concise text view is intended for a terminal; `--json` emits the stable,
-machine-readable `gb.inspect/v1` schema.
+`gb-inspect` identifies a file from its content and reports either its validated ISO BMFF box
+hierarchy or JPEG marker/codestream structure. The concise text view is intended for a terminal;
+`--json` emits a stable, machine-readable format-specific schema.
 
 ```sh
 gb-inspect recording.360
 gb-inspect --json recording.360
+gb-inspect --json photo.jpg
 ```
 
 Exit status is `0` for success, `2` for command-line misuse, `3` for a missing or unreadable
 input, `4` for structurally corrupt/truncated input, and `5` for an unsupported input. Diagnostics
 are written to stderr.
 
-Current limitations: this thin slice recognizes an ISO BMFF file through `ftyp` and safely walks
-common structural container boxes. It does not yet decode track/sample tables, codecs, metadata,
-or vendor payloads, and has not been validated against original GoPro MAX (2025) media. Unknown
-boxes remain visible as raw type/offset/size records but are not recursively guessed.
+ISO BMFF output uses `gb.inspect/v1`. This slice safely walks common structural container boxes
+but does not yet decode track/sample tables, codecs, or vendor payloads. Unknown boxes remain
+visible as raw type/offset/size records and are not recursively guessed.
+
+JPEG output uses `gb.inspect.jpeg/v1`. It validates marker lengths and entropy termination,
+reports dimensions/precision/components, recognizes JFIF, EXIF, XMP, MPF and APP6 presence, and
+enumerates directly appended JPEG codestreams such as GoPro's dependent preview. It deliberately
+does not interpret EXIF/XMP/MPF/APP6 payload fields yet. Content detection does not rely on the
+filename extension.

@@ -98,6 +98,7 @@ gb-cplusplus/
 │   └── findings/
 ├── docs/
 │   ├── architecture.md
+│   ├── adr/
 │   ├── testing.md
 │   ├── format-support.md
 │   └── dependencies.md
@@ -452,7 +453,9 @@ When implementing work under this blueprint:
 7. Ensure all tools build and work independently through CMake, with machine-readable stable output.
 8. No automatic uploading, destructive file writes, or silent source modification.
 9. Keep temporary processes, files and caches explicit and removable.
-10. Record decisions and unresolved risks in `docs/architecture.md` and `research/findings/`.
+10. Record architecture decisions as individual files under `docs/adr/`, maintain unresolved
+    cross-cutting risks in `docs/architecture.md`, and record format evidence in
+    `research/findings/`.
 11. When a capability is implemented in a library, refactor the corresponding tool to use that same production implementation.
 12. Report tests run, results, relevant measurements, dependencies added, limitations, and next recommended experiment in every substantial change.
 13. If a prerequisite sample is unavailable, build the general inspection path and fixtures first; mark conclusions about actual MAX media as **unverified**.

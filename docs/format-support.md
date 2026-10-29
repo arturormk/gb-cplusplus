@@ -8,6 +8,10 @@
   container boxes.
 - UUID box header accounting.
 - Lossless FourCC bytes, byte offsets, total sizes, and header sizes in JSON.
+- Content-based JPEG detection with checked marker and entropy termination parsing.
+- JPEG dimensions, precision, component count, and directly appended codestream enumeration.
+- Structural detection of JFIF, EXIF, XMP, MPF and APP6 payloads without interpreting private
+  metadata values.
 
 ## Evidence from GoPro MAX (2025) samples
 
@@ -20,7 +24,7 @@ evidence, not a claim that the current library decodes those streams or supports
 ## Not implemented
 
 - Native decoding/reconstruction of the observed GoPro MAX (2025) `.360` topology.
-- Track, codec, sample table, timing, GPMF, EXIF, XMP, or other metadata decoding.
+- Track, codec, sample table, timing, GPMF, EXIF, XMP, MPF, or APP6 metadata decoding.
 - Payload extraction, fragmented-media semantics, HEIF item interpretation, or file repair.
 
 The observed topology has been independently cross-checked with FFprobe and ExifTool. General MAX

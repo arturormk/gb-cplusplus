@@ -2,8 +2,8 @@
 
 `gb-cplusplus` is the C++20/Linux implementation of an independent open-source toolkit for
 advanced GoPro camera users. The first deliverable is `gb-inspect`, a read-only ISO Base Media
-File Format (ISO BMFF) structure inspector. GoBro is a provisional public-facing name and is not
-affiliated with, endorsed by, or sponsored by GoPro.
+File Format (ISO BMFF) and JPEG structure inspector. GoBro is a provisional public-facing name and
+is not affiliated with, endorsed by, or sponsored by GoPro.
 
 The project is at its first laboratory milestone. It does **not** yet claim support for the GoPro
 MAX (2025) `.360` stream topology; that requires evidence from original sample media.
@@ -41,7 +41,8 @@ build/dev/tools/gb-inspect/gb-inspect --help
 ```
 
 The tool reads the source only, reports checked byte offsets and lengths, and never extracts or
-modifies payloads. JSON output is versioned as `gb.inspect/v1`. Diagnostics go to stderr.
+modifies payloads. ISO BMFF JSON uses `gb.inspect/v1`; JPEG JSON uses `gb.inspect.jpeg/v1`.
+Diagnostics go to stderr.
 
 ## Scope and project guidance
 

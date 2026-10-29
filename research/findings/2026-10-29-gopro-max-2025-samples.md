@@ -13,3 +13,6 @@ ordinary MP4 has one H.264 track plus AAC/timecode/`gpmd`/`fdsc`. Both video fil
 GPS, accelerometer, and gyroscope metadata. The 360 JPEG is a full 5760×2880 equirectangular GPano
 image, while the supplied superwide JPEG is a 4320×1440 crop within a declared 5760×2880 GPano
 canvas.
+
+Follow-up: `gb-inspect` 0.2.0 now validates the JPEG marker/codestream structure directly and
+reproduces the primary and dependent-preview geometry without ExifTool or ImageMagick.
