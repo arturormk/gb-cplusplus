@@ -1,0 +1,218 @@
+# GoPro MAX (2025) sample findings
+
+Date inspected: 2026-10-29
+
+Evidence status: confirmed for these five files only
+
+Repository base commit: `4acf11c6944adccbc45f7a2287b7685432d73972`
+
+`gb-inspect`: 0.1.0 from the uncommitted working tree based on that commit
+
+This report records the first inspection of original GoPro MAX (2025) media available to this
+project. It is not a general claim that every firmware version or shooting mode has the same
+layout. Inspection was read-only. The files remain under `__stuff/` and are not repository
+fixtures.
+
+Exact GPS coordinates, camera/lens serials, media IDs, and scene content are deliberately omitted.
+The hashes below identify the evidence without publishing those private fields.
+
+## Tools
+
+- `gb-inspect 0.1.0`
+- FFprobe 4.4.2 (`4.4.2-0ubuntu0.22.04.1+esm17`)
+- ExifTool 12.40
+- file 5.41
+- ImageMagick `identify` from the local Ubuntu environment
+
+FFprobe and ExifTool are independent reference tools here; they are not project dependencies.
+
+## Evidence inventory
+
+| File | Supplied mode | Exact bytes | SHA-256 |
+|---|---|---:|---|
+| `GS040047.360` | 360 video | 4,008,703,896 | `6c410ceaf750a299937a637489247ce4cbf56b1fde9616da2838ddd63ac7ca63` |
+| `GH050083.MP4` | superwide video | 3,075,396,507 | `b39c7e9bdc3cbb4ebfba7cd6808ee02a7402c0f543cb95424a0a177d27a5e1b7` |
+| `GP__0011.JPG` | normal photo | 2,679,418 | `538732f35988358c0f9b17258377a6b34ae0b2409f9add8a74c5e872765607ed` |
+| `GP__0026.JPG` | superwide photo | 2,617,132 | `c9bc791bf13747dcf4f80c70176a5224adaeb62fccb9be1488665f008429821` |
+| `GS__0033.JPG` | 360 photo | 5,082,107 | `8dfedf5367bfcbd256d7d320574b1762dfbc2034013c693eb545d8193756d81b` |
+
+All five identify the camera as `GoPro Max`, firmware `H19.03.02.06.00`, and GoPro metadata
+version `8.1.2`.
+
+## Common video container layout
+
+Both video files are ISO BMFF/MP4 with major and compatible brand `mp41`. Their complete
+top-level order is:
+
+```text
+ftyp -> mdat -> moov
+```
+
+The `moov` box is at the end, so an inspector or player must seek near the end before it can read
+the track tables. The media data is not fragmented. Both samples use 32-bit `stco` chunk offsets,
+not `co64`; even the `.360` sample remains below the 4 GiB unsigned-offset boundary. This may help
+explain camera chaptering near 4 GB, but chaptering behavior is not proven by one file.
+
+Both `moov/udta` boxes contain these GoPro-specific children:
+
+```text
+FIRM LENS CAME SETT MUID HMMT BCID GUMI GPMF free
+```
+
+The MP4 additionally starts `udta` with a QuickTime `©xyz` location box. At the corresponding
+position, the `.360` file has a `free` box. This does **not** mean the `.360` lacks GPS: its `gpmd`
+track contains GPS samples.
+
+`gb-inspect` measured under 0.01 seconds and about 3.6 MiB maximum RSS per video because it seeks
+over `mdat` rather than reading the multi-gigabyte payload.
+
+### `GS040047.360`: native 360 video
+
+- Duration: 482.560 s (8:02.560)
+- Container bitrate reported by FFprobe: 66,457,292 bit/s
+- Top-level boxes:
+  - `ftyp`: offset 0, size 20
+  - `mdat`: offset 20, size 4,007,643,255
+  - `moov`: offset 4,007,643,275, size 1,060,621
+- Seven tracks are present.
+
+| FFprobe index | Type/tag | Time base | Duration / samples | Important properties |
+|---:|---|---|---|---|
+| 0 | HEVC `hvc1` video | 1/90000 | 482.560 s; 12,064 frames | Main, 4096×1344, 25 fps, BT.709, about 30.002 Mbit/s |
+| 1 | AAC-LC `mp4a` audio | 1/48000 | 482.560 s; 22,620 frames | 48 kHz stereo, about 189 kbit/s |
+| 2 | `tmcd` data | 1/90000 | 482.560 s; 1 sample | GoPro timecode |
+| 3 | `gpmd` binary data | 1/1000 | 482.560 s; 464 samples | GoPro timed metadata/GPMF, about 86.6 kbit/s |
+| 4 | `fdsc` data | 1/90000 | 482.560 s; 69,834 samples | Handler `GoPro SOS`, about 18.6 kbit/s; semantics not yet established |
+| 5 | HEVC `hvc1` video | 1/90000 | 482.560 s; 12,064 frames | Main, 4096×1344, 25 fps, BT.709, about 29.999 Mbit/s |
+| 6 | PCM `in32` audio | 1/48000 | 482.560 s; 23,162,880 samples | 48 kHz, 4 channels, little-endian, 6.144 Mbit/s; handler `GoPro AMB` |
+
+The two HEVC tracks have equal dimensions, frame count, frame rate, start time, duration, and
+nearly equal bitrates. This strongly identifies them as the synchronized front/back lens streams,
+consistent with the user-supplied 360 mode. The exact lens-to-track assignment remains unknown.
+
+FFprobe identifies track 6 as signed 32-bit PCM, and its bitrate exactly equals
+`48000 * 4 * 32`. ExifTool reports 16 bits per sample for the same track. The raw sample entry must
+be examined before treating either textual report as authoritative.
+
+FFprobe reports an all-zero display matrix on the second HEVC stream, with an invalid/sentinel
+rotation value. Code must not interpret that matrix as a normal transform. The movie header's raw
+`next_track_ID` is 6 although track IDs 6 and 7 exist; readers must enumerate actual `trak` boxes
+instead of trusting that field as an upper bound.
+
+### `GH050083.MP4`: superwide video
+
+- Duration: 543.560 s (9:03.560)
+- Container bitrate reported by FFprobe: 45,263,029 bit/s
+- Top-level boxes:
+  - `ftyp`: offset 0, size 20
+  - `mdat`: offset 20, size 3,074,732,028
+  - `moov`: offset 3,074,732,048, size 664,459
+- Five tracks are present.
+
+| FFprobe index | Type/tag | Time base | Duration / samples | Important properties |
+|---:|---|---|---|---|
+| 0 | H.264 `avc1` video | 1/90000 | 543.560 s; 13,589 frames | High profile, 1920×1080, 25 fps, BT.709, about 45.004 Mbit/s |
+| 1 | AAC-LC `mp4a` audio | 1/48000 | 543.531 s; 25,478 frames | 48 kHz stereo, about 189 kbit/s |
+| 2 | `tmcd` data | 1/90000 | 543.560 s; 1 sample | GoPro timecode |
+| 3 | `gpmd` binary data | 1/1000 | 543.560 s; 523 samples | GoPro timed metadata/GPMF, about 50.7 kbit/s |
+| 4 | `fdsc` data | 1/90000 | 543.560 s; 39,592 samples | Handler `GoPro SOS`, about 9.3 kbit/s; semantics not yet established |
+
+No projection or field-of-view value understood by these tools proves “superwide”; that mode
+label comes from the capture context. Unlike the native `.360`, this file is already a single
+ordinary 16:9 video stream and has no `GoPro AMB` PCM track.
+
+### Embedded telemetry
+
+ExifTool's embedded scan (`-ee`) confirms both `gpmd` tracks carry:
+
+- GPS latitude, longitude, altitude, 2D speed and 3D speed;
+- GPS fix mode, horizontal positioning error, and GPS date/time;
+- accelerometer and gyroscope arrays; and
+- sample times and repeated timestamps.
+
+| File | `gpmd` samples/documents | Extracted GPS point occurrences | Accelerometer groups | Gyroscope groups | Timestamp occurrences |
+|---|---:|---:|---:|---:|---:|
+| `GS040047.360` | 464 | 8,771 | 464 | 464 | 7,424 |
+| `GH050083.MP4` | 523 | 9,841 | 523 | 523 | 9,414 |
+
+An “accelerometer group” or “gyroscope group” may contain an array of readings, so these counts
+are not sensor sample rates. Precise GPMF types, scales, units, nesting, gaps, and clock mapping
+still need a loss-aware parser. GPS coordinates were inspected only to establish presence and
+were not copied into this report.
+
+## JPEG findings
+
+All three are baseline 8-bit JPEGs using YCbCr 4:2:2. They contain big-endian EXIF, GoPro APP6
+metadata, MPF metadata, an embedded EXIF thumbnail, and a second MPF image used as a dependent
+preview. The second image is not evidence of a second raw lens capture. ExifTool emits a minor
+`Unrecognized MakerNotes` warning for each file, so its decoded GoPro fields are not a complete
+inventory of the opaque metadata.
+
+| Property | Normal `GP__0011.JPG` | Superwide `GP__0026.JPG` | 360 `GS__0033.JPG` |
+|---|---:|---:|---:|
+| Main dimensions | 2704×2028 (4:3) | 4320×1440 (3:1) | 5760×2880 (2:1) |
+| GoPro resolution tag | `5.5MP_W` | `6.2MP_P` | `16.6MP_S` |
+| XMP GPano | absent | present | present |
+| GPano projection | — | equirectangular | equirectangular |
+| GPano full canvas | — | 5760×2880 | 5760×2880 |
+| GPano crop `(left, top, width, height)` | — | `(720, 720, 4320, 1440)` | `(0, 0, 5760, 2880)` |
+| GPS EXIF | not observed | not observed | present (values redacted) |
+| MPF images | 2 | 2 | 2 |
+| Dependent preview length | 420,970 bytes | 615,930 bytes | 395,658 bytes |
+
+The superwide photo is therefore encoded as the centered crop of a full-size equirectangular
+canvas, not merely as an untagged wide JPEG. Its 4320/5760 width ratio arithmetically corresponds
+to 270 degrees on an ideal equirectangular mapping, but the effective optical field of view and
+stitch/crop policy need independent validation before that is exposed as a semantic claim. The
+360 photo occupies the complete 2:1 GPano canvas and declares two source photos.
+
+JPEG marker inventory:
+
+| File | APP1 | APP2 | APP6 |
+|---|---|---|---|
+| Normal | one segment, 62,304 bytes | 176 bytes (MPF) | 818 bytes (GoPro) |
+| Superwide | two segments, 1,737 and 53,273 bytes | 176 bytes (MPF) | 1,162 bytes (GoPro) |
+| 360 | two segments, 1,733 and 60,365 bytes | 176 bytes (MPF) | 1,162 bytes (GoPro) |
+
+The extra APP1 segment in the panoramic photos carries XMP GPano data. ExifTool exposes GoPro
+“Geometry Calibrations”, “Back Lens”, and “Front Lens” device containers in all three APP6
+payloads, but the default report does not provide a complete numeric calibration model.
+
+## Reproduction commands
+
+Run from the repository root. Full ExifTool output contains private serial and location values;
+do not publish it without redaction.
+
+```sh
+build/dev/tools/gb-inspect/gb-inspect __stuff/GS040047.360
+build/dev/tools/gb-inspect/gb-inspect __stuff/GH050083.MP4
+
+ffprobe -v error -show_format -show_streams -of json __stuff/GS040047.360
+ffprobe -v error -show_format -show_streams -of json __stuff/GH050083.MP4
+
+exiftool -G1 -a -s __stuff/GP__0011.JPG __stuff/GP__0026.JPG __stuff/GS__0033.JPG
+exiftool -ee -api LargeFileSupport=1 -G3 -s __stuff/GS040047.360
+exiftool -ee -api LargeFileSupport=1 -G3 -s __stuff/GH050083.MP4
+
+sha256sum __stuff/GS040047.360 __stuff/GH050083.MP4 \
+  __stuff/GP__0011.JPG __stuff/GP__0026.JPG __stuff/GS__0033.JPG
+```
+
+## Implementation consequences and next experiments
+
+1. Extend `gb_container` to parse `mvhd`, `tkhd`, `mdhd`, `hdlr`, and `stsd`; this will let
+   `gb-inspect` reproduce the track table above without FFprobe.
+2. Preserve duplicate video/audio roles and unknown `fdsc` data rather than selecting only the
+   first playable stream.
+3. Treat integer ticks plus rational time bases as authoritative. Do not reduce timing to rounded
+   seconds.
+4. Implement GPMF location separately from GPMF interpretation, and test `.360` GPS discovery
+   without relying on a `©xyz` user-data box.
+5. Extract small, explicitly requested `stsd`, GPMF, APP6, EXIF, XMP, and MPF fixtures after a
+   privacy review; do not commit these original samples.
+6. Decode representative frames from both HEVC tracks to establish lens ordering, packing, and
+   reconstruction requirements. This report did not inspect scene pixels.
+7. Determine the `fdsc`/`GoPro SOS` payload semantics and resolve the 32-bit-versus-16-bit PCM
+   reporting discrepancy from raw sample descriptions.
+8. Acquire additional files for other resolutions, frame rates, GPS-disabled cases, chapter
+   boundaries, low-light modes, and firmware versions before generalizing.

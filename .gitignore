@@ -1,0 +1,9 @@
+/build/
+/out/
+/__stuff/
+/.cache/
+compile_commands.json
+*.360
+*.mp4
+*.mov
+*.gpx

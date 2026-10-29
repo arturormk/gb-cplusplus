@@ -1,0 +1,8 @@
+Checks: >
+  -*,
+  bugprone-*,
+  performance-*,
+  portability-*,
+  readability-avoid-const-params-in-decls
+WarningsAsErrors: ''
+HeaderFilterRegex: '^(lib|tools|tests)/'

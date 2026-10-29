@@ -1,0 +1,111 @@
+#!/usr/bin/env bash
+
+set -Eeuo pipefail
+
+readonly SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+readonly PRESET="dev"
+readonly BUILD_DIR="${SCRIPT_DIR}/build/${PRESET}"
+readonly INSTALL_DIR="${BUILD_DIR}/install"
+
+install_dependencies=true
+run_tests=true
+
+usage() {
+  cat <<'EOF'
+Usage: ./quickstart.sh [options]
+
+Configure, build, test, and locally install gb-cplusplus.
+
+Options:
+  --no-install-deps  Do not try to install missing Ubuntu packages
+  --skip-tests       Build without running the test suite
+  -h, --help         Show this help and exit
+
+Missing build tools are installed with apt-get when it is available. The script
+uses sudo when needed and may prompt for the user's password. Build products stay
+inside build/dev; no project executable is installed system-wide.
+EOF
+}
+
+while (($# > 0)); do
+  case "$1" in
+    --no-install-deps)
+      install_dependencies=false
+      ;;
+    --skip-tests)
+      run_tests=false
+      ;;
+    -h | --help)
+      usage
+      exit 0
+      ;;
+    *)
+      printf 'quickstart.sh: unknown option: %s\n\n' "$1" >&2
+      usage >&2
+      exit 2
+      ;;
+  esac
+  shift
+done
+
+missing_packages=()
+command -v c++ >/dev/null 2>&1 || missing_packages+=(build-essential)
+command -v cmake >/dev/null 2>&1 || missing_packages+=(cmake)
+command -v ninja >/dev/null 2>&1 || missing_packages+=(ninja-build)
+
+if ((${#missing_packages[@]} > 0)); then
+  printf 'Missing required build packages: %s\n' "${missing_packages[*]}"
+
+  if [[ "${install_dependencies}" != true ]]; then
+    printf 'Install them and rerun this script, or omit --no-install-deps.\n' >&2
+    exit 1
+  fi
+  if ! command -v apt-get >/dev/null 2>&1; then
+    printf 'Automatic installation currently supports apt-get-based systems only.\n' >&2
+    printf 'Install a C++20 compiler, CMake 3.22+, and Ninja 1.10+, then rerun.\n' >&2
+    exit 1
+  fi
+
+  apt_command=(apt-get)
+  if ((EUID != 0)); then
+    if ! command -v sudo >/dev/null 2>&1; then
+      printf 'sudo is required to install missing packages.\n' >&2
+      exit 1
+    fi
+    apt_command=(sudo apt-get)
+  fi
+
+  printf 'Installing missing build dependencies with apt-get...\n'
+  "${apt_command[@]}" update
+  "${apt_command[@]}" install -y --no-install-recommends "${missing_packages[@]}"
+fi
+
+printf 'Configuring with CMake preset %s...\n' "${PRESET}"
+cd -- "${SCRIPT_DIR}"
+cmake --preset "${PRESET}"
+
+printf 'Building all configured targets...\n'
+cmake --build --preset "${PRESET}"
+
+if [[ "${run_tests}" == true ]]; then
+  printf 'Running tests...\n'
+  ctest --preset "${PRESET}" --output-on-failure
+fi
+
+printf 'Installing user-facing executables locally...\n'
+cmake --install "${BUILD_DIR}" --prefix "${INSTALL_DIR}"
+
+mapfile -d '' executables < <(
+  find "${INSTALL_DIR}/bin" -maxdepth 1 -type f -perm -u+x -print0 2>/dev/null | sort -z
+)
+
+if ((${#executables[@]} == 0)); then
+  printf 'Build completed, but no installed executable targets were found.\n' >&2
+  exit 1
+fi
+
+printf '\nBuild and local installation completed successfully.\n'
+printf 'Executable files:\n'
+for executable in "${executables[@]}"; do
+  printf '  %s\n' "$executable"
+done
