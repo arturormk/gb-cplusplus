@@ -4,6 +4,7 @@ pkg_check_modules(GB_FFMPEG REQUIRED IMPORTED_TARGET
 
 add_library(gb_media
   src/audio.cpp
+  src/chapters.cpp
   src/ffmpeg_support.cpp
   src/hud.cpp
   src/media.cpp

@@ -3,6 +3,7 @@
 #include "audio_output.hpp"
 #include "gb/container/iso_bmff.hpp"
 #include "gb/media/audio.hpp"
+#include "gb/media/chapters.hpp"
 #include "gb/media/playback.hpp"
 #include "gb/metadata/gpmf.hpp"
 #include "gb/telemetry/telemetry.hpp"
@@ -153,8 +154,8 @@ PlayerController::PlayerController(PlayerOptions options, QObject *parent)
   connect(&engine_, &PlaybackEngine::audioChanged, this, &PlayerController::audioChanged);
   connect(&engine_, &PlaybackEngine::errorOccurred, this,
           [this](const QString &message) { setStatus(QStringLiteral("Decode error: ") + message, true); });
-  connect(&engine_, &PlaybackEngine::endReached, this,
-          [this] { setStatus(QStringLiteral("End of media")); });
+  // Queued: opening the next chapter closes the engine, which is still emitting.
+  connect(&engine_, &PlaybackEngine::endReached, this, &PlayerController::onEndReached, Qt::QueuedConnection);
   diagnostics_timer_.setInterval(1000);
   connect(&diagnostics_timer_, &QTimer::timeout, this, &PlayerController::updateDiagnostics);
   if (options_.map_tiles.user_agent.isEmpty()) {
@@ -178,6 +179,12 @@ QString PlayerController::mapProviderName() const { return QString::fromStdStrin
 QObject *PlayerController::engine() { return &engine_; }
 PlaybackEngine &PlayerController::playbackEngine() { return engine_; }
 QString PlayerController::inputName() const { return QFileInfo(input_path_).fileName(); }
+
+QStringList PlayerController::sequenceNames() const {
+  QStringList names;
+  for (const auto &path : sequence_paths_) names.push_back(QFileInfo(path).fileName());
+  return names;
+}
 
 int PlayerController::overlap() const { return source_->layout.overlap; }
 
@@ -236,6 +243,13 @@ bool PlayerController::open(const QString &path, const double start_seconds) {
     source_->layout = layout;
     source_->streams = streams;
     input_path_ = QFileInfo(path).absoluteFilePath();
+    sequence_paths_.clear();
+    sequence_index_ = 0;
+    for (const auto &chapter : gb::media::chapter_sequence(input_path_.toStdString())) {
+      const auto chapter_path = QString::fromStdString(chapter.string());
+      if (chapter_path == input_path_) sequence_index_ = static_cast<int>(sequence_paths_.size());
+      sequence_paths_.push_back(chapter_path);
+    }
     const auto base = streams.front().time_base;
     const auto start = std::isfinite(start_seconds) && start_seconds > 0.0
                            ? gb::media::rescale_ticks(std::llround(start_seconds * 1000.0), {1, 1000}, base)
@@ -735,6 +749,24 @@ std::int64_t PlayerController::ticksForSeconds(const double value) const {
   if (!engine_.isOpen() || !std::isfinite(value)) return 0;
   const auto milliseconds = std::llround(std::max(0.0, value) * 1000.0);
   return gb::media::rescale_ticks(milliseconds, {1, 1000}, engine_.timeBase());
+}
+
+void PlayerController::onEndReached() {
+  const auto next = sequence_index_ + 1;
+  // Continue only if nothing moved playback off the last frame before this queued call ran.
+  if (options_.continue_sequence && next < sequence_paths_.size() && !engine_.playing() && !engine_.seeking() &&
+      engine_.positionTicks() + engine_.frameDurationTicks() >= engine_.durationTicks()) {
+    // A failed open keeps the previous chapter and reports why.
+    if (open(sequence_paths_[next])) play();
+    return;
+  }
+  setStatus(QStringLiteral("End of media"));
+}
+
+void PlayerController::openSequenceIndex(const int index) {
+  if (index < 0 || index >= sequence_paths_.size() || index == sequence_index_) return;
+  const auto was_playing = engine_.playing();
+  if (open(sequence_paths_[index]) && was_playing) play();
 }
 
 void PlayerController::togglePlay() {

@@ -240,6 +240,8 @@ int main(int argc, char **argv) {
   qmlRegisterType<VideoView>("Gb.Player", 1, 0, "VideoView");
   qmlRegisterType<MapView>("Gb.Player", 1, 0, "MapView");
 
+  // A benchmark measures one file; it must not run on into the next chapter.
+  if (options.benchmark.has_value()) options.player.continue_sequence = false;
   PlayerController controller(options.player);
   QQmlApplicationEngine engine;
   engine.rootContext()->setContextProperty(QStringLiteral("player"), &controller);

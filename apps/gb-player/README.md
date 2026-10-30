@@ -16,6 +16,14 @@ recordings read-only and plays them without conversion:
   sound fragments. See ADR-0008.
 - **Map**: an OpenStreetMap map of the recorded GPS route with the current position, kept in
   step with the displayed frame. Click the route to seek there. See ADR-0009.
+- **Chapters**: the camera splits long recordings into files `GSnnmmmm.360` (MAX),
+  `GHnnmmmm.MP4` (AVC) or `GXnnmmmm.MP4` (HEVC), where `nn` is the chapter (01 onwards) and
+  `mmmm` the recording number, per GoPro's
+  [file naming convention](https://community.gopro.com/s/article/GoPro-Camera-File-Naming-Convention).
+  When the opened file is one of several chapters in its folder, the toolbar's file name becomes a
+  drop-down listing them in order; choosing one opens it from the start, playing if playback was
+  running. When playback reaches the end of a chapter, the next one opens and plays. Each chapter
+  stays a separate file: timeline, telemetry and map cover only the open one.
 
 ## Use
 
@@ -39,6 +47,7 @@ gb-player --map-cache /tmp/tiles recording.360  # use another tile cache
 | Timeline press and drag | scrub: frames follow the pointer, clock held, audio silent until release + 250 ms |
 | M | mute / unmute (the audio clock keeps running) |
 | R / F / Ctrl+O | reset view / full screen / open file |
+| Toolbar chapter drop-down | open another chapter of the recording |
 | Map: drag, wheel, `+` / `−` | pan (stops following), zoom |
 | Map: click on the route | seek there; if the route passes several times, choose the time |
 | Map: `⤢` / `◎` | fit the whole route / follow the current position |
@@ -119,7 +128,7 @@ texture upload plus drawing on the GPU. The `map` section reports how the drawn 
 compares with the GPS record nearest to the displayed PTS. The record is sampled about every
 100 ms while playing, where up to two frames of lag is allowed. After the pause and after every
 seek it must match exactly. The section also gives tile cache and request counts. The report
-contains no telemetry values. Results describe
+contains no telemetry values. A benchmark never continues into the next chapter. Results describe
 the machine they were measured on; see `research/findings/` for recorded runs.
 
 ## Requirements and limitations
@@ -128,7 +137,7 @@ the machine they were measured on; see `research/findings/` for recorded runs.
   software backend, decoding, presentation and telemetry still work, but no image is shown.
 - Audio: the first mono or stereo stream plays through SDL2 (`--no-audio` disables it). The MAX
   four-channel spatial track is not rendered. Hardware decoding (VA-API), edit lists,
-  multi-chapter grouping, photos, and export are not implemented.
+  a joined timeline across chapters, photos, and export are not implemented.
 - The map is raster only, and tiles can look soft on HiDPI screens. Routes crossing the
   antimeridian are not drawn across it. The tile cache is never pruned automatically.
 - MAX reconstruction requires the verified two-stream geometry. The near-black `BACK` face of the

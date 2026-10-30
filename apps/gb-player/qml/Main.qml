@@ -40,7 +40,11 @@ ApplicationWindow {
 
     Connections {
         target: player
-        function onFileChanged() { window.selectMode(window.requestedMode) }
+        function onFileChanged() {
+            window.selectMode(window.requestedMode)
+            // Choosing an entry breaks the currentIndex binding; follow chapter changes anyway.
+            chapterBox.currentIndex = player.sequenceIndex
+        }
     }
 
     Shortcut { sequence: "Space"; onActivated: player.togglePlay() }
@@ -72,10 +76,22 @@ ApplicationWindow {
 
             DarkButton { text: "Open…"; onClicked: player.openDialog() }
             Label {
+                visible: player.sequenceNames.length < 2
                 text: player.inputName.length ? player.inputName : "No file"
                 color: "#d9e2e8"
                 elide: Text.ElideMiddle
                 Layout.maximumWidth: 260
+            }
+            // Chapters of a recording split by the camera: pick one to open it.
+            DarkComboBox {
+                id: chapterBox
+                visible: player.sequenceNames.length >= 2
+                model: player.sequenceNames
+                currentIndex: player.sequenceIndex
+                Layout.preferredWidth: 170
+                ToolTip.visible: hovered
+                ToolTip.text: "Chapter " + (player.sequenceIndex + 1) + " of " + player.sequenceNames.length
+                onActivated: function(index) { player.openSequenceIndex(index) }
             }
             Label {
                 text: player.layoutDescription

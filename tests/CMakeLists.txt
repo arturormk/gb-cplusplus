@@ -16,6 +16,9 @@ target_link_libraries(gb_telemetry_tests PRIVATE gb::telemetry gb_project_option
 add_executable(gb_media_tests unit/media_test.cpp)
 target_link_libraries(gb_media_tests PRIVATE gb::media gb_project_options)
 
+add_executable(gb_chapters_tests unit/chapters_test.cpp)
+target_link_libraries(gb_chapters_tests PRIVATE gb::media gb_project_options)
+
 add_executable(gb_playback_tests unit/playback_test.cpp)
 target_link_libraries(gb_playback_tests PRIVATE gb::media gb_project_options)
 
@@ -32,6 +35,7 @@ set_tests_properties(gb_tiles_tests PROPERTIES TIMEOUT 60)
 add_test(NAME gb_image_tests COMMAND gb_image_tests)
 add_test(NAME gb_metadata_tests COMMAND gb_metadata_tests)
 add_test(NAME gb_media_tests COMMAND gb_media_tests)
+add_test(NAME gb_chapters_tests COMMAND gb_chapters_tests)
 add_test(NAME gb_inspect_help COMMAND gb_inspect --help)
 add_test(NAME gb_inspect_version COMMAND gb_inspect --version)
 add_test(NAME gb_metadata_help COMMAND gb_metadata_tool --help)

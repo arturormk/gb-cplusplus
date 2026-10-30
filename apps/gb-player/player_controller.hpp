@@ -10,6 +10,7 @@
 #include <QElapsedTimer>
 #include <QObject>
 #include <QString>
+#include <QStringList>
 #include <QTimer>
 #include <QVariantList>
 #include <QVariantMap>
@@ -24,6 +25,8 @@ struct PlayerOptions {
   int decoder_threads{0};
   std::size_t queue_capacity{4};
   bool audio{true};
+  // At the end of a chapter during playback, open and play the next one.
+  bool continue_sequence{true};
   gb::geo::TileProvider map_provider;
   gb::tiles::FetcherOptions map_tiles;
 };
@@ -35,6 +38,8 @@ class PlayerController final : public QObject {
   Q_PROPERTY(QObject *engine READ engine CONSTANT)
   Q_PROPERTY(QString inputPath READ inputPath NOTIFY fileChanged)
   Q_PROPERTY(QString inputName READ inputName NOTIFY fileChanged)
+  Q_PROPERTY(QStringList sequenceNames READ sequenceNames NOTIFY fileChanged)
+  Q_PROPERTY(int sequenceIndex READ sequenceIndex NOTIFY fileChanged)
   Q_PROPERTY(bool hasMedia READ hasMedia NOTIFY fileChanged)
   Q_PROPERTY(int sourceLayout READ sourceLayout NOTIFY fileChanged)
   Q_PROPERTY(QString layoutDescription READ layoutDescription NOTIFY fileChanged)
@@ -76,6 +81,10 @@ public:
   [[nodiscard]] const PlayerOptions &options() const { return options_; }
   [[nodiscard]] QString inputPath() const { return input_path_; }
   [[nodiscard]] QString inputName() const;
+  // File names of the chapters of the open recording (GSnnmmmm.360 / GHnnmmmm.MP4 /
+  // GXnnmmmm.MP4 with the same mmmm), in chapter order, and the open one's index. A file that is not chaptered is alone.
+  [[nodiscard]] QStringList sequenceNames() const;
+  [[nodiscard]] int sequenceIndex() const { return sequence_index_; }
   [[nodiscard]] bool hasMedia() const { return engine_.isOpen(); }
   [[nodiscard]] int sourceLayout() const;
   [[nodiscard]] QString layoutDescription() const;
@@ -122,6 +131,8 @@ public:
 
   Q_INVOKABLE void openDialog();
   Q_INVOKABLE bool open(const QString &path, double start_seconds = 0.0);
+  // Opens another chapter of the open recording from its start, keeping play/pause.
+  Q_INVOKABLE void openSequenceIndex(int index);
   Q_INVOKABLE void togglePlay();
   Q_INVOKABLE void play();
   Q_INVOKABLE void pause();
@@ -156,6 +167,7 @@ private:
   struct Source;
 
   void setStatus(const QString &message, bool error = false);
+  void onEndReached();
   void startMetadataLoad(const std::string &path);
   void applyMetadata(std::uint64_t generation, std::shared_ptr<LoadedMetadata> loaded);
   void onFrameChanged();
@@ -172,6 +184,8 @@ private:
   PlaybackEngine engine_;
   std::unique_ptr<Source> source_;
   QString input_path_;
+  QStringList sequence_paths_;
+  int sequence_index_{};
   QString audio_description_;
   QString status_;
   bool status_is_error_{};
