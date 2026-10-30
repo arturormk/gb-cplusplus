@@ -21,6 +21,10 @@ ApplicationWindow {
     readonly property var availableModes: player.sourceLayout === 1 ? [0, 1, 2, 3, 4, 5, 6]
                                         : player.sourceLayout === 2 ? [0, 1, 2, 3, 4, 7] : [7]
     readonly property bool spherical: view.mode <= 3
+    // Fisheye, stereographic and Little Planet normalize each axis separately; a square view
+    // makes their image circle round.
+    readonly property bool circular: view.mode >= 1 && view.mode <= 3
+    property bool squareView: initialSquare
     property int requestedMode: initialView
 
     function selectMode(mode) {
@@ -60,6 +64,7 @@ ApplicationWindow {
     Shortcut { sequence: "F"; onActivated: window.visibility = window.visibility === Window.FullScreen ? Window.Windowed : Window.FullScreen }
     Shortcut { sequence: "Escape"; onActivated: if (window.visibility === Window.FullScreen) window.visibility = Window.Windowed }
     Shortcut { sequence: "R"; onActivated: window.resetView() }
+    Shortcut { sequence: "S"; onActivated: window.squareView = !window.squareView }
     Shortcut { sequence: "Ctrl+O"; onActivated: player.openDialog() }
     Repeater {
         model: 8
@@ -110,6 +115,17 @@ ApplicationWindow {
                 Layout.preferredWidth: 230
                 onActivated: function(index) { window.selectMode(window.availableModes[index]) }
             }
+            DarkButton {
+                text: "Square"
+                visible: window.circular
+                checkable: true
+                checked: window.squareView
+                enabled: player.hasMedia
+                implicitWidth: 76
+                ToolTip.visible: hovered
+                ToolTip.text: "Square view, so the image circle is round (S)"
+                onToggled: window.squareView = checked
+            }
             DarkButton { text: "Reset view"; enabled: player.hasMedia; onClicked: window.resetView() }
             DarkButton {
                 text: window.visibility === Window.FullScreen ? "Exit full screen" : "Full screen"
@@ -133,8 +149,10 @@ ApplicationWindow {
 
             VideoView {
                 id: view
-                anchors.fill: parent
-                anchors.margins: 1
+                readonly property bool square: window.squareView && window.circular
+                anchors.centerIn: parent
+                width: square ? Math.min(parent.width, parent.height) - 2 : parent.width - 2
+                height: square ? width : parent.height - 2
                 engine: player.engine
                 sourceLayout: player.sourceLayout
                 overlap: player.overlap

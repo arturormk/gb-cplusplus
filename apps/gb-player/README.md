@@ -55,6 +55,7 @@ gb-player --view panorama GS__0033.JPG           # a 360° photo
 | Timeline press and drag | scrub: frames follow the pointer, clock held, audio silent until release + 250 ms |
 | M | mute / unmute (the audio clock keeps running) |
 | R / F / Ctrl+O | reset view / full screen / open file |
+| S, toolbar Square | square view, so the fisheye-family image circle is round |
 | Toolbar chapter drop-down | open another chapter of the recording |
 | Map: drag, wheel, `+` / `−` | pan (stops following), zoom |
 | Map: click on the route | seek there; if the route passes several times, choose the time |
@@ -187,4 +188,4 @@ the machine they were measured on; see `research/findings/` for recorded runs.
 - MAX reconstruction requires the verified two-stream geometry. The near-black `BACK` face of the
   fingerprinted sample is shown as recorded.
 - Fisheye-family views keep the shared reference convention of normalizing each axis separately,
-  so non-square views are elliptical.
+  so non-square views are elliptical unless the Square toggle is on.

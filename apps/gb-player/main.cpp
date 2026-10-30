@@ -32,6 +32,7 @@ struct Options {
   QString path;
   double seconds{};
   int view{VideoView::Rectilinear};
+  bool square{};
   bool play{};
   PlayerOptions player;
   std::optional<BenchmarkOptions> benchmark;
@@ -57,6 +58,7 @@ void help() {
          "  --time SECONDS        initial media time (default 0)\n"
          "  --view MODE           rectilinear, fisheye, stereographic, little-planet,\n"
          "                        panorama, raw-1, raw-2, or original (default rectilinear)\n"
+         "  --square              square view, so fisheye-family image circles are round\n"
          "  --play                start playing after opening\n"
          "  --decoder-threads N   decoder threads per stream, 0 = automatic (default 0)\n"
          "  --queue N             decoded frame sets buffered ahead, 1..32 (default 4)\n"
@@ -74,7 +76,7 @@ void help() {
          "  --help                show this help and exit\n"
          "  --version             show the program version and exit\n\n"
          "Keys: Space play/pause, Left/Right seek 5 s, ,/. step one frame, M mute,\n"
-         "F full screen, R reset view, 1-8 select view mode.\n\n"
+         "F full screen, R reset view, S square view, 1-8 select view mode.\n\n"
          "Audio plays only during stable playback. It is silent while paused, while the\n"
          "timeline is dragged, while a seek is decoding, and for 250 ms after each seek.\n\n"
          "Map: when a recording has GPS, the map requests the tiles covering the visible\n"
@@ -119,6 +121,8 @@ Options parse(const int argc, char **argv) {
       const auto found = std::find(kViewNames.begin(), kViewNames.end(), name);
       if (found == kViewNames.end()) throw std::runtime_error("unknown view mode: " + std::string(name));
       options.view = static_cast<int>(std::distance(kViewNames.begin(), found));
+    } else if (argument == "--square") {
+      options.square = true;
     } else if (argument == "--play") {
       options.play = true;
     } else if (argument == "--decoder-threads") {
@@ -248,6 +252,7 @@ int main(int argc, char **argv) {
   QQmlApplicationEngine engine;
   engine.rootContext()->setContextProperty(QStringLiteral("player"), &controller);
   engine.rootContext()->setContextProperty(QStringLiteral("initialView"), options.view);
+  engine.rootContext()->setContextProperty(QStringLiteral("initialSquare"), options.square);
   engine.load(QUrl(QStringLiteral("qrc:/qml/Main.qml")));
   if (engine.rootObjects().isEmpty()) return 1;
   auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().front());
