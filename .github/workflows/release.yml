@@ -24,7 +24,15 @@ jobs:
             exit 1
           fi
           echo "GB_VERSION=${version}" >> "${GITHUB_ENV}"
+          # Only even minors are releases; odd-minor tags just mark development versions.
+          minor="$(cut -d. -f2 <<< "${version}")"
+          if (( minor % 2 == 0 )); then
+            echo "GB_RELEASE=true" >> "${GITHUB_ENV}"
+          else
+            echo "::notice::v${version} is a development version; no release is published"
+          fi
       - name: Install dependencies
+        if: env.GB_RELEASE == 'true'
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
@@ -35,18 +43,19 @@ jobs:
             qml6-module-qtquick-nativestyle qml6-module-qtquick-templates \
             qml6-module-qtquick-window libsdl2-dev
       - name: Configure
+        if: env.GB_RELEASE == 'true'
         run: cmake --preset dev -DGB_WARNINGS_AS_ERRORS=ON
       - name: Build
+        if: env.GB_RELEASE == 'true'
         run: cmake --build --preset dev
       - name: Test
+        if: env.GB_RELEASE == 'true'
         run: ctest --preset dev
-      # Even minors will attach .deb/.rpm packages here once packaging lands (ADR-0010).
+      # .deb/.rpm packages will be attached here once packaging lands (ADR-0010).
       - name: Publish GitHub release
+        if: env.GB_RELEASE == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          prerelease=()
-          minor="$(cut -d. -f2 <<< "${GB_VERSION}")"
-          if (( minor % 2 == 1 )); then prerelease=(--prerelease); fi
           gh release create "${GITHUB_REF_NAME}" --title "gb-cplusplus ${GITHUB_REF_NAME}" \
-            --generate-notes "${prerelease[@]}"
+            --generate-notes

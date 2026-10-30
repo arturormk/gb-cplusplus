@@ -27,9 +27,10 @@ for `--version`, and `gb-player` sends it in the map tile User-Agent.
 5. **No-history builds.** Shallow clones undercount and produce a CMake warning; CI fetches full
    history. Builds without Git default the patch to 0 with a warning. Pass
    `-DGB_VERSION_PATCH_OVERRIDE=N` to set it.
-6. **Tags and GitHub releases.** Tags are `v` plus the derived version (`v0.1.13`, `v1.0`). The
-   `release` workflow refuses a tag that differs from `cmake -P cmake/GbVersion.cmake`, builds
-   and tests, then creates a GitHub release. Odd-minor releases are marked as pre-releases.
+6. **Tags and GitHub releases.** Tags are `v` plus the derived version (`v0.1.14`, `v1.0`). The
+   `release` workflow refuses a tag that differs from `cmake -P cmake/GbVersion.cmake`. Only
+   even-minor tags (`v1.0`, `v1.0.1`, `v1.2`) build, test and publish a GitHub release. Odd-minor
+   tags only mark development versions and never produce release artifacts.
 7. **Packaging follows even minors.** Even-minor releases will also publish `.deb` and `.rpm`
    packages. This is deferred until before 1.0. `GB_VERSION_IS_RELEASE` is exported for the
    packaging step.
