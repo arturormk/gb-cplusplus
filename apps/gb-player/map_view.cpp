@@ -21,6 +21,14 @@ constexpr qint64 kRetryUnavailableMs = 60000;
 constexpr double kDragThreshold = 4.0;
 constexpr double kClickTolerancePixels = 10.0;
 constexpr double kMinimumClickToleranceMetres = 5.0;
+constexpr int kAnimationIntervalMs = 16;
+// Time constants of the display filters. GPS course from neighbouring fixes swings by tens of
+// degrees between records at walking pace; ~0.5 s of smoothing keeps the arrow steady while still
+// following real turns.
+constexpr double kCourseTimeConstant = 0.5;
+constexpr double kPanTimeConstant = 0.3;
+// A record jump larger than this is a seek: the arrow takes the new course at once.
+constexpr std::size_t kSnapRecords = 25;
 
 quint64 packed(const gb::geo::TileKey key) {
   return (static_cast<quint64>(key.zoom) << 56U) | (static_cast<quint64>(key.x) << 28U) | static_cast<quint64>(key.y);
@@ -38,6 +46,9 @@ MapView::MapView(QQuickItem *parent) : QQuickPaintedItem(parent), images_(kMemor
   setFillColor(kBackground);
   setOpaquePainting(true);
   clock_.start();
+  animation_.setInterval(kAnimationIntervalMs);
+  animation_.setTimerType(Qt::PreciseTimer);
+  connect(&animation_, &QTimer::timeout, this, &MapView::animate);
 }
 
 QObject *MapView::controller() const { return player_; }
@@ -218,6 +229,8 @@ void MapView::updateTileStatus() {
 void MapView::onRouteChanged() {
   route_.clear();
   usable_.clear();
+  shown_course_.reset();
+  last_record_.reset();
   if (player_ != nullptr) {
     for (const auto &point : player_->mapRoute()) {
       route_.push_back(gb::geo::project(point.position));
@@ -262,27 +275,86 @@ void MapView::fitRoute() {
   refreshTiles();
 }
 
+std::optional<gb::geo::WorldPoint> MapView::followTarget() const {
+  if (player_ == nullptr || route_.empty()) return std::nullopt;
+  const auto record = player_->mapRecord();
+  const auto state = player_->mapState();
+  if (!record.has_value() || *record >= route_.size() || !usable_[*record] ||
+      (state != QStringLiteral("valid") && state != QStringLiteral("gap"))) {
+    return std::nullopt;
+  }
+  return route_[*record];
+}
+
 void MapView::onPositionChanged() {
-  if (follow_ && player_ != nullptr && !route_.empty()) {
+  if (player_ != nullptr) {
     const auto record = player_->mapRecord();
-    const auto state = player_->mapState();
-    if (record.has_value() && *record < route_.size() &&
-        (state == QStringLiteral("valid") || state == QStringLiteral("gap")) && usable_[*record]) {
-      const auto target = route_[*record];
-      // Recentre only when the marker leaves the middle half of the view, so the map does not
-      // scroll on every GPS record.
-      const auto view = viewport();
-      const auto sx = target.x * view.world_pixels - view.left;
-      const auto sy = target.y * view.world_pixels - view.top;
-      if (sx < width() * 0.25 || sx > width() * 0.75 || sy < height() * 0.25 || sy > height() * 0.75) {
-        center_ = target;
+    const auto course = player_->mapCourse();
+    // The first course, or one after a seek, is shown at once instead of swinging round to it.
+    const auto jumped = !last_record_.has_value() || !record.has_value() ||
+                        std::max(*record, *last_record_) - std::min(*record, *last_record_) > kSnapRecords;
+    if (course.has_value() && (jumped || !shown_course_.has_value())) shown_course_ = *course;
+    if (record.has_value()) last_record_ = record;
+  }
+  if (follow_) {
+    if (const auto target = followTarget(); target.has_value()) {
+      // Far away (a seek, or follow just switched on): jump rather than glide across the world.
+      const auto world_pixels = viewport().world_pixels;
+      const auto dx = std::remainder(target->x - center_.x, 1.0) * world_pixels;
+      const auto dy = (target->y - center_.y) * world_pixels;
+      if (std::hypot(dx, dy) > std::max(width(), height())) {
+        center_ = *target;
         emit viewChanged();
         refreshTiles();
-        return;
       }
     }
   }
+  startAnimation();
   update();
+}
+
+void MapView::startAnimation() {
+  if (animation_.isActive()) return;
+  animation_clock_.start();
+  animation_.start();
+}
+
+// One step of the display filters: the arrow turns towards the current course along the shorter
+// way round, and while following the centre glides towards the marker. Stops once both settle.
+void MapView::animate() {
+  const auto dt = std::min(0.1, static_cast<double>(animation_clock_.restart()) / 1000.0);
+  bool active = false;
+  const auto course = player_ != nullptr ? player_->mapCourse() : std::nullopt;
+  if (course.has_value() && shown_course_.has_value()) {
+    const auto difference = std::remainder(*course - *shown_course_, 360.0);
+    if (std::fabs(difference) > 0.1) {
+      *shown_course_ += difference * (1.0 - std::exp(-dt / kCourseTimeConstant));
+      active = true;
+    } else {
+      shown_course_ = *course;
+    }
+    update();
+  }
+  if (follow_ && !dragging_) {
+    if (const auto target = followTarget(); target.has_value()) {
+      const auto dx = std::remainder(target->x - center_.x, 1.0);
+      const auto dy = target->y - center_.y;
+      if (dx != 0.0 || dy != 0.0) {
+        if (std::hypot(dx, dy) * viewport().world_pixels > 0.25) {
+          const auto step = 1.0 - std::exp(-dt / kPanTimeConstant);
+          center_.x += dx * step;
+          center_.x -= std::floor(center_.x);
+          center_.y = std::clamp(center_.y + dy * step, 0.0, 1.0);
+          active = true;
+        } else {
+          center_ = *target;
+        }
+        emit viewChanged();
+        refreshTiles();
+      }
+    }
+  }
+  if (!active) animation_.stop();
 }
 
 void MapView::geometryChange(const QRectF &new_geometry, const QRectF &old_geometry) {
@@ -384,10 +456,11 @@ void MapView::paint(QPainter *painter) {
     const auto position = screen(route_[*record]);
     if (state == QStringLiteral("valid")) {
       if (const auto course = player_->mapCourse(); course.has_value()) {
-        // Direction of travel from neighbouring fixes, not the camera's pointing direction.
+        // Direction of travel from neighbouring fixes, not the camera's pointing direction,
+        // smoothed for display.
         painter->save();
         painter->translate(position);
-        painter->rotate(*course);
+        painter->rotate(shown_course_.value_or(*course));
         QPainterPath arrow;
         arrow.moveTo(0.0, -19.0);
         arrow.lineTo(7.0, -8.0);

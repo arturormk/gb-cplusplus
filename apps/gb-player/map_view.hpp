@@ -8,6 +8,7 @@
 #include <QImage>
 #include <QPointer>
 #include <QQuickPaintedItem>
+#include <QTimer>
 
 #include <atomic>
 #include <map>
@@ -21,7 +22,8 @@ class PlayerController;
 // controller's TileFetcher; only tiles covering the visible area (and their cached ancestors as
 // placeholders) are ever requested. The route is drawn per run of valid fixes, so invalid
 // stretches show as breaks. Dragging pans and stops following; a click without a drag reports the
-// position so QML can offer seek targets.
+// position so QML can offer seek targets. While following, the view glides to keep the marker
+// centred. The course arrow is low-pass filtered for display; the marker position never is.
 class MapView : public QQuickPaintedItem {
   Q_OBJECT
   Q_PROPERTY(QObject *controller READ controller WRITE setController NOTIFY controllerChanged)
@@ -90,6 +92,9 @@ private:
   void updateTileStatus();
   void zoomAround(double new_zoom, QPointF anchor);
   [[nodiscard]] const QImage *tileImage(gb::geo::TileKey key) const;
+  [[nodiscard]] std::optional<gb::geo::WorldPoint> followTarget() const;
+  void startAnimation();
+  void animate();
 
   QPointer<PlayerController> player_;
   gb::geo::WorldPoint center_{0.5, 0.5};
@@ -106,6 +111,11 @@ private:
   int missing_tiles_{};
   QString last_unavailable_reason_;
   QElapsedTimer clock_;
+
+  QTimer animation_;
+  QElapsedTimer animation_clock_;
+  std::optional<double> shown_course_;  // filtered arrow angle (degrees), kept across stops
+  std::optional<std::size_t> last_record_;
 
   QPointF press_position_;
   QPointF last_position_;
