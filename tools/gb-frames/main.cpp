@@ -1,6 +1,11 @@
+#include "gb/container/iso_bmff.hpp"
 #include "gb/media/media.hpp"
+#include "gb/metadata/gpmf.hpp"
+#include "gb/telemetry/telemetry.hpp"
 
 #include <algorithm>
+#include <array>
+#include <cctype>
 #include <cmath>
 #include <cstdint>
 #include <filesystem>
@@ -15,10 +20,13 @@
 
 namespace {
 
+enum class HudMode { none, basic, full };
+
 struct Options {
   bool list{};
   bool json{};
   bool reconstruct{};
+  HudMode hud{HudMode::none};
   bool force{};
   std::vector<int> streams;
   std::optional<long double> seconds;
@@ -42,6 +50,7 @@ void help() {
       "  --time TIME        media time in seconds or HH:MM:SS[.fraction] (default 0)\n"
       "  --pts TICKS        exact requested ticks (single-stream mode only)\n"
       "  --reconstruct      produce a CPU reference equirectangular panorama\n"
+      "  --hud MODE         burn a basic or full metadata HUD into the output\n"
       "  --width PIXELS     reconstructed width (default 4096)\n"
       "  --height PIXELS    reconstructed height (default 2048)\n"
       "  --overlap PIXELS   source overlap (default 64)\n"
@@ -51,6 +60,296 @@ void help() {
       "  --force            replace an existing output file\n"
       "  --help             show this help and exit\n"
       "  --version          show the program version and exit\n";
+}
+
+struct HudResult {
+  gb::media::HudOverlay overlay;
+  std::optional<std::uint32_t> track_id;
+  std::optional<std::size_t> sample_index;
+  std::size_t field_count{};
+  std::string metadata_status{"unavailable"};
+  std::string mode;
+};
+
+std::string clean_text(const std::string_view input) {
+  std::string output;
+  output.reserve(input.size());
+  for (const auto byte : input) {
+    const auto character = static_cast<unsigned char>(byte);
+    if (character == 0xb0U) output.push_back('o');
+    else if (character == 0xb2U) output.push_back('2');
+    else if (character == 0xb5U) output.push_back('u');
+    else output.push_back(std::isprint(character) != 0 ? static_cast<char>(character) : '?');
+  }
+  return output;
+}
+
+std::string media_clock(const long double seconds) {
+  const auto total_milliseconds = static_cast<std::int64_t>(
+      std::max(0.0L, std::round(seconds * 1000.0L)));
+  const auto hours = total_milliseconds / 3'600'000;
+  const auto minutes = total_milliseconds / 60'000 % 60;
+  const auto whole_seconds = total_milliseconds / 1000 % 60;
+  const auto milliseconds = total_milliseconds % 1000;
+  std::ostringstream output;
+  output << std::setfill('0') << std::setw(2) << hours << ':' << std::setw(2) << minutes
+         << ':' << std::setw(2) << whole_seconds << '.' << std::setw(3) << milliseconds;
+  return output.str();
+}
+
+std::vector<std::string> units(const std::string &value) {
+  std::vector<std::string> result;
+  std::size_t begin{};
+  while (begin <= value.size()) {
+    const auto end = value.find(',', begin);
+    result.push_back(value.substr(begin, end == std::string::npos ? end : end - begin));
+    if (end == std::string::npos) break;
+    begin = end + 1U;
+  }
+  return result;
+}
+
+std::optional<long double> numeric(const std::string &value) {
+  try {
+    std::size_t consumed{};
+    const auto parsed = std::stold(value, &consumed);
+    if (consumed == value.size() && std::isfinite(parsed)) return parsed;
+  } catch (const std::exception &) {
+  }
+  return std::nullopt;
+}
+
+std::string stream_name(const gb::metadata::GpmfElement &element,
+                        const std::string &fallback) {
+  if (element.key != "STRM") return fallback;
+  const auto name = std::find_if(element.children.begin(), element.children.end(),
+                                 [](const auto &child) { return child.key == "STNM"; });
+  return name != element.children.end() && !name->values.empty()
+             ? clean_text(name->values.front())
+             : fallback;
+}
+
+void append_hud_elements(const std::vector<gb::metadata::GpmfElement> &elements,
+                         const long double position, const std::string &parent,
+                         HudResult &hud) {
+  static const std::array<std::string_view, 6> vector_keys{
+      "GRAV", "MAGN", "ACCL", "GYRO", "CORI", "IORI"};
+  for (const auto &element : elements) {
+    const auto context = stream_name(element, parent);
+    if (!element.children.empty()) {
+      append_hud_elements(element.children, position, context, hud);
+      continue;
+    }
+    const auto &values = element.normalized_values.empty() ? element.values
+                                                           : element.normalized_values;
+    if (values.empty()) continue;
+    auto records = std::max<std::size_t>(element.repeat, 1U);
+    if (values.size() % records != 0U) records = 1U;
+    const auto components = values.size() / records;
+    const auto record = records == 1U
+                            ? 0U
+                            : static_cast<std::size_t>(std::clamp(
+                                  std::llround(position * static_cast<long double>(records - 1U)),
+                                  0LL, static_cast<long long>(records - 1U)));
+    const auto component_units = units(element.unit);
+    std::ostringstream line;
+    if (!context.empty()) line << clean_text(context) << '/';
+    line << clean_text(element.key) << ' ';
+    for (std::size_t component = 0; component < components; ++component) {
+      if (component != 0U) line << ", ";
+      const auto index = record * components + component;
+      line << clean_text(values[index]);
+      if (!component_units.empty()) {
+        const auto &unit = component_units[component % component_units.size()];
+        if (!unit.empty()) line << ' ' << clean_text(unit);
+      }
+    }
+    hud.overlay.lines.push_back(line.str());
+    ++hud.field_count;
+
+    if (components >= 3U &&
+        std::find(vector_keys.begin(), vector_keys.end(), element.key) != vector_keys.end()) {
+      const auto x = numeric(values[record * components]);
+      const auto y = numeric(values[record * components + 1U]);
+      const auto z = numeric(values[record * components + 2U]);
+      if (x.has_value() && y.has_value() && z.has_value()) {
+        hud.overlay.vectors.push_back({clean_text(element.key), *x, *y, *z,
+                                      component_units.empty() ? "" : clean_text(component_units[0])});
+      }
+    }
+  }
+}
+
+HudResult make_full_hud(const Options &options, const gb::media::RgbFrame &frame) {
+  HudResult hud;
+  hud.mode = "full";
+  if (frame.time_base.denominator <= 0) {
+    throw gb::media::MediaError(gb::media::ErrorKind::corrupt,
+                                "decoded frame has an invalid time base");
+  }
+  const auto seconds = static_cast<long double>(frame.pts) * frame.time_base.numerator /
+                       frame.time_base.denominator;
+  hud.overlay.lines = {
+      "GB-FRAMES HUD",
+      "TIME " + media_clock(seconds),
+      options.reconstruct ? "PROJECTION EQUIRECTANGULAR / COVERAGE 360X180 DEG"
+                          : "PROJECTION SOURCE / FOV N/A",
+      "FRAME " + std::to_string(frame.width) + "X" + std::to_string(frame.height) +
+          " RGB24",
+      "SOURCE STREAM " + (frame.stream_index < 0 ? std::string("MULTIPLE")
+                                                 : std::to_string(frame.stream_index)) +
+          " / PTS " + std::to_string(frame.pts) + " / TB " +
+          std::to_string(frame.time_base.numerator) + "/" +
+          std::to_string(frame.time_base.denominator),
+      "COLOR " + clean_text(frame.source_color.space) + " / " +
+          clean_text(frame.source_color.transfer) + " / " + clean_text(frame.source_color.range)};
+
+  try {
+    const auto inspection = gb::container::inspect_iso_bmff(options.input);
+    const gb::container::Track *selected_track{};
+    std::size_t selected_sample{};
+    long double closest = std::numeric_limits<long double>::infinity();
+    bool selected_contains{};
+    for (const auto &track : inspection.tracks) {
+      if (track.codec != "gpmd" || track.time_base.denominator == 0U) continue;
+      for (std::size_t index = 0; index < track.samples.size(); ++index) {
+        const auto &sample = track.samples[index];
+        const auto sample_seconds = static_cast<long double>(sample.presentation_time) *
+                                    track.time_base.numerator / track.time_base.denominator;
+        const auto end_seconds = sample_seconds + static_cast<long double>(sample.duration) *
+                                                      track.time_base.numerator /
+                                                      track.time_base.denominator;
+        const auto contains = seconds >= sample_seconds && seconds < end_seconds;
+        const auto distance = seconds < sample_seconds ? sample_seconds - seconds
+                              : seconds >= end_seconds ? seconds - end_seconds
+                                                      : 0.0L;
+        if ((contains && !selected_contains) ||
+            (contains == selected_contains && distance < closest)) {
+          closest = distance;
+          selected_track = &track;
+          selected_sample = index;
+          selected_contains = contains;
+        }
+      }
+    }
+    if (selected_track == nullptr) {
+      hud.metadata_status = "no timed GPMF track";
+    } else {
+      const auto &sample = selected_track->samples[selected_sample];
+      const auto target_ticks = seconds * selected_track->time_base.denominator /
+                                selected_track->time_base.numerator;
+      const auto position = sample.duration == 0U
+                                ? 0.0L
+                                : std::clamp((target_ticks - sample.presentation_time) /
+                                                 static_cast<long double>(sample.duration),
+                                             0.0L, 1.0L);
+      const auto payload = gb::container::read_sample(options.input, sample);
+      const auto elements = gb::metadata::parse_gpmf(payload);
+      hud.track_id = selected_track->id;
+      hud.sample_index = selected_sample;
+      hud.metadata_status = "track " + std::to_string(selected_track->id) + " sample " +
+                            std::to_string(selected_sample);
+      append_hud_elements(elements, position, "", hud);
+    }
+  } catch (const std::exception &error) {
+    hud.metadata_status = "unavailable (" + clean_text(error.what()) + ')';
+  }
+  hud.overlay.lines.insert(hud.overlay.lines.begin() + 6,
+                           "METADATA " + hud.metadata_status);
+  return hud;
+}
+
+std::string decimal(const long double value, const int precision) {
+  std::ostringstream output;
+  output << std::fixed << std::setprecision(precision) << value;
+  return output.str();
+}
+
+std::optional<long double> motion_azimuth(const std::vector<gb::telemetry::GpsPoint> &points,
+                                          const std::size_t selected) {
+  if (selected >= points.size() || points[selected].validity == gb::telemetry::Validity::invalid ||
+      points[selected].speed_2d <= 0.01L) {
+    return std::nullopt;
+  }
+  const auto usable = [](const auto &point) {
+    return point.validity != gb::telemetry::Validity::invalid;
+  };
+  const auto differs = [](const auto &left, const auto &right) {
+    return left.latitude != right.latitude || left.longitude != right.longitude;
+  };
+  const gb::telemetry::GpsPoint *before{};
+  for (auto index = selected; index > 0U; --index) {
+    const auto &candidate = points[index - 1U];
+    if (usable(candidate) && differs(candidate, points[selected])) {
+      before = &candidate;
+      break;
+    }
+  }
+  const gb::telemetry::GpsPoint *after{};
+  for (auto index = selected + 1U; index < points.size(); ++index) {
+    const auto &candidate = points[index];
+    if (usable(candidate) && differs(points[selected], candidate)) {
+      after = &candidate;
+      break;
+    }
+  }
+  const auto *start = before != nullptr ? before : &points[selected];
+  const auto *end = after != nullptr ? after : &points[selected];
+  if (start == end || !differs(*start, *end)) return std::nullopt;
+
+  return gb::telemetry::forward_azimuth_degrees(start->latitude, start->longitude,
+                                                 end->latitude, end->longitude);
+}
+
+HudResult make_basic_hud(const Options &options, const gb::media::RgbFrame &frame) {
+  HudResult hud;
+  hud.mode = "basic";
+  hud.field_count = 8U;
+  hud.overlay.compact = true;
+  const auto frame_seconds = static_cast<long double>(frame.pts) * frame.time_base.numerator /
+                             frame.time_base.denominator;
+  hud.overlay.lines = {"FILE " + clean_text(options.input.filename().string()),
+                       "VIDEO TIME " + media_clock(frame_seconds), "UTC N/A", "GPS N/A",
+                       "ALTITUDE N/A", "SPEED 2D N/A", "SPEED 3D N/A", "AZIMUTH N/A"};
+  try {
+    const auto telemetry = gb::telemetry::extract(options.input);
+    hud.track_id = telemetry.track_id;
+    std::optional<std::size_t> nearest_index;
+    auto distance = std::numeric_limits<long double>::infinity();
+    for (std::size_t index = 0; index < telemetry.gps.size(); ++index) {
+      const auto &point = telemetry.gps[index];
+      if (point.time_base.denominator == 0U) continue;
+      const auto point_seconds = static_cast<long double>(point.media_time_ticks) *
+                                 point.time_base.numerator / point.time_base.denominator;
+      const auto candidate = std::fabs(point_seconds - frame_seconds);
+      if (candidate < distance) {
+        nearest_index = index;
+        distance = candidate;
+      }
+    }
+    if (!nearest_index.has_value()) {
+      hud.metadata_status = "no GPS telemetry";
+    } else {
+      const auto &nearest = telemetry.gps[*nearest_index];
+      hud.sample_index = nearest.source_sample;
+      hud.metadata_status = "track " + std::to_string(telemetry.track_id) + " sample " +
+                            std::to_string(nearest.source_sample) + " record " +
+                            std::to_string(nearest.record_index);
+      if (nearest.utc.has_value()) hud.overlay.lines[2] = "UTC " + *nearest.utc;
+      hud.overlay.lines[3] = "GPS LAT " + decimal(nearest.latitude, 7) + " DEG / LON " +
+                             decimal(nearest.longitude, 7) + " DEG";
+      hud.overlay.lines[4] = "ALTITUDE " + decimal(nearest.altitude, 3) + " M";
+      hud.overlay.lines[5] = "SPEED 2D " + decimal(nearest.speed_2d, 3) + " M/S";
+      hud.overlay.lines[6] = "SPEED 3D " + decimal(nearest.speed_3d, 3) + " M/S";
+      const auto azimuth = motion_azimuth(telemetry.gps, *nearest_index);
+      if (azimuth.has_value()) {
+        hud.overlay.lines[7] = "AZIMUTH " + decimal(*azimuth, 1) + " DEG";
+      }
+    }
+  } catch (const std::exception &error) {
+    hud.metadata_status = "unavailable (" + clean_text(error.what()) + ')';
+  }
+  return hud;
 }
 std::string json_string(const std::string_view input) {
   std::ostringstream result;
@@ -157,7 +456,8 @@ void print_streams(const Options &options, const std::vector<gb::media::VideoStr
 }
 
 void print_result(const Options &options, const gb::media::RgbFrame &frame,
-                  const std::vector<gb::media::RgbFrame> &sources) {
+                  const std::vector<gb::media::RgbFrame> &sources,
+                  const std::optional<HudResult> &hud) {
   if (!options.json) {
     std::cout << "output: " << options.output.string() << '\n'
               << "mode: " << (options.reconstruct ? "equirectangular reconstruction" : "decoded stream") << '\n'
@@ -169,6 +469,10 @@ void print_result(const Options &options, const gb::media::RgbFrame &frame,
                 << source.duration << " time_base=" << source.time_base.numerator << '/'
                 << source.time_base.denominator << " pixel_format="
                 << source.source_color.pixel_format << '\n';
+    }
+    if (hud.has_value()) {
+      std::cout << "hud: " << hud->mode << "; burned in; metadata=" << hud->metadata_status
+                << " fields=" << hud->field_count << '\n';
     }
     return;
   }
@@ -195,6 +499,18 @@ void print_result(const Options &options, const gb::media::RgbFrame &frame,
     std::cout << ",\n  \"reconstruction\": {\"projection\": \"equirectangular\", \"overlap_pixels\": "
               << options.overlap << ", \"calibration\": \"layout transform and linear overlap blend only\"}";
   }
+  if (hud.has_value()) {
+    std::cout << ",\n  \"hud\": {\"enabled\": true, \"mode\": " << json_string(hud->mode)
+              << ", \"metadata_status\": " << json_string(hud->metadata_status)
+              << ", \"metadata_track_id\": ";
+    if (hud->track_id.has_value()) std::cout << *hud->track_id;
+    else std::cout << "null";
+    std::cout << ", \"metadata_sample_index\": ";
+    if (hud->sample_index.has_value()) std::cout << *hud->sample_index;
+    else std::cout << "null";
+    std::cout << ", \"field_count\": " << hud->field_count
+              << ", \"vector_gauge_count\": " << hud->overlay.vectors.size() << '}';
+  }
   std::cout << "\n}\n";
 }
 
@@ -209,6 +525,12 @@ Options parse(const int argc, char **argv) {
     if (argument == "--list") options.list = true;
     else if (argument == "--json") options.json = true;
     else if (argument == "--reconstruct") options.reconstruct = true;
+    else if (argument == "--hud") {
+      const auto mode = value(argument);
+      if (mode == "basic") options.hud = HudMode::basic;
+      else if (mode == "full") options.hud = HudMode::full;
+      else throw std::runtime_error("--hud mode must be basic or full");
+    }
     else if (argument == "--force") options.force = true;
     else if (argument == "--stream") {
       const auto parsed = integer<int>(value(argument));
@@ -280,7 +602,7 @@ int main(const int argc, char **argv) {
     if (options.list) {
       if (!options.output.empty() || options.reconstruct || options.pts.has_value() ||
           options.seconds.has_value() || !options.streams.empty() || !options.format.empty() ||
-          options.force) {
+          options.force || options.hud != HudMode::none) {
         throw std::runtime_error("--list cannot be combined with extraction options");
       }
       print_streams(options, streams);
@@ -334,10 +656,16 @@ int main(const int argc, char **argv) {
                                                               options.width, options.height,
                                                               options.overlap)
                       : decoded[0];
+    std::optional<HudResult> hud;
+    if (options.hud != HudMode::none) {
+      hud = options.hud == HudMode::full ? make_full_hud(options, result)
+                                         : make_basic_hud(options, result);
+      gb::media::draw_hud(result, hud->overlay);
+    }
     if (options.format == "png") gb::media::write_png(options.output, result);
     else if (options.format == "ppm") gb::media::write_ppm(options.output, result);
     else gb::media::write_rgb24(options.output, result);
-    print_result(options, result, decoded);
+    print_result(options, result, decoded, hud);
     return 0;
   } catch (const gb::media::MediaError &error) {
     std::cerr << "gb-frames: " << gb::media::error_kind_name(error.kind()) << ": "

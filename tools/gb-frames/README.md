@@ -14,6 +14,8 @@ gb-frames --stream 5 --pts 450000 --format rgb24 --output rear.rgb recording.360
   --json > rear.json
 gb-frames --reconstruct --stream 0 --stream 5 --time 5 \
   --width 4096 --height 2048 --output panorama.png recording.360
+gb-frames --reconstruct --time 5 --hud full --output panorama-with-hud.png recording.360
+gb-frames --stream 0 --time 5 --hud basic --output labeled-frame.png recording.360
 ```
 
 `--time` accepts seconds or `HH:MM:SS[.fraction]` and is independently converted to each selected
@@ -25,6 +27,29 @@ listing and `gb.frames/v1` for extraction.
 Raw RGB24 is tightly packed in row-major order with no header. Keep the JSON report beside a raw
 dump: it records geometry, byte interpretation, source pixel format, range, matrix/space,
 transfer, primaries, chroma location, integer PTS, duration, and rational time base.
+
+## Metadata HUD
+
+`--hud full` burns the complete, fixed HUD into PNG, PPM, or RGB24 output. It always shows the
+selected frame's media time, projection and coverage/FOV status, geometry, source stream and
+timestamp, color metadata, and timed-metadata status. If the file has a GPMF track, the containing
+metadata sample is synchronized to the actual decoded frame timestamp and every decoded field in
+that sample is added. Repeated sensor records are selected at the frame's position within the
+metadata sample. Gravity, magnetometer, accelerometer, gyroscope, and orientation vectors also
+receive graphical XY direction gauges with their Z values.
+
+`--hud basic` burns a compact label inside the existing image containing the source filename,
+selected-frame video time, GPS latitude/longitude and altitude, UTC timestamp, and 2D and 3D
+speeds. It selects the telemetry record nearest the actual decoded frame. When surrounding valid
+GPS positions and nonzero 2D speed provide a motion vector, it also reports forward azimuth in
+degrees (`0` north, `90` east, `180` south, `270` west). Missing values say `N/A`. Neither HUD mode
+changes the output dimensions. A mode is mandatory; bare `--hud` is invalid.
+
+Unavailable metadata is explicitly shown as unavailable; it is never displayed as zero. The HUD
+is intentionally unconditional within each mode: there are no switches for hiding, moving, or
+styling individual elements. On very small images, text is clipped to the available overlay area.
+`--json` reports the HUD mode, selected metadata track/sample, and the number of fields and vector
+gauges rendered.
 
 ## Reconstruction status
 

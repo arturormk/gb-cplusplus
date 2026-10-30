@@ -304,6 +304,32 @@ Extraction extract(const std::filesystem::path &path,
   return result;
 }
 
+std::optional<long double> forward_azimuth_degrees(const long double latitude_1,
+                                                   const long double longitude_1,
+                                                   const long double latitude_2,
+                                                   const long double longitude_2) {
+  if (!std::isfinite(latitude_1) || !std::isfinite(longitude_1) ||
+      !std::isfinite(latitude_2) || !std::isfinite(longitude_2) ||
+      latitude_1 < -90.0L || latitude_1 > 90.0L || latitude_2 < -90.0L ||
+      latitude_2 > 90.0L || longitude_1 < -180.0L || longitude_1 > 180.0L ||
+      longitude_2 < -180.0L || longitude_2 > 180.0L ||
+      (latitude_1 == latitude_2 && longitude_1 == longitude_2)) {
+    return std::nullopt;
+  }
+  constexpr long double pi = 3.141592653589793238462643383279502884L;
+  const auto first_latitude = latitude_1 * pi / 180.0L;
+  const auto second_latitude = latitude_2 * pi / 180.0L;
+  const auto longitude_delta = (longitude_2 - longitude_1) * pi / 180.0L;
+  const auto y = std::sin(longitude_delta) * std::cos(second_latitude);
+  const auto x = std::cos(first_latitude) * std::sin(second_latitude) -
+                 std::sin(first_latitude) * std::cos(second_latitude) *
+                     std::cos(longitude_delta);
+  if (x == 0.0L && y == 0.0L) return std::nullopt;
+  auto result = std::atan2(y, x) * 180.0L / pi;
+  if (result < 0.0L) result += 360.0L;
+  return result;
+}
+
 std::string validity_name(const Validity validity) {
   switch (validity) {
   case Validity::valid:

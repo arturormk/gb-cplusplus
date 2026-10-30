@@ -46,6 +46,21 @@ struct RgbFrame {
   ColorMetadata source_color;
 };
 
+struct HudVector {
+  std::string label;
+  long double x{};
+  long double y{};
+  long double z{};
+  std::string unit;
+};
+
+struct HudOverlay {
+  std::vector<std::string> lines;
+  std::vector<HudVector> vectors;
+  bool compact{};
+  int font_scale_multiplier{1};
+};
+
 enum class ErrorKind { missing, io, unsupported, corrupt, invalid_argument };
 
 class MediaError final : public std::runtime_error {
@@ -65,6 +80,7 @@ private:
                                                    std::int32_t width,
                                                    std::int32_t height,
                                                    std::int32_t overlap = 64);
+void draw_hud(RgbFrame &frame, const HudOverlay &overlay);
 void write_png(const std::filesystem::path &path, const RgbFrame &frame);
 void write_ppm(const std::filesystem::path &path, const RgbFrame &frame);
 void write_rgb24(const std::filesystem::path &path, const RgbFrame &frame);

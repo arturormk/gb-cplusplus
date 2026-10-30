@@ -62,6 +62,32 @@ set_tests_properties(gb_frames_extract_json PROPERTIES
   PASS_REGULAR_EXPRESSION
     "gb.frames/v1.*stream_index.*1.*pixel_format.*rgb24")
 
+add_test(NAME gb_frames_hud_json
+  COMMAND gb_frames --json --hud full --stream 0 --time 0.5 --force
+    --output "${GB_CLI_FIXTURE_DIR}/stream-0-hud.png"
+    "${GB_CLI_FIXTURE_DIR}/two-video.mp4")
+set_tests_properties(gb_frames_hud_json PROPERTIES
+  FIXTURES_REQUIRED gb_frames_media
+  PASS_REGULAR_EXPRESSION
+    "gb.frames/v1.*hud.*enabled.*true.*mode.*full.*metadata_status.*no timed GPMF track.*field_count.*0")
+
+add_test(NAME gb_frames_hud_basic_json
+  COMMAND gb_frames --json --hud basic --stream 0 --time 0.5 --force
+    --output "${GB_CLI_FIXTURE_DIR}/stream-0-basic-hud.png"
+    "${GB_CLI_FIXTURE_DIR}/two-video.mp4")
+set_tests_properties(gb_frames_hud_basic_json PROPERTIES
+  FIXTURES_REQUIRED gb_frames_media
+  PASS_REGULAR_EXPRESSION
+    "gb.frames/v1.*hud.*enabled.*true.*mode.*basic.*metadata_status.*unavailable.*field_count.*8")
+
+add_test(NAME gb_frames_hud_requires_mode
+  COMMAND gb_frames --hud --stream 0 --force
+    --output "${GB_CLI_FIXTURE_DIR}/invalid-hud.png"
+    "${GB_CLI_FIXTURE_DIR}/two-video.mp4")
+set_tests_properties(gb_frames_hud_requires_mode PROPERTIES
+  FIXTURES_REQUIRED gb_frames_media
+  WILL_FAIL TRUE)
+
 add_test(NAME gb_frames_reconstruct_json
   COMMAND gb_frames --json --reconstruct --time 0.5 --width 64 --height 32 --overlap 1
     --force --output "${GB_CLI_FIXTURE_DIR}/panorama.ppm"

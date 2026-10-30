@@ -53,6 +53,25 @@ int main() {
     }
     require(red_pixels > 0U && blue_pixels > 0U, "both source streams must be represented");
 
+    auto hud_frame = solid(320, 180, 20U, 30U, 40U);
+    const auto before = hud_frame.pixels;
+    gb::media::HudOverlay hud;
+    hud.lines = {"GB-FRAMES HUD", "TIME 00:00:01.000", "METADATA N/A"};
+    hud.vectors.push_back({"GRAV", 1.0L, -2.0L, 9.8L, "m/s2"});
+    gb::media::draw_hud(hud_frame, hud);
+    require(hud_frame.pixels != before, "HUD did not alter the frame");
+    require(hud_frame.pixels.size() == before.size(), "HUD changed the buffer geometry");
+
+    auto invalid_hud = hud_frame;
+    invalid_hud.pixels.pop_back();
+    bool invalid_hud_rejected{};
+    try {
+      gb::media::draw_hud(invalid_hud, hud);
+    } catch (const gb::media::MediaError &error) {
+      invalid_hud_rejected = error.kind() == gb::media::ErrorKind::invalid_argument;
+    }
+    require(invalid_hud_rejected, "invalid HUD target was not rejected");
+
     auto mismatched = rear;
     mismatched.width = 199;
     bool rejected{};

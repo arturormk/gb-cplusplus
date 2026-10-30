@@ -56,6 +56,10 @@ struct Extraction {
 
 [[nodiscard]] Extraction extract(const std::filesystem::path &path,
                                  std::optional<std::uint32_t> track_id = std::nullopt);
+[[nodiscard]] std::optional<long double> forward_azimuth_degrees(long double latitude_1,
+                                                                 long double longitude_1,
+                                                                 long double latitude_2,
+                                                                 long double longitude_2);
 [[nodiscard]] std::string validity_name(Validity validity);
 
 } // namespace gb::telemetry
