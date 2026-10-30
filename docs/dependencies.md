@@ -1,6 +1,6 @@
 # Dependencies
 
-## Required now (M0 through M3)
+## Required now (M0 through M4)
 
 The supported baseline is Ubuntu 22.04 or newer with:
 
@@ -27,7 +27,10 @@ sudo apt install build-essential cmake ninja-build pkg-config ffmpeg \
 ```
 
 The build has no downloaded dependencies. The terminal tools dynamically use the packaged FFmpeg
-libraries; `gb-project` additionally uses the packaged Qt 6 libraries and QML modules.
+libraries. `gb-project` and `gb-player` also use the packaged Qt 6 libraries and QML modules.
+M4 adds no packages. `gb-player` issues OpenGL calls through `QOpenGLExtraFunctions` from Qt GUI
+and does not need the Qt OpenGL module. At runtime it needs an OpenGL 3.3 or OpenGL ES 3.0 driver
+to display video; the Mesa drivers in Ubuntu 22.04 provide this.
 The versions above match the initial verified development environment; CI should continuously
 exercise the oldest supported baseline.
 

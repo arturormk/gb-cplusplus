@@ -1,0 +1,389 @@
+import QtQuick
+import QtQuick.Controls
+import QtQuick.Layouts
+import QtQuick.Window
+import Gb.Player
+
+ApplicationWindow {
+    id: window
+    width: 1600
+    height: 960
+    minimumWidth: 1100
+    minimumHeight: 680
+    visible: true
+    color: "#0b1015"
+    title: player.displayName + (player.inputName.length ? " — " + player.inputName : "")
+
+    readonly property var modeNames: ["Rectilinear", "Fisheye", "Stereographic", "Little Planet",
+                                      "Panorama (equirectangular)", "Raw track 1", "Raw track 2",
+                                      "Original"]
+    readonly property var availableModes: player.sourceLayout === 1 ? [0, 1, 2, 3, 4, 5, 6] : [7]
+    readonly property bool spherical: view.mode <= 3
+    property int requestedMode: initialView
+
+    function selectMode(mode) {
+        requestedMode = mode
+        view.mode = availableModes.indexOf(mode) >= 0 ? mode : availableModes[0]
+        if (view.mode === 3 && view.fieldOfView < 180) view.fieldOfView = 240
+        else if (view.mode === 0 && view.fieldOfView > 150) view.fieldOfView = 90
+        else if ((view.mode === 1 || view.mode === 2) && view.fieldOfView < 120) view.fieldOfView = 180
+    }
+    function resetView() {
+        view.yaw = 0
+        view.pitch = 0
+        view.roll = 0
+        view.zoom = 1
+        view.panX = 0
+        view.panY = 0
+        view.fieldOfView = view.mode === 3 ? 240 : (view.mode === 1 || view.mode === 2) ? 180 : 90
+    }
+
+    Connections {
+        target: player
+        function onFileChanged() { window.selectMode(window.requestedMode) }
+    }
+
+    Shortcut { sequence: "Space"; onActivated: player.togglePlay() }
+    Shortcut { sequence: "Left"; onActivated: player.seekSeconds(player.position - 5) }
+    Shortcut { sequence: "Right"; onActivated: player.seekSeconds(player.position + 5) }
+    Shortcut { sequence: ","; onActivated: player.stepFrames(-1) }
+    Shortcut { sequence: "."; onActivated: player.stepFrames(1) }
+    Shortcut { sequence: "Ctrl+Left"; onActivated: player.stepFrames(-1) }
+    Shortcut { sequence: "Ctrl+Right"; onActivated: player.stepFrames(1) }
+    Shortcut { sequence: "F"; onActivated: window.visibility = window.visibility === Window.FullScreen ? Window.Windowed : Window.FullScreen }
+    Shortcut { sequence: "Escape"; onActivated: if (window.visibility === Window.FullScreen) window.visibility = Window.Windowed }
+    Shortcut { sequence: "R"; onActivated: window.resetView() }
+    Shortcut { sequence: "Ctrl+O"; onActivated: player.openDialog() }
+    Repeater {
+        model: 8
+        Item {
+            Shortcut { sequence: String(index + 1); onActivated: window.selectMode(index) }
+        }
+    }
+
+    header: ToolBar {
+        background: Rectangle { color: "#17212a" }
+        RowLayout {
+            anchors.fill: parent
+            anchors.leftMargin: 10
+            anchors.rightMargin: 10
+            spacing: 8
+
+            DarkButton { text: "Open…"; onClicked: player.openDialog() }
+            Label {
+                text: player.inputName.length ? player.inputName : "No file"
+                color: "#d9e2e8"
+                elide: Text.ElideMiddle
+                Layout.maximumWidth: 260
+            }
+            Label {
+                text: player.layoutDescription
+                color: "#7f919f"
+                elide: Text.ElideRight
+                Layout.fillWidth: true
+            }
+            Label { text: "View"; color: "#9fb0bd" }
+            DarkComboBox {
+                id: modeBox
+                model: window.availableModes.map(function(mode) { return window.modeNames[mode] })
+                currentIndex: Math.max(0, window.availableModes.indexOf(view.mode))
+                enabled: player.hasMedia
+                Layout.preferredWidth: 230
+                onActivated: function(index) { window.selectMode(window.availableModes[index]) }
+            }
+            DarkButton { text: "Reset view"; enabled: player.hasMedia; onClicked: window.resetView() }
+            DarkButton {
+                text: window.visibility === Window.FullScreen ? "Exit full screen" : "Full screen"
+                onClicked: window.visibility = window.visibility === Window.FullScreen ? Window.Windowed : Window.FullScreen
+            }
+        }
+    }
+
+    RowLayout {
+        anchors.fill: parent
+        anchors.margins: 6
+        spacing: 6
+
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            color: "#090d11"
+            border.color: "#26343f"
+            radius: 3
+            clip: true
+
+            VideoView {
+                id: view
+                anchors.fill: parent
+                anchors.margins: 1
+                engine: player.engine
+                sourceLayout: player.sourceLayout
+                overlap: player.overlap
+                Component.onCompleted: window.selectMode(initialView)
+            }
+
+            MouseArea {
+                anchors.fill: parent
+                enabled: player.hasMedia
+                acceptedButtons: Qt.LeftButton
+                property real lastX: 0
+                property real lastY: 0
+                onPressed: function(mouse) { lastX = mouse.x; lastY = mouse.y }
+                onPositionChanged: function(mouse) {
+                    var dx = mouse.x - lastX
+                    var dy = mouse.y - lastY
+                    lastX = mouse.x
+                    lastY = mouse.y
+                    if (window.spherical) {
+                        var degreesPerPixel = view.fieldOfView / Math.max(1, view.width)
+                        view.yaw = ((view.yaw - dx * degreesPerPixel + 540) % 360) - 180
+                        view.pitch = Math.max(-90, Math.min(90, view.pitch + dy * degreesPerPixel))
+                    } else {
+                        view.panX -= dx / Math.max(1, view.width) / view.zoom
+                        view.panY -= dy / Math.max(1, view.height) / view.zoom
+                    }
+                }
+                onDoubleClicked: player.togglePlay()
+                onWheel: function(wheel) {
+                    var steps = wheel.angleDelta.y / 120
+                    if (window.spherical) {
+                        var maximum = view.mode === 0 ? 150 : 330
+                        view.fieldOfView = Math.max(20, Math.min(maximum, view.fieldOfView - steps * 5))
+                    } else {
+                        view.zoom = Math.max(1, Math.min(16, view.zoom * Math.pow(1.15, steps)))
+                        if (view.zoom === 1) { view.panX = 0; view.panY = 0 }
+                    }
+                    wheel.accepted = true
+                }
+            }
+
+            Rectangle {
+                anchors.left: parent.left
+                anchors.top: parent.top
+                anchors.margins: 10
+                visible: player.hasMedia
+                color: "#b30b1015"
+                radius: 3
+                width: overlayText.implicitWidth + 16
+                height: overlayText.implicitHeight + 10
+                Text {
+                    id: overlayText
+                    anchors.centerIn: parent
+                    color: "#cfe0ea"
+                    font.pixelSize: 12
+                    font.family: "monospace"
+                    text: window.modeNames[view.mode] + (window.spherical
+                          ? "   yaw " + view.yaw.toFixed(1) + "°  pitch " + view.pitch.toFixed(1)
+                            + "°  roll " + view.roll.toFixed(1) + "°  FOV " + view.fieldOfView.toFixed(0) + "°"
+                          : "   zoom " + view.zoom.toFixed(2) + "×")
+                }
+            }
+
+            Column {
+                anchors.centerIn: parent
+                spacing: 8
+                visible: !player.hasMedia || !view.gpuAvailable
+                Label {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: !view.gpuAvailable ? "GPU view unavailable: OpenGL 3.3 is required"
+                                             : "Open a GoPro .360 or MP4 recording (Ctrl+O)"
+                    color: "#8193a1"
+                    font.pixelSize: 16
+                }
+                Label {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: "Original files are opened read-only."
+                    color: "#5d6e7b"
+                }
+            }
+        }
+
+        Rectangle {
+            Layout.preferredWidth: 440
+            Layout.fillHeight: true
+            color: "#121a21"
+            radius: 3
+
+            ColumnLayout {
+                anchors.fill: parent
+                anchors.margins: 8
+                spacing: 6
+
+                TabBar {
+                    id: tabs
+                    Layout.fillWidth: true
+                    background: Rectangle { color: "#121a21" }
+                    Repeater {
+                        model: ["Telemetry", "Metadata", "Performance"]
+                        TabButton {
+                            text: modelData
+                            contentItem: Text {
+                                text: parent.text
+                                color: tabs.currentIndex === index ? "#61dc97" : "#9fb0bd"
+                                font.bold: tabs.currentIndex === index
+                                horizontalAlignment: Text.AlignHCenter
+                            }
+                            background: Rectangle {
+                                color: tabs.currentIndex === index ? "#1b2833" : "#121a21"
+                                border.color: "#26343f"
+                            }
+                        }
+                    }
+                }
+
+                StackLayout {
+                    currentIndex: tabs.currentIndex
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+
+                    ScrollView {
+                        clip: true
+                        contentWidth: availableWidth
+                        ColumnLayout {
+                            width: parent.width
+                            spacing: 8
+                            Label {
+                                text: "Synchronized to the displayed frame. Values are the nearest recorded "
+                                      + "GPS5 record; nothing is interpolated."
+                                color: "#7f919f"
+                                wrapMode: Text.Wrap
+                                Layout.fillWidth: true
+                            }
+                            InfoTable { rows: player.telemetryRows; Layout.fillWidth: true }
+                        }
+                    }
+
+                    ScrollView {
+                        clip: true
+                        contentWidth: availableWidth
+                        ColumnLayout {
+                            width: parent.width
+                            spacing: 8
+                            Label { text: "File"; color: "#61dc97"; font.bold: true }
+                            InfoTable { rows: player.fileRows; Layout.fillWidth: true }
+                            Label { text: "Tracks"; color: "#61dc97"; font.bold: true }
+                            Repeater {
+                                model: tabs.currentIndex === 1 ? player.trackRows : []
+                                Text {
+                                    Layout.fillWidth: true
+                                    wrapMode: Text.WrapAnywhere
+                                    font.family: "monospace"
+                                    font.pixelSize: 11
+                                    color: "#d2dde4"
+                                    text: "#" + modelData.id + " " + modelData.handler + " " + modelData.codec
+                                          + " — " + modelData.name + "\n   " + modelData.samples + " samples, "
+                                          + modelData.duration + " ticks @ " + modelData.timeBase
+                                          + (modelData.geometry.length ? ", " + modelData.geometry : "")
+                                }
+                            }
+                            Label { text: "GPMF at playback time"; color: "#61dc97"; font.bold: true }
+                            Label {
+                                text: player.gpmfTitle
+                                color: "#9fb0bd"
+                                wrapMode: Text.Wrap
+                                Layout.fillWidth: true
+                            }
+                            Repeater {
+                                // Hundreds of rows: only instantiate while the tab is visible.
+                                model: tabs.currentIndex === 1 ? player.gpmfRows : []
+                                Text {
+                                    Layout.fillWidth: true
+                                    leftPadding: modelData.depth * 14
+                                    wrapMode: Text.WrapAnywhere
+                                    font.family: "monospace"
+                                    font.pixelSize: 11
+                                    textFormat: Text.PlainText
+                                    color: modelData.known ? "#d2dde4" : "#ffb35c"
+                                    text: modelData.key + " [" + modelData.type
+                                          + (modelData.repeat > 1 ? "×" + modelData.repeat : "") + "] "
+                                          + modelData.detail + (modelData.unit.length ? " " + modelData.unit : "")
+                                          + (modelData.known ? "" : "   (unknown key)")
+                                }
+                            }
+                        }
+                    }
+
+                    ScrollView {
+                        clip: true
+                        contentWidth: availableWidth
+                        ColumnLayout {
+                            width: parent.width
+                            spacing: 8
+                            Label {
+                                text: "Updated every second. Seek latency is measured from request to the "
+                                      + "first drawn frame. Run gb-player --benchmark for a reproducible report."
+                                color: "#7f919f"
+                                wrapMode: Text.Wrap
+                                Layout.fillWidth: true
+                            }
+                            InfoTable { rows: player.diagnosticsRows; labelWidth: 120; Layout.fillWidth: true }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    footer: Rectangle {
+        color: "#17212a"
+        implicitHeight: footerColumn.implicitHeight + 12
+        ColumnLayout {
+            id: footerColumn
+            anchors.fill: parent
+            anchors.margins: 6
+            anchors.leftMargin: 10
+            anchors.rightMargin: 10
+            spacing: 2
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+                DarkButton { text: "◀|"; implicitWidth: 44; enabled: player.hasMedia; onClicked: player.stepFrames(-1) }
+                DarkButton {
+                    text: player.playing ? "Pause" : "Play"
+                    implicitWidth: 80
+                    enabled: player.hasMedia
+                    onClicked: player.togglePlay()
+                }
+                DarkButton { text: "|▶"; implicitWidth: 44; enabled: player.hasMedia; onClicked: player.stepFrames(1) }
+                Label {
+                    text: player.positionText
+                    color: "#e3ebf0"
+                    font.family: "monospace"
+                }
+                Timeline {
+                    Layout.fillWidth: true
+                    position: player.position
+                    duration: player.duration
+                    samples: player.timelineSamples
+                    gaps: player.timelineGaps
+                    coverage: player.gpsCoverage
+                    onSeekRequested: function(fraction) { player.seekFraction(fraction) }
+                }
+                Label {
+                    text: player.durationText
+                    color: "#9fb0bd"
+                    font.family: "monospace"
+                }
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                Label {
+                    text: player.status
+                    color: player.statusIsError ? "#ff7d7d" : "#9fb0bd"
+                    elide: Text.ElideRight
+                    Layout.fillWidth: true
+                }
+                Label {
+                    text: player.ptsText
+                    color: "#6f8292"
+                    font.family: "monospace"
+                }
+                Label {
+                    text: "Independent open-source toolkit — not affiliated with GoPro"
+                    color: "#56656f"
+                    font.pixelSize: 11
+                }
+            }
+        }
+    }
+}

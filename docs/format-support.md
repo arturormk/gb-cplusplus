@@ -28,6 +28,9 @@
   blending, and deterministic virtual-camera projections.
 - Qt 6 projection laboratory comparing both raw tracks, reconstructed equirectangular output, and
   GPU/CPU rectilinear, fisheye, stereographic, and Little Planet views.
+- Native playback of the MAX two-stream `.360` layout: exact-PTS frame pairing, accurate seeking,
+  and single-pass GPU YUV-to-RGB, EAC reconstruction and virtual-camera projection in `gb-player`.
+  Single-stream video plays flat with zoom and pan.
 - Content-based JPEG detection with checked marker and entropy termination parsing.
 - JPEG dimensions, precision, component count, and directly appended codestream enumeration.
 - Structural detection of JFIF, EXIF, XMP, MPF and APP6 payloads without interpreting private
@@ -44,7 +47,8 @@ near-black `BACK` source face in stream 5 of the `.360` sample rather than conce
 
 ## Not implemented
 
-- Stabilization, optical-flow seam correction, recovered camera calibration, and playback.
+- Stabilization, optical-flow seam correction, recovered camera calibration, audio playback,
+  hardware decoding, and photo viewing in the player.
 - Fragmented-media sample mapping, edit lists, multiple sample descriptions, compressed/complex
   GPMF values, GPS9, sensor-series export, EXIF, XMP, MPF, or APP6 metadata decoding.
 - General payload extraction, HEIF item interpretation, or file repair. Raw `gpmd` sample export is
@@ -53,4 +57,5 @@ near-black `BACK` source face in stream 5 of the `.360` sample rather than conce
 GPS5 record counts were independently cross-checked with ExifTool. Individual GPS record times
 are uniformly assigned within their containing GPMF sample and therefore carry a one-record
 interval uncertainty; no capture-time mapping is claimed. General MAX support remains unverified
-beyond the fingerprinted samples, and playback is not implemented.
+beyond the fingerprinted samples. Player measurements are recorded in
+[`../research/findings/2026-10-30-gb-player-m4-baseline.md`](../research/findings/2026-10-30-gb-player-m4-baseline.md).

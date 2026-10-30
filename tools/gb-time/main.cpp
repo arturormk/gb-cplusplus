@@ -120,16 +120,6 @@ long double drift_ms(const gb::telemetry::UtcAnchor &first,
   return utc_delta - media_delta;
 }
 
-const gb::telemetry::GpsPoint *nearest(const gb::telemetry::Extraction &data,
-                                       const std::int64_t ticks) {
-  if (data.gps.empty()) return nullptr;
-  return &*std::min_element(data.gps.begin(), data.gps.end(), [ticks](const auto &left, const auto &right) {
-    const auto left_distance = std::fabs(static_cast<long double>(left.media_time_ticks) - ticks);
-    const auto right_distance = std::fabs(static_cast<long double>(right.media_time_ticks) - ticks);
-    return left_distance < right_distance;
-  });
-}
-
 void print_json(const Options &options, const gb::container::Inspection &inspection,
                 const gb::telemetry::Extraction &telemetry) {
   std::cout << "{\n  \"schema\": \"gb.time/v1\",\n  \"path\": "
@@ -189,7 +179,7 @@ void print_json(const Options &options, const gb::container::Inspection &inspect
   }
   std::cout << ']';
   if (options.at_ticks.has_value()) {
-    const auto *point = nearest(telemetry, *options.at_ticks);
+    const auto *point = gb::telemetry::nearest_point(telemetry, *options.at_ticks);
     std::cout << ",\n  \"query\": {\"requested_ticks\": " << *options.at_ticks << ", \"nearest\": ";
     if (point == nullptr) std::cout << "null";
     else {
@@ -242,7 +232,7 @@ void print_text(const Options &options, const gb::container::Inspection &inspect
     std::cout << "  warning=" << warning << '\n';
   }
   if (options.at_ticks.has_value()) {
-    const auto *point = nearest(telemetry, *options.at_ticks);
+    const auto *point = gb::telemetry::nearest_point(telemetry, *options.at_ticks);
     std::cout << "query: requested_ticks=" << *options.at_ticks;
     if (point == nullptr) std::cout << " nearest=unavailable\n";
     else std::cout << " nearest_ticks=" << point->media_time_ticks << " uncertainty_ticks="

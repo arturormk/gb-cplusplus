@@ -59,11 +59,13 @@ if ! command -v pkg-config >/dev/null 2>&1 ||
    ! pkg-config --exists libavformat libavcodec libavutil libswscale; then
   missing_packages+=(libavformat-dev libavcodec-dev libavutil-dev libswscale-dev)
 fi
-if ! command -v pkg-config >/dev/null 2>&1 ||
-   ! pkg-config --exists Qt6Core Qt6Gui Qt6Qml Qt6Quick Qt6ShaderTools ||
-   [[ ! -f /usr/lib/x86_64-linux-gnu/qt6/qml/QtQuick/Controls/qmldir ]] ||
+if ! compgen -G '/usr/lib/*/cmake/Qt6/Qt6Config.cmake' >/dev/null ||
+   ! compgen -G '/usr/lib/*/cmake/Qt6OpenGL/Qt6OpenGLConfig.cmake' >/dev/null ||
+   ! compgen -G '/usr/lib/*/cmake/Qt6ShaderTools/Qt6ShaderToolsConfig.cmake' >/dev/null ||
+   ! compgen -G '/usr/lib/*/qt6/qml/QtQuick/Controls/qmldir' >/dev/null ||
    [[ ! -x /usr/lib/qt6/bin/qsb ]]; then
-  missing_packages+=(qt6-base-dev qt6-declarative-dev libqt6shadertools6-dev qt6-shader-baker
+  missing_packages+=(qt6-base-dev libqt6opengl6-dev qt6-declarative-dev
+    libqt6shadertools6-dev qt6-shader-baker
     qml6-module-qtqml qml6-module-qtqml-models qml6-module-qtqml-workerscript
     qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts
     qml6-module-qtquick-nativestyle qml6-module-qtquick-templates qml6-module-qtquick-window)
@@ -98,7 +100,7 @@ fi
 
 printf 'Configuring with CMake preset %s...\n' "${PRESET}"
 cd -- "${SCRIPT_DIR}"
-cmake --preset "${PRESET}"
+cmake --preset "${PRESET}" "-UQt6*_DIR" -U CMAKE_PREFIX_PATH
 
 printf 'Building all configured targets...\n'
 cmake --build --preset "${PRESET}"

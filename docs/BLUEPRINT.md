@@ -394,8 +394,8 @@ speeds, fix and DOP as JSON, CSV, GPX, and GeoJSON, with invalid/missing handlin
 gaps. `gb-time` reports integer decode/presentation timing, UTC anchors, discontinuities, drift,
 and nearest-record queries. Both fingerprinted videos reproduce the M1 GPS counts and have been
 checked at selected media ticks without publishing private routes. Synthetic tests cover absent
-GPS, invalid fixes, non-integral record spacing, composition offsets, and malformed input. M3 is
-next.
+GPS, invalid fixes, non-integral record spacing, composition offsets, and malformed input. M3 has
+since completed.
 
 - `gb-telemetry` and `gb-time` with GPS extraction, units, validity, and media/GPS time mapping.
 - GPX/GeoJSON/CSV/JSON, missing GPS cases, gaps, corruption and sample jitter tests.
@@ -411,7 +411,8 @@ provides the required Qt comparison of both raw tracks, the reconstructed panora
 interactive GPU view with a CPU reference/export path. Synthetic six-face fixtures verify the
 mapping and multiple projection modes; real frames at multiple timestamps verify decoding,
 orientation, and source diagnostics. The fingerprinted recording's `BACK` source face is itself
-near-black and remains visible as such; reconstruction does not manufacture missing pixels.
+near-black and remains visible as such; reconstruction does not manufacture missing pixels. M4 has
+since met its baseline gate.
 
 - `gb-frames` extracts both original video streams; reconstructed panoramic stills from multiple timestamps.
 - `gb-project` visual comparison of raw, reconstructed and virtual-camera views.
@@ -419,6 +420,18 @@ near-black and remains visible as such; reconstruction does not manufacture miss
 - **Gate:** correct navigable panorama directly from original MAX 2025 `.360` with no manual user conversion.
 
 ### M4 — Native Qt player baseline
+
+**Status: Baseline gate met (2026-10-30).** `gb-player` opens the fingerprinted `.360` directly,
+decodes both HEVC lens streams in exact PTS lockstep, and reconstructs and projects them in one
+GPU shader pass that ports the M3 CPU reference. It plays the single-stream MP4 flat. Telemetry
+and per-sample GPMF metadata follow the displayed frame without interpolation. Over 60 s on the
+development machine, both samples played at 25 fps with 0 dropped frames, 0 underruns and 20/20
+exact random seeks. Measured `.360` seek latency was 354 ms median and 520 ms maximum, at about 2.3
+cores of CPU, 2.4 ms GPU time per frame, and 0.43–0.79 GiB peak RSS depending on decoder
+threads. See
+[`research/findings/2026-10-30-gb-player-m4-baseline.md`](../research/findings/2026-10-30-gb-player-m4-baseline.md).
+Audio output and audio-master synchronization, hardware decoding, and photos are not part of this
+baseline.
 
 - Open file, play/pause/seek, spherical viewing, metadata panel.
 - Synchronize telemetry and media timeline; basic performance diagnostics.

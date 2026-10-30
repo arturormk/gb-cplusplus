@@ -6,9 +6,11 @@ timestamped GPS telemetry, and diagnose media/GPS clock relationships. GoBro is 
 public-facing name and is not affiliated with, endorsed by, or sponsored by GoPro.
 
 The M0 baseline, M1 container/metadata laboratory, M2 telemetry/timing laboratory, and M3 native
-video reconstruction/projection laboratory are complete. `gb-frames` provides exact native frame
-extraction and deterministic reconstruction; `gb-project` provides the Qt visual comparison and
-interactive virtual camera.
+video reconstruction/projection laboratory are complete, and the M4 player baseline has met its
+gate. `gb-frames` provides exact native frame extraction and deterministic reconstruction, and
+`gb-project` provides the Qt visual comparison and interactive virtual camera. `gb-player` plays
+original MAX `.360` recordings directly, with GPU spherical viewing, accurate seeking, synchronized
+telemetry and metadata panels, and performance diagnostics.
 
 ## Build and test
 
@@ -54,6 +56,8 @@ build/dev/tools/gb-frames/gb-frames --stream 0 --time 5 --output stream-0.png re
 build/dev/tools/gb-frames/gb-frames --reconstruct --stream 0 --stream 5 \
   --time 5 --output panorama.png recording.360
 build/dev/tools/gb-project/gb-project --time 5 recording.360
+build/dev/apps/gb-player/gb-player recording.360
+build/dev/apps/gb-player/gb-player --benchmark 60 --seeks 20 recording.360 > benchmark.json
 ```
 
 Source media is opened read-only; generated reports, frames, and projections are written only to
@@ -70,7 +74,9 @@ individual tool READMEs for the policies used by GPX/GeoJSON and media-to-UTC ma
 
 Frame reports use `gb.frames.streams/v1` and `gb.frames/v1`, retaining integer PTS/time bases and
 source color metadata. The face-specific MAX EAC reconstruction and virtual-camera projection are
-shared by `gb-frames` and `gb-project`; see their individual READMEs for controls and limitations.
+shared by `gb-frames`, `gb-project`, and `gb-player`; see their individual READMEs for controls and
+limitations. Player benchmark reports use `gb.player.benchmark/v1`; see
+[`apps/gb-player/README.md`](apps/gb-player/README.md).
 
 ## Scope and project guidance
 

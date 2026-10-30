@@ -37,7 +37,20 @@ integration tests list both streams, select stream 1 at a timestamp, encode PNG,
 PPM without requiring private media. An offscreen `gb-project` smoke test loads the complete QML
 scene and compiled shader resources without requiring a display server.
 
-The test suite also invokes all six tools' `--help` and `--version`, generates isolated ISO BMFF,
+`gb_playback_tests` covers playback layout selection (verified MAX geometry, odd overlap,
+mismatched streams, no video), floor-rounded tick rescaling and overflow rejection. It also runs
+the synchronized reader against an FFmpeg-generated 20-frame, two-stream MPEG-4 fixture with a
+5-frame GOP. The reader must pair every frame, keep the PTS sequence exact, preserve stream order
+and limited-range planes, seek accurately inside a GOP, hold the last frame past the end, and
+reject invalid selections. `gb_telemetry_tests` also checks the shared nearest-record tie policy.
+The offscreen `gb-player` smoke tests load the QML scene with the software scene graph and play
+the fixture from 1.05 s. The first presented frame must be the 1.0 s frame of the dual-stream
+layout, with telemetry correctly reported as absent.
+
+GPU rendering, real-time smoothness, and seek latency need a display and real media. They are
+measured with `gb-player --benchmark` and recorded under `research/findings/`, not in CTest.
+
+The test suite also invokes all six tools' and `gb-player`'s `--help` and `--version`, generates isolated ISO BMFF,
 GPMF, and JPEG CLI fixtures, checks all JSON schema IDs, and verifies that corrupt inputs fail.
 Future work should add full JSON Schema validation, fuzzing, sanitizers, and curated public or
 fingerprint-only regression cases derived from real camera evidence.

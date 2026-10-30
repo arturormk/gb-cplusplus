@@ -56,10 +56,19 @@ struct Extraction {
 
 [[nodiscard]] Extraction extract(const std::filesystem::path &path,
                                  std::optional<std::uint32_t> track_id = std::nullopt);
+// Returns the recorded GPS point nearest to a media tick, preferring the earlier point on ties.
+// No position is interpolated. Returns nullptr when no GPS point exists.
+[[nodiscard]] const GpsPoint *nearest_point(const Extraction &extraction, std::int64_t media_ticks);
 [[nodiscard]] std::optional<long double> forward_azimuth_degrees(long double latitude_1,
                                                                  long double longitude_1,
                                                                  long double latitude_2,
                                                                  long double longitude_2);
+// Azimuth of the horizontal velocity at points[selected], in degrees clockwise from true north
+// (0 north, 90 east, 180 south, 270 west). It is the direction of travel derived from the nearest
+// distinct usable positions before and after the record, not the camera's pointing direction.
+// Returns nullopt for an invalid record, 2D speed at or below 0.01 m/s, or no distinct neighbour.
+[[nodiscard]] std::optional<long double> motion_azimuth_degrees(const std::vector<GpsPoint> &points,
+                                                                std::size_t selected);
 [[nodiscard]] std::string validity_name(Validity validity);
 
 } // namespace gb::telemetry

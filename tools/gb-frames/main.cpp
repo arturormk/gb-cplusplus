@@ -265,42 +265,6 @@ std::string decimal(const long double value, const int precision) {
   return output.str();
 }
 
-std::optional<long double> motion_azimuth(const std::vector<gb::telemetry::GpsPoint> &points,
-                                          const std::size_t selected) {
-  if (selected >= points.size() || points[selected].validity == gb::telemetry::Validity::invalid ||
-      points[selected].speed_2d <= 0.01L) {
-    return std::nullopt;
-  }
-  const auto usable = [](const auto &point) {
-    return point.validity != gb::telemetry::Validity::invalid;
-  };
-  const auto differs = [](const auto &left, const auto &right) {
-    return left.latitude != right.latitude || left.longitude != right.longitude;
-  };
-  const gb::telemetry::GpsPoint *before{};
-  for (auto index = selected; index > 0U; --index) {
-    const auto &candidate = points[index - 1U];
-    if (usable(candidate) && differs(candidate, points[selected])) {
-      before = &candidate;
-      break;
-    }
-  }
-  const gb::telemetry::GpsPoint *after{};
-  for (auto index = selected + 1U; index < points.size(); ++index) {
-    const auto &candidate = points[index];
-    if (usable(candidate) && differs(points[selected], candidate)) {
-      after = &candidate;
-      break;
-    }
-  }
-  const auto *start = before != nullptr ? before : &points[selected];
-  const auto *end = after != nullptr ? after : &points[selected];
-  if (start == end || !differs(*start, *end)) return std::nullopt;
-
-  return gb::telemetry::forward_azimuth_degrees(start->latitude, start->longitude,
-                                                 end->latitude, end->longitude);
-}
-
 HudResult make_basic_hud(const Options &options, const gb::media::RgbFrame &frame) {
   HudResult hud;
   hud.mode = "basic";
@@ -341,7 +305,7 @@ HudResult make_basic_hud(const Options &options, const gb::media::RgbFrame &fram
       hud.overlay.lines[4] = "ALTITUDE " + decimal(nearest.altitude, 3) + " M";
       hud.overlay.lines[5] = "SPEED 2D " + decimal(nearest.speed_2d, 3) + " M/S";
       hud.overlay.lines[6] = "SPEED 3D " + decimal(nearest.speed_3d, 3) + " M/S";
-      const auto azimuth = motion_azimuth(telemetry.gps, *nearest_index);
+      const auto azimuth = gb::telemetry::motion_azimuth_degrees(telemetry.gps, *nearest_index);
       if (azimuth.has_value()) {
         hud.overlay.lines[7] = "AZIMUTH " + decimal(*azimuth, 1) + " DEG";
       }

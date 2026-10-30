@@ -2,6 +2,7 @@
 
 #include <cmath>
 #include <iostream>
+#include <vector>
 
 int main(const int argc, char **argv) {
   if (argc != 2) {
@@ -36,6 +37,46 @@ int main(const int argc, char **argv) {
         std::fabs(*south - 180.0L) > 1e-9L || std::fabs(*west - 270.0L) > 1e-9L ||
         gb::telemetry::forward_azimuth_degrees(0.0L, 0.0L, 0.0L, 0.0L).has_value()) {
       std::cerr << "unexpected forward azimuth\n";
+      return 1;
+    }
+    const auto fix = [](const long double latitude, const long double longitude, const long double speed,
+                        const gb::telemetry::Validity validity = gb::telemetry::Validity::valid) {
+      gb::telemetry::GpsPoint sample;
+      sample.latitude = latitude;
+      sample.longitude = longitude;
+      sample.speed_2d = speed;
+      sample.validity = validity;
+      return sample;
+    };
+    // Eastbound path whose middle record repeats its predecessor; an invalid westward outlier is skipped.
+    const std::vector<gb::telemetry::GpsPoint> path{
+        fix(0.0L, 0.0L, 5.0L), fix(0.0L, 0.001L, 5.0L), fix(0.0L, 0.001L, 5.0L),
+        fix(0.0L, -1.0L, 5.0L, gb::telemetry::Validity::invalid), fix(0.0L, 0.002L, 5.0L)};
+    const auto heading = gb::telemetry::motion_azimuth_degrees(path, 2U);
+    auto stationary = path;
+    stationary[2].speed_2d = 0.0L;
+    if (!heading.has_value() || std::fabs(*heading - 90.0L) > 1e-6L ||
+        gb::telemetry::motion_azimuth_degrees(stationary, 2U).has_value() ||
+        gb::telemetry::motion_azimuth_degrees(path, 3U).has_value() ||
+        gb::telemetry::motion_azimuth_degrees(path, path.size()).has_value() ||
+        gb::telemetry::motion_azimuth_degrees({fix(0.0L, 0.0L, 5.0L)}, 0U).has_value()) {
+      std::cerr << "unexpected motion azimuth\n";
+      return 1;
+    }
+    gb::telemetry::Extraction track;
+    for (const auto ticks : {100, 200, 400}) {
+      gb::telemetry::GpsPoint sample;
+      sample.media_time_ticks = ticks;
+      track.gps.push_back(sample);
+    }
+    const auto nearest = [&track](const std::int64_t ticks) {
+      const auto *found = gb::telemetry::nearest_point(track, ticks);
+      return found == nullptr ? -1 : found->media_time_ticks;
+    };
+    if (nearest(0) != 100 || nearest(240) != 200 || nearest(300) != 200 ||
+        nearest(301) != 400 || nearest(10000) != 400 ||
+        gb::telemetry::nearest_point(gb::telemetry::Extraction{}, 0) != nullptr) {
+      std::cerr << "unexpected nearest GPS record policy\n";
       return 1;
     }
     return 0;

@@ -16,6 +16,9 @@ target_link_libraries(gb_telemetry_tests PRIVATE gb::telemetry gb_project_option
 add_executable(gb_media_tests unit/media_test.cpp)
 target_link_libraries(gb_media_tests PRIVATE gb::media gb_project_options)
 
+add_executable(gb_playback_tests unit/playback_test.cpp)
+target_link_libraries(gb_playback_tests PRIVATE gb::media gb_project_options)
+
 add_test(NAME gb_container_tests COMMAND gb_container_tests)
 add_test(NAME gb_image_tests COMMAND gb_image_tests)
 add_test(NAME gb_metadata_tests COMMAND gb_metadata_tests)
@@ -36,6 +39,14 @@ add_test(NAME gb_project_qml_smoke COMMAND gb_project --smoke-test)
 set_tests_properties(gb_project_qml_smoke PROPERTIES
   ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
+add_test(NAME gb_player_help COMMAND gb_player --help)
+add_test(NAME gb_player_version COMMAND gb_player --version)
+add_test(NAME gb_player_qml_smoke COMMAND gb_player --smoke-test)
+add_test(NAME gb_player_rejects_unknown_view COMMAND gb_player --view sideways)
+set_tests_properties(gb_player_rejects_unknown_view PROPERTIES WILL_FAIL TRUE)
+set_tests_properties(gb_player_qml_smoke PROPERTIES
+  ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
 set(GB_CLI_FIXTURE_DIR "${CMAKE_CURRENT_BINARY_DIR}/cli-fixtures")
 add_test(NAME gb_cli_fixture_setup
   COMMAND gb_test_fixture_writer "${GB_CLI_FIXTURE_DIR}")
@@ -50,6 +61,27 @@ add_test(NAME gb_frames_fixture_setup
 set_tests_properties(gb_frames_fixture_setup PROPERTIES
   FIXTURES_REQUIRED gb_cli_media
   FIXTURES_SETUP gb_frames_media)
+
+add_test(NAME gb_playback_fixture_setup
+  COMMAND "${GB_FFMPEG_EXECUTABLE}" -v error
+    -f lavfi -i color=c=red:s=104x32:r=10:d=2
+    -f lavfi -i color=c=blue:s=104x32:r=10:d=2
+    -map 0:v -map 1:v -c:v mpeg4 -g 5 -bf 0 -y "${GB_CLI_FIXTURE_DIR}/playback.mp4")
+set_tests_properties(gb_playback_fixture_setup PROPERTIES
+  FIXTURES_REQUIRED gb_cli_media
+  FIXTURES_SETUP gb_playback_media)
+
+add_test(NAME gb_playback_tests
+  COMMAND gb_playback_tests "${GB_CLI_FIXTURE_DIR}/playback.mp4")
+set_tests_properties(gb_playback_tests PROPERTIES FIXTURES_REQUIRED gb_playback_media)
+
+add_test(NAME gb_player_playback_smoke
+  COMMAND gb_player --smoke-test --time 1.05 "${GB_CLI_FIXTURE_DIR}/playback.mp4")
+set_tests_properties(gb_player_playback_smoke PROPERTIES
+  FIXTURES_REQUIRED gb_playback_media
+  ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+  TIMEOUT 60
+  PASS_REGULAR_EXPRESSION "gb-player smoke: layout=max_dual_eac streams=2 pts=[1-9][0-9]* telemetry=none")
 
 add_test(NAME gb_frames_list_json
   COMMAND gb_frames --list --json "${GB_CLI_FIXTURE_DIR}/two-video.mp4")
