@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(gb-cplusplus VERSION 0.8.0 LANGUAGES CXX)
+include(cmake/GbVersion.cmake)
+project(gb-cplusplus VERSION ${GB_VERSION} LANGUAGES CXX)
+message(STATUS "gb-cplusplus version ${PROJECT_VERSION}")
 
 include(CTest)
 

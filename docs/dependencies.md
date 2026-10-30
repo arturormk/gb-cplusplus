@@ -55,10 +55,12 @@ ExifTool, the GoPro GPMF parser, and map rendering libraries (MapLibre) are not 
 and Qt are required by the current all-target build, but remain unnecessary when building the
 earlier library/tool targets in isolation.
 
-The project license remains under review as directed by the blueprint. No third-party source code
-is vendored. `gb_media` links the system FFmpeg shared libraries and `gb-project` links the system
-Qt 6 libraries; binary redistribution must review the selected builds and their applicable
-LGPL/GPL or commercial-license obligations.
+The project is licensed under GPL-3.0-or-later (see `LICENSE`). No third-party source code is
+vendored. `gb_media` links the system FFmpeg shared libraries (LGPL-2.1-or-later, or GPL when
+built with GPL components, as Ubuntu's are), `gb-project` and `gb-player` link the system Qt 6
+libraries (LGPL-3.0), and `gb-player` links SDL2 (zlib). All are compatible with
+GPL-3.0-or-later when dynamically linked. Binary packages must still preserve the notices of
+the selected builds.
 
 ## FFmpeg review
 

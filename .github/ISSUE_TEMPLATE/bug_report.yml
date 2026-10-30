@@ -1,0 +1,42 @@
+name: Bug report
+description: Something does not work as documented
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: >
+        Please do not attach private recordings. Tool output, `gb-inspect --json`, or a
+        description of the camera and settings is usually enough.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Output of `--version` for the affected tool, e.g. `gb-player 0.1.13`
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Distribution, Qt and FFmpeg versions, and GPU driver if relevant
+    validations:
+      required: true
+  - type: input
+    id: camera
+    attributes:
+      label: Camera and recording
+      description: Camera model, firmware, mode (e.g. MAX 2025, 360 video, 5.6K30)
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Expected and actual behavior
+      description: Include stderr diagnostics
+    validations:
+      required: true

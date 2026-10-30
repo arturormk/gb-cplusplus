@@ -1,0 +1,52 @@
+name: release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-22.04
+    steps:
+      # actions/checkout v7.0.1; immutable upstream commit.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          # Full history: odd-minor versions count commits (ADR-0010).
+          fetch-depth: 0
+      - name: Check tag against VERSION
+        run: |
+          version="$(cmake -P cmake/GbVersion.cmake)"
+          if [[ "${GITHUB_REF_NAME}" != "v${version}" ]]; then
+            echo "::error::Tag ${GITHUB_REF_NAME} does not match the derived version v${version}"
+            exit 1
+          fi
+          echo "GB_VERSION=${version}" >> "${GITHUB_ENV}"
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            ffmpeg libavformat-dev libavcodec-dev libavutil-dev libswscale-dev \
+            qt6-base-dev qt6-declarative-dev libqt6shadertools6-dev qt6-shader-baker \
+            qml6-module-qtqml qml6-module-qtqml-models qml6-module-qtqml-workerscript \
+            qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts \
+            qml6-module-qtquick-nativestyle qml6-module-qtquick-templates \
+            qml6-module-qtquick-window libsdl2-dev
+      - name: Configure
+        run: cmake --preset dev -DGB_WARNINGS_AS_ERRORS=ON
+      - name: Build
+        run: cmake --build --preset dev
+      - name: Test
+        run: ctest --preset dev
+      # Even minors will attach .deb/.rpm packages here once packaging lands (ADR-0010).
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          prerelease=()
+          minor="$(cut -d. -f2 <<< "${GB_VERSION}")"
+          if (( minor % 2 == 1 )); then prerelease=(--prerelease); fi
+          gh release create "${GITHUB_REF_NAME}" --title "gb-cplusplus ${GITHUB_REF_NAME}" \
+            --generate-notes "${prerelease[@]}"

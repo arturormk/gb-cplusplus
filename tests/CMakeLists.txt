@@ -58,6 +58,13 @@ set_tests_properties(gb_player_rejects_unknown_map_provider PROPERTIES WILL_FAIL
 set_tests_properties(gb_player_qml_smoke PROPERTIES
   ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
+# Every executable reports the version derived by cmake/GbVersion.cmake (ADR-0010).
+string(REPLACE "." "\\." gb_version_regex "${GB_VERSION}")
+foreach(gb_tool IN ITEMS inspect metadata telemetry time frames project player)
+  set_tests_properties(gb_${gb_tool}_version PROPERTIES
+    PASS_REGULAR_EXPRESSION "^gb-${gb_tool} ${gb_version_regex}\n$")
+endforeach()
+
 set(GB_CLI_FIXTURE_DIR "${CMAKE_CURRENT_BINARY_DIR}/cli-fixtures")
 add_test(NAME gb_cli_fixture_setup
   COMMAND gb_test_fixture_writer "${GB_CLI_FIXTURE_DIR}")

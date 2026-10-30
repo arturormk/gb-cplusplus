@@ -1,5 +1,10 @@
 # gb-cplusplus
 
+[![ci](https://github.com/arturormk/gb-cplusplus/actions/workflows/ci.yml/badge.svg)](https://github.com/arturormk/gb-cplusplus/actions/workflows/ci.yml)
+[![License: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-blue.svg)](LICENSE)
+[![Built with Claude Code](https://img.shields.io/badge/built_with-Claude_Code-D97757?logo=claude&logoColor=white)](https://claude.com/claude-code)
+[![tools/ built with Codex](https://img.shields.io/badge/tools%2F_built_with-Codex-412991?logo=openai&logoColor=white)](https://openai.com/codex)
+
 `gb-cplusplus` is the C++20/Linux implementation of an independent open-source toolkit for
 advanced GoPro camera users. Its current laboratory tools inspect containers and GPMF, extract
 timestamped GPS telemetry, and diagnose media/GPS clock relationships. GoBro is a provisional
@@ -92,10 +97,36 @@ The implementation follows [`docs/BLUEPRINT.md`](docs/BLUEPRINT.md): tools estab
 format evidence before shared functionality moves into a player. Current architecture, testing,
 known limitations, and research procedure are documented under `docs/` and `research/`.
 
+## AI provenance
+
+This is an AI-generated project directed and curated by a human. The M0–M3 laboratory tools
+under `tools/` and the libraries they introduced were developed with OpenAI Codex. `gb-player`
+(`apps/`) and the M4–M5 library work, including `gb-geo`, `gb-tiles`, and audio decoding, were
+developed with Claude Code. The commit history and the decision records in `docs/adr/`
+document the work.
+
+## Versioning
+
+The version comes from [`VERSION`](VERSION) and Git; every tool prints it with `--version`, and
+`cmake -P cmake/GbVersion.cmake` prints it without building. Odd minors (0.1, 0.3, …) are
+development series whose patch is the commit count, e.g. `0.1.13`. Even minors (0.2, 1.0, …)
+are manually versioned releases. See [ADR-0010](docs/adr/0010-versioning-and-releases.md) and
+[`CHANGELOG.md`](CHANGELOG.md).
+
 ## Contributing
 
-Keep changes focused on one laboratory capability. Add synthetic or legally distributable tests
-for binary behavior, keep source media out of Git, and record new format findings with commands,
-file fingerprints, and a clear confirmed-versus-hypothesis label. Before submitting a change,
-build with Ninja and run `ctest --preset dev`. The project license is not final; do not contribute
-code copied from third-party projects or add dependencies without a license review.
+See [`CONTRIBUTING.md`](CONTRIBUTING.md). Report security issues privately as described in
+[`SECURITY.md`](SECURITY.md).
+
+## License
+
+Copyright (C) 2026 Arturo R Montesinos and contributors.
+
+gb-cplusplus is free software: you can redistribute it and/or modify it under the terms of the
+GNU General Public License as published by the Free Software Foundation, either version 3 of
+the License, or (at your option) any later version. It is distributed WITHOUT ANY WARRANTY; see
+[`LICENSE`](LICENSE).
+
+The tools link the system FFmpeg, Qt 6, and SDL2 libraries; see
+[`docs/dependencies.md`](docs/dependencies.md) for their licenses. GoBro and gb-cplusplus are
+not affiliated with, endorsed by, or sponsored by GoPro.
