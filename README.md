@@ -1,4 +1,4 @@
-# gb-cplusplus
+# GoBro: A GoPro Companion for Linux
 
 [![ci](https://github.com/arturormk/gb-cplusplus/actions/workflows/ci.yml/badge.svg)](https://github.com/arturormk/gb-cplusplus/actions/workflows/ci.yml)
 [![License: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-blue.svg)](LICENSE)
