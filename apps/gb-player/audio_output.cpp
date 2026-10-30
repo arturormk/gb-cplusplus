@@ -224,7 +224,9 @@ void AudioOutput::fill(float *out, const std::int64_t frames) {
     }
     case State::aligning: {
       const auto first = anchor_sample_ + framesIn(now + latency_ - anchor_time_, sample_rate_);
-      if (!queue_.empty() && queuedPosition() < first) {
+      // Loop until the queue reaches the target, so silence below can never be negative even if
+      // block positions are not contiguous.
+      while (!queue_.empty() && queuedPosition() < first) {
         const auto skip = std::min(first - queuedPosition(), queued_frames_);
         statistics_.aligned_skip_frames += static_cast<std::uint64_t>(skip);
         discardQueued(skip);
@@ -235,7 +237,7 @@ void AudioOutput::fill(float *out, const std::int64_t frames) {
         break;
       }
       const auto silence = queuedPosition() - first;
-      if (silence >= frames) break;
+      if (silence < 0 || silence >= frames) break;
       statistics_.aligned_silence_frames += static_cast<std::uint64_t>(silence);
       state_ = State::playing;
       gain_ = 0.0F;

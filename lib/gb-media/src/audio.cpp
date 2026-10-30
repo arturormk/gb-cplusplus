@@ -158,15 +158,23 @@ struct AudioReader::Impl {
       throw MediaError(ErrorKind::unsupported, "audio channel count changed mid-stream");
     }
     if (decoded.nb_samples <= 0) return;
-    // Trust the running count for contiguous audio, and re-anchor on real timestamp gaps.
+    // Trust the running count for contiguous audio, and re-anchor forward on real timestamp gaps.
+    // A backward jump overlaps audio already emitted: drop the overlap so block positions stay
+    // monotonic and contiguous.
     const auto position = frame_position(decoded);
     const auto tolerance = std::max<std::int64_t>(1, stream.sample_rate / 50);
-    if (!next_sample.has_value() || std::llabs(position - *next_sample) > tolerance) next_sample = position;
+    std::int64_t overlap{};
+    if (!next_sample.has_value() || position - *next_sample > tolerance) {
+      next_sample = position;
+    } else if (*next_sample - position > tolerance) {
+      overlap = *next_sample - position;
+    }
     AudioBlock block;
-    block.first_sample = *next_sample;
-    *next_sample += decoded.nb_samples;
+    block.first_sample = *next_sample - overlap;
 
-    auto skip = std::clamp<std::int64_t>(discard_before - block.first_sample, 0, decoded.nb_samples);
+    auto skip = std::clamp<std::int64_t>(std::max(discard_before - block.first_sample, overlap), 0,
+                                         decoded.nb_samples);
+    *next_sample = std::max(*next_sample, block.first_sample + decoded.nb_samples);
     if (skip == decoded.nb_samples) return;
     block.first_sample += skip;
     block.samples.resize(static_cast<std::size_t>(decoded.nb_samples - skip) * 2U);
