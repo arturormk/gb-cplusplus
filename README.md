@@ -19,6 +19,9 @@ telemetry and metadata panels, synchronized audio that plays only during stable 
 while scrubbing or seeking), a live OpenStreetMap route map with click-to-seek, and performance
 diagnostics.
 
+![gb-player playing a GoPro recording of a dirt track, with the OpenStreetMap route map and the
+synchronized GPS telemetry panel on the right](docs/screenshots/gb-player.jpg)
+
 ## Build and test
 
 For the quickest setup, run:
