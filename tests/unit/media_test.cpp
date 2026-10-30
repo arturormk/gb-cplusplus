@@ -1,5 +1,6 @@
 #include "gb/media/media.hpp"
 
+#include <array>
 #include <cstdint>
 #include <exception>
 #include <iostream>
@@ -26,6 +27,50 @@ gb::media::RgbFrame solid(const std::int32_t width, const std::int32_t height,
   frame.time_base = {1, 1000};
   return frame;
 }
+
+gb::media::RgbFrame coordinate_map(const std::int32_t width, const std::int32_t height) {
+  auto frame = solid(width, height, 0U, 0U, 0U);
+  for (int y = 0; y < height; ++y) {
+    for (int x = 0; x < width; ++x) {
+      const auto offset = (static_cast<std::size_t>(y) * static_cast<std::size_t>(width) +
+                           static_cast<std::size_t>(x)) *
+                          3U;
+      frame.pixels[offset] = static_cast<std::uint8_t>(x * 255 / (width - 1));
+      frame.pixels[offset + 1U] = static_cast<std::uint8_t>(y * 255 / (height - 1));
+    }
+  }
+  return frame;
+}
+
+gb::media::RgbFrame packed_faces() {
+  auto frame = solid(200, 64, 0U, 0U, 0U);
+  const std::array<std::array<std::uint8_t, 3>, 3> colors{{
+      {255U, 0U, 0U}, {0U, 255U, 0U}, {0U, 0U, 255U}}};
+  const std::array<int, 4> boundaries{0, 68, 132, 200};
+  for (std::size_t region = 0; region < colors.size(); ++region) {
+    for (int y = 0; y < frame.height; ++y) {
+      for (int x = boundaries[region]; x < boundaries[region + 1U]; ++x) {
+        const auto offset = (static_cast<std::size_t>(y) *
+                                 static_cast<std::size_t>(frame.width) +
+                             static_cast<std::size_t>(x)) *
+                            3U;
+        for (std::size_t channel = 0; channel < 3U; ++channel) {
+          frame.pixels[offset + channel] = colors[region][channel];
+        }
+      }
+    }
+  }
+  return frame;
+}
+
+std::uint8_t channel_at(const gb::media::RgbFrame &frame, const int x, const int y,
+                        const std::size_t channel) {
+  return frame.pixels[(static_cast<std::size_t>(y) * static_cast<std::size_t>(frame.width) +
+                       static_cast<std::size_t>(x)) *
+                          3U +
+                      channel];
+}
+
 void require(const bool condition, const char *message) {
   if (!condition) throw std::runtime_error(message);
 }
@@ -52,6 +97,63 @@ int main() {
       blue_pixels += blue == 255U ? 1U : 0U;
     }
     require(red_pixels > 0U && blue_pixels > 0U, "both source streams must be represented");
+
+    auto first_faces = packed_faces();
+    auto second_faces = packed_faces();
+    for (std::size_t offset = 0; offset < second_faces.pixels.size(); offset += 3U) {
+      second_faces.pixels[offset] = static_cast<std::uint8_t>(255U - second_faces.pixels[offset]);
+      second_faces.pixels[offset + 1U] =
+          static_cast<std::uint8_t>(255U - second_faces.pixels[offset + 1U]);
+      second_faces.pixels[offset + 2U] =
+          static_cast<std::uint8_t>(255U - second_faces.pixels[offset + 2U]);
+    }
+    const auto six_faces =
+        gb::media::reconstruct_equirectangular(first_faces, second_faces, 256, 128, 8);
+    std::array<std::size_t, 6> face_color_counts{};
+    const std::array<std::array<std::uint8_t, 3>, 6> face_colors{{
+        {255U, 0U, 0U}, {0U, 255U, 0U}, {0U, 0U, 255U},
+        {0U, 255U, 255U}, {255U, 0U, 255U}, {255U, 255U, 0U}}};
+    for (std::size_t offset = 0; offset < six_faces.pixels.size(); offset += 3U) {
+      for (std::size_t color = 0; color < face_colors.size(); ++color) {
+        if (six_faces.pixels[offset] == face_colors[color][0] &&
+            six_faces.pixels[offset + 1U] == face_colors[color][1] &&
+            six_faces.pixels[offset + 2U] == face_colors[color][2]) {
+          ++face_color_counts[color];
+        }
+      }
+    }
+    for (const auto count : face_color_counts) {
+      require(count > 100U, "one of the six packed faces was not reconstructed");
+    }
+
+    const auto map = coordinate_map(360, 180);
+    const auto forward = gb::media::project_equirectangular(
+        map, gb::media::ProjectionMode::rectilinear, 101, 101, 0.0L, 0.0L, 0.0L, 90.0L);
+    require(std::abs(static_cast<int>(channel_at(forward, 50, 50, 0U)) - 128) <= 2,
+            "rectilinear center longitude is incorrect");
+    require(std::abs(static_cast<int>(channel_at(forward, 50, 50, 1U)) - 128) <= 2,
+            "rectilinear center latitude is incorrect");
+    const auto east = gb::media::project_equirectangular(
+        map, gb::media::ProjectionMode::rectilinear, 101, 101, 90.0L, 0.0L, 0.0L, 90.0L);
+    require(std::abs(static_cast<int>(channel_at(east, 50, 50, 0U)) - 191) <= 2,
+            "positive yaw does not look east");
+    const auto up = gb::media::project_equirectangular(
+        map, gb::media::ProjectionMode::rectilinear, 101, 101, 0.0L, 90.0L, 0.0L, 90.0L);
+    require(channel_at(up, 50, 50, 1U) <= 2U, "positive pitch does not look up");
+    const auto fisheye = gb::media::project_equirectangular(
+        map, gb::media::ProjectionMode::fisheye, 100, 100, 0.0L, 0.0L, 0.0L, 180.0L);
+    require(channel_at(fisheye, 0, 0, 0U) == 0U && channel_at(fisheye, 0, 0, 1U) == 0U,
+            "fisheye outside-circle pixels are not black");
+    for (const auto mode : {gb::media::ProjectionMode::stereographic,
+                            gb::media::ProjectionMode::little_planet}) {
+      const auto projected = gb::media::project_equirectangular(
+          map, mode, 100, 100, 0.0L, 0.0L, 0.0L, 180.0L);
+      require(projected.width == 100 && projected.height == 100 && !projected.pixels.empty(),
+              "projection mode did not produce the requested output");
+    }
+    require(gb::media::projection_mode_name(gb::media::ProjectionMode::little_planet) ==
+                "little_planet",
+            "projection mode name changed");
 
     auto hud_frame = solid(320, 180, 20U, 30U, 40U);
     const auto before = hud_frame.pixels;

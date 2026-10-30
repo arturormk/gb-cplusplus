@@ -43,10 +43,14 @@ directly from the original `.360`. At media times 5 s and 120 s, both selected f
 exact requested PTS (`450000` and `10800000` respectively), duration 3600 ticks, and time base
 1/90000. PNG extraction preserves the reported full-range BT.709 source description.
 
-The CPU pseudo-EAC reference was visually checked at both times. It produces continuous mapped
-content for the available faces but exposes a large missing BACK region. A diagnostic thirds scan
-of the decoded stream-5 frame at 5 s found its center third essentially black while its outer
-thirds contain image data; this is present before projection and is not caused by PNG encoding.
-Swapping the stream order does not recover the face. The cause may be capture-mode/layout metadata
-or an unavailable source face; it is not yet established. `gb-frames` deliberately leaves the
-region visible instead of synthesizing pixels, so the full M3 panorama gate remains open.
+The corrected CPU reference was visually checked at both times. It follows the published
+face-specific layout: stream 0 contains `LEFT / FRONT / RIGHT`, stream 5 contains
+`DOWN / BACK / TOP`, and the retained width is blended across wrapped side-face duplicates. This
+corrects the earlier generic two-row cube-atlas assumption and produces an upright, navigable
+equirectangular panorama with continuous wrapping.
+
+A diagnostic source scan at 5 s found stream 5's center `BACK` face essentially black while its
+outer faces contain image data. That condition exists before projection and is not caused by PNG
+encoding or the face mapping. `gb-frames` and `gb-project` deliberately preserve and report it
+instead of synthesizing pixels. Six-color synthetic fixtures independently exercise every mapped
+face, so this evidence-file limitation does not leave the M3 reconstruction model unresolved.

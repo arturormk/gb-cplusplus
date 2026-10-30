@@ -8,6 +8,7 @@ extern "C" {
 #include <libswscale/swscale.h>
 }
 
+#include <algorithm>
 #include <cerrno>
 #include <cstring>
 #include <fstream>
@@ -135,11 +136,24 @@ RgbFrame convert_frame(const AVFrame &source, const int stream_index,
                                coefficients, 1, 0, 1 << 16, 1 << 16) < 0) {
     throw MediaError(ErrorKind::unsupported, "cannot configure RGB color conversion");
   }
-  std::uint8_t *destination[] = {result.pixels.data(), nullptr, nullptr, nullptr};
-  const int strides[] = {source.width * 3, 0, 0, 0};
+  const auto packed_stride = source.width * 3;
+  const auto aligned_stride = (packed_stride + 31) & ~31;
+  std::vector<std::uint8_t> converted(static_cast<std::size_t>(aligned_stride) *
+                                          static_cast<std::size_t>(source.height) +
+                                      AV_INPUT_BUFFER_PADDING_SIZE);
+  std::uint8_t *destination[] = {converted.data(), nullptr, nullptr, nullptr};
+  const int strides[] = {aligned_stride, 0, 0, 0};
   const auto rows = sws_scale(scaler.get(), source.data, source.linesize, 0, source.height,
                               destination, strides);
   if (rows != source.height) throw MediaError(ErrorKind::corrupt, "incomplete RGB conversion");
+  for (int row = 0; row < source.height; ++row) {
+    const auto source_offset = static_cast<std::size_t>(row) *
+                               static_cast<std::size_t>(aligned_stride);
+    const auto destination_offset = static_cast<std::size_t>(row) *
+                                    static_cast<std::size_t>(packed_stride);
+    std::copy_n(converted.begin() + static_cast<std::ptrdiff_t>(source_offset), packed_stride,
+                result.pixels.begin() + static_cast<std::ptrdiff_t>(destination_offset));
+  }
   return result;
 }
 

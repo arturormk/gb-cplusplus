@@ -24,7 +24,10 @@
   diagnostics with nearest-record queries.
 - Native FFmpeg video-stream enumeration and software decoding with deterministic nearest-PTS
   selection, PNG/PPM/RGB24 output, and source color metadata.
-- Experimental CPU MAX pseudo-EAC reconstruction with explicit stream selection and overlap.
+- Face-specific CPU MAX pseudo-EAC reconstruction with explicit stream selection, retained-overlap
+  blending, and deterministic virtual-camera projections.
+- Qt 6 projection laboratory comparing both raw tracks, reconstructed equirectangular output, and
+  GPU/CPU rectilinear, fisheye, stereographic, and Little Planet views.
 - Content-based JPEG detection with checked marker and entropy termination parsing.
 - JPEG dimensions, precision, component count, and directly appended codestream enumeration.
 - Structural detection of JFIF, EXIF, XMP, MPF and APP6 payloads without interpreting private
@@ -36,13 +39,12 @@ Five owner-provided samples have now established one native `.360` topology, one
 MP4 topology, and three JPEG layouts. See
 [`formats/gopro-max-2025-sample-findings.md`](formats/gopro-max-2025-sample-findings.md) for
 fingerprints, exact commands, redacted observations, and remaining uncertainties. Both `.360`
-HEVC streams now decode at synchronized PTS values. The current projection exposes a near-black
-packed face in stream 5, so this is not yet a claim of a complete navigable panorama.
+HEVC streams decode at synchronized PTS values. The verified six-face projection exposes a
+near-black `BACK` source face in stream 5 of the `.360` sample rather than concealing it.
 
 ## Not implemented
 
-- A verified complete/stabilized reconstruction of the observed GoPro MAX (2025) `.360` topology,
-  interactive projection, and playback.
+- Stabilization, optical-flow seam correction, recovered camera calibration, and playback.
 - Fragmented-media sample mapping, edit lists, multiple sample descriptions, compressed/complex
   GPMF values, GPS9, sensor-series export, EXIF, XMP, MPF, or APP6 metadata decoding.
 - General payload extraction, HEIF item interpretation, or file repair. Raw `gpmd` sample export is
@@ -51,4 +53,4 @@ packed face in stream 5, so this is not yet a claim of a complete navigable pano
 GPS5 record counts were independently cross-checked with ExifTool. Individual GPS record times
 are uniformly assigned within their containing GPMF sample and therefore carry a one-record
 interval uncertainty; no capture-time mapping is claimed. General MAX support remains unverified
-beyond the fingerprinted samples, and playback/reconstruction is not implemented.
+beyond the fingerprinted samples, and playback is not implemented.

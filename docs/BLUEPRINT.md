@@ -403,12 +403,15 @@ next.
 
 ### M3 — Native video reconstruction laboratory
 
-**Status: In progress (2026-10-30).** `gb-frames` now directly enumerates and decodes either
-fingerprinted HEVC stream with exact integer PTS/color reporting and provides a tested CPU
-pseudo-EAC reconstruction reference. Real-sample inspection found a near-black packed face in
-the second stream, which the reference transform exposes as a missing BACK region. The cause,
-complete navigable panorama, and `gb-project` visual laboratory remain open; the M3 gate is not
-yet satisfied.
+**Status: Complete (2026-10-30).** `gb-frames` directly enumerates and decodes either fingerprinted
+HEVC stream with exact integer PTS/color reporting. The shared CPU reference implements the
+face-specific MAX layout (`LEFT / FRONT / RIGHT` and `DOWN / BACK / TOP`), EAC transform, face
+rotations, retained-overlap blending, and deterministic virtual-camera projections. `gb-project`
+provides the required Qt comparison of both raw tracks, the reconstructed panorama, and an
+interactive GPU view with a CPU reference/export path. Synthetic six-face fixtures verify the
+mapping and multiple projection modes; real frames at multiple timestamps verify decoding,
+orientation, and source diagnostics. The fingerprinted recording's `BACK` source face is itself
+near-black and remains visible as such; reconstruction does not manufacture missing pixels.
 
 - `gb-frames` extracts both original video streams; reconstructed panoramic stills from multiple timestamps.
 - `gb-project` visual comparison of raw, reconstructed and virtual-camera views.

@@ -61,6 +61,8 @@ struct HudOverlay {
   int font_scale_multiplier{1};
 };
 
+enum class ProjectionMode { equirectangular, rectilinear, fisheye, stereographic, little_planet };
+
 enum class ErrorKind { missing, io, unsupported, corrupt, invalid_argument };
 
 class MediaError final : public std::runtime_error {
@@ -80,6 +82,15 @@ private:
                                                    std::int32_t width,
                                                    std::int32_t height,
                                                    std::int32_t overlap = 64);
+[[nodiscard]] RgbFrame project_equirectangular(const RgbFrame &source,
+                                               ProjectionMode mode,
+                                               std::int32_t width,
+                                               std::int32_t height,
+                                               long double yaw_degrees = 0.0L,
+                                               long double pitch_degrees = 0.0L,
+                                               long double roll_degrees = 0.0L,
+                                               long double field_of_view_degrees = 90.0L);
+[[nodiscard]] std::string projection_mode_name(ProjectionMode mode);
 void draw_hud(RgbFrame &frame, const HudOverlay &overlay);
 void write_png(const std::filesystem::path &path, const RgbFrame &frame);
 void write_ppm(const std::filesystem::path &path, const RgbFrame &frame);

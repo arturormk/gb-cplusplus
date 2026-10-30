@@ -30,6 +30,11 @@ add_test(NAME gb_time_help COMMAND gb_time_tool --help)
 add_test(NAME gb_time_version COMMAND gb_time_tool --version)
 add_test(NAME gb_frames_help COMMAND gb_frames --help)
 add_test(NAME gb_frames_version COMMAND gb_frames --version)
+add_test(NAME gb_project_help COMMAND gb_project --help)
+add_test(NAME gb_project_version COMMAND gb_project --version)
+add_test(NAME gb_project_qml_smoke COMMAND gb_project --smoke-test)
+set_tests_properties(gb_project_qml_smoke PROPERTIES
+  ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
 set(GB_CLI_FIXTURE_DIR "${CMAKE_CURRENT_BINARY_DIR}/cli-fixtures")
 add_test(NAME gb_cli_fixture_setup
@@ -39,8 +44,8 @@ set_tests_properties(gb_cli_fixture_setup PROPERTIES FIXTURES_SETUP gb_cli_media
 find_program(GB_FFMPEG_EXECUTABLE ffmpeg REQUIRED)
 add_test(NAME gb_frames_fixture_setup
   COMMAND "${GB_FFMPEG_EXECUTABLE}" -v error
-    -f lavfi -i color=c=red:s=96x32:r=2:d=1
-    -f lavfi -i color=c=blue:s=96x32:r=2:d=1
+    -f lavfi -i color=c=red:s=104x32:r=2:d=1
+    -f lavfi -i color=c=blue:s=104x32:r=2:d=1
     -map 0:v -map 1:v -c:v mpeg4 -y "${GB_CLI_FIXTURE_DIR}/two-video.mp4")
 set_tests_properties(gb_frames_fixture_setup PROPERTIES
   FIXTURES_REQUIRED gb_cli_media
@@ -89,7 +94,7 @@ set_tests_properties(gb_frames_hud_requires_mode PROPERTIES
   WILL_FAIL TRUE)
 
 add_test(NAME gb_frames_reconstruct_json
-  COMMAND gb_frames --json --reconstruct --time 0.5 --width 64 --height 32 --overlap 1
+  COMMAND gb_frames --json --reconstruct --time 0.5 --width 64 --height 32 --overlap 8
     --force --output "${GB_CLI_FIXTURE_DIR}/panorama.ppm"
     "${GB_CLI_FIXTURE_DIR}/two-video.mp4")
 set_tests_properties(gb_frames_reconstruct_json PROPERTIES

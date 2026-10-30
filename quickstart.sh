@@ -59,6 +59,15 @@ if ! command -v pkg-config >/dev/null 2>&1 ||
    ! pkg-config --exists libavformat libavcodec libavutil libswscale; then
   missing_packages+=(libavformat-dev libavcodec-dev libavutil-dev libswscale-dev)
 fi
+if ! command -v pkg-config >/dev/null 2>&1 ||
+   ! pkg-config --exists Qt6Core Qt6Gui Qt6Qml Qt6Quick Qt6ShaderTools ||
+   [[ ! -f /usr/lib/x86_64-linux-gnu/qt6/qml/QtQuick/Controls/qmldir ]] ||
+   [[ ! -x /usr/lib/qt6/bin/qsb ]]; then
+  missing_packages+=(qt6-base-dev qt6-declarative-dev libqt6shadertools6-dev qt6-shader-baker
+    qml6-module-qtqml qml6-module-qtqml-models qml6-module-qtqml-workerscript
+    qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts
+    qml6-module-qtquick-nativestyle qml6-module-qtquick-templates qml6-module-qtquick-window)
+fi
 
 if ((${#missing_packages[@]} > 0)); then
   printf 'Missing required build packages: %s\n' "${missing_packages[*]}"
@@ -69,7 +78,7 @@ if ((${#missing_packages[@]} > 0)); then
   fi
   if ! command -v apt-get >/dev/null 2>&1; then
     printf 'Automatic installation currently supports apt-get-based systems only.\n' >&2
-    printf 'Install a C++20 compiler, CMake 3.22+, Ninja 1.10+, pkg-config, and FFmpeg development libraries, then rerun.\n' >&2
+    printf 'Install a C++20 compiler, CMake 3.22+, Ninja 1.10+, pkg-config, FFmpeg development libraries, and Qt 6 development/QML packages, then rerun.\n' >&2
     exit 1
   fi
 

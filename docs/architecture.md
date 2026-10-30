@@ -11,6 +11,7 @@ Architecture decisions are stored as individual records under [`adr/`](adr/):
 - [ADR-0003: Bounded native GPMF inspection](adr/0003-bounded-native-gpmf-inspection.md)
 - [ADR-0004: Explicit telemetry and clock provenance](adr/0004-explicit-telemetry-clock-provenance.md)
 - [ADR-0005: Native FFmpeg frame decoding with a CPU projection reference](adr/0005-native-ffmpeg-frame-decoding.md)
+- [ADR-0006: Face-specific MAX reconstruction and Qt projection laboratory](adr/0006-max-reconstruction-and-qt-projection-laboratory.md)
 
 ## Current boundaries
 
@@ -19,13 +20,15 @@ Architecture decisions are stored as individual records under [`adr/`](adr/):
 - `gb-telemetry` exports GPS records and `gb-time` diagnoses media/GPS clock relationships.
 - `gb-frames` lists and decodes selected video streams and runs a deterministic CPU projection
   reference; it does not provide playback.
+- `gb-project` is the Qt visual projection laboratory. It compares both packed source tracks, the
+  reconstructed panorama, and an interactive GPU virtual camera against a CPU reference.
 - `gb_container` performs bounded, read-only ISO BMFF structural inspection.
 - `gb_image` performs bounded, read-only JPEG marker and codestream inspection.
 - `gb_metadata` performs bounded, loss-aware GPMF KLV parsing and normalization.
 - `gb_telemetry` assigns recorded GPS fields to checked presentation ticks, classifies fix
   validity, retains timing uncertainty, and exposes GPSU anchors without inventing positions.
-- `gb_media` owns FFmpeg demux/decode, RGB conversion, still-image writing, and the shared MAX
-  pseudo-EAC reference transform.
+- `gb_media` owns FFmpeg demux/decode, RGB conversion, still-image writing, the shared MAX
+  pseudo-EAC reference transform, and deterministic virtual-camera projections.
 - Existing ISO BMFF JSON uses `gb.inspect/v1`; JPEG uses `gb.inspect.jpeg/v1`.
 - Unknown structures remain visible where possible and are not assigned guessed semantics.
 
@@ -40,11 +43,10 @@ Architecture decisions are stored as individual records under [`adr/`](adr/):
   yet interpreted by the project libraries.
 - GPMF complex and compressed values are raw-preserved but not interpreted. GPS5 is mapped to
   GPSU UTC anchors, but sensor capture time, TimeWarp cadence, GPS9, and edit lists remain open.
-- The project license and Qt dependency choice remain unresolved. FFmpeg is now required for M3;
-  enabled codec/build license obligations still require distribution review.
-- The fingerprinted `.360` decodes both streams at matching PTS, but one packed face is near-black
-  in the second stream. The M3 navigable-panorama gate remains open until mode/layout evidence
-  explains or corrects it.
+- The project license remains unresolved. FFmpeg and Qt 6 are now required; enabled codec/build
+  license obligations and application distribution still require review.
+- The fingerprinted `.360` decodes both streams at matching PTS, but its source `BACK` face is
+  near-black. Reconstruction preserves that evidence rather than fabricating image content.
 
 ## ADR convention
 

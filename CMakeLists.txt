@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(gb-cplusplus VERSION 0.5.0 LANGUAGES CXX)
+project(gb-cplusplus VERSION 0.6.0 LANGUAGES CXX)
 
 include(CTest)
 
@@ -31,6 +31,7 @@ add_subdirectory(tools/gb-metadata)
 add_subdirectory(tools/gb-telemetry)
 add_subdirectory(tools/gb-time)
 add_subdirectory(tools/gb-frames)
+add_subdirectory(tools/gb-project)
 
 if(BUILD_TESTING)
   add_subdirectory(tests)

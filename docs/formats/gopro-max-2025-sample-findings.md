@@ -257,12 +257,17 @@ At 5 s and 120 s, both tracks select the exact requested integer PTS and report 
 frame durations on their 1/90000 time bases. Separate PNGs, raw RGB24, and schema-versioned color
 and timing reports require no intermediate conversion.
 
-The tested CPU pseudo-EAC transform follows the documented 4096×1344 strip geometry and 64-pixel
-overlap. Visual checks at both timestamps reveal a missing BACK region because the center third of
-decoded stream 5 is already near-black; its outer thirds contain data. Swapping stream order does
-not restore the region. This observation is confirmed for this file, but its cause is not: capture
-mode, calibration/layout metadata, and decoder behavior remain candidates. The implementation
-does not fill the region, and no complete-panorama support claim is made.
+The corrected CPU transform follows the face-specific 4096×1344 geometry: stream 0 supplies
+`LEFT / FRONT / RIGHT`, stream 5 supplies `DOWN / BACK / TOP`, and the additional 64 pixels are
+retained overlap distributed through wrapped side-face duplicates. It applies the required face
+rotations and equal-angular cube mapping rather than treating the tracks as generic cube-atlas
+rows. Six-color synthetic fixtures verify that all faces reach their expected panorama regions,
+and visual checks at 5 s and 120 s show an upright, continuously wrapped result.
+
+The center `BACK` face of decoded stream 5 is already near-black in this particular recording;
+its outer faces contain image data. The source diagnostic and raw extraction establish that the
+black region precedes projection. The implementation preserves and reports it instead of filling
+it, so it is an evidence-file content limitation rather than an unimplemented face mapping.
 
 Reproduction without publishing images:
 
@@ -275,6 +280,7 @@ build/dev/tools/gb-frames/gb-frames --json --stream 5 --time 5 \
 build/dev/tools/gb-frames/gb-frames --json --reconstruct --stream 0 --stream 5 \
   --time 120 --width 2048 --height 1024 --output /tmp/panorama.png \
   __stuff/GS040047.360
+build/dev/tools/gb-project/gb-project --time 5 --width 2048 __stuff/GS040047.360
 ```
 
 ## M1 native-tool validation

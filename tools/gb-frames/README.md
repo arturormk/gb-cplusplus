@@ -54,20 +54,24 @@ gauges rendered.
 ## Reconstruction status
 
 `--reconstruct` is a deterministic CPU reference for the original MAX 4096×1344 pseudo-EAC
-packing. It maps the two strips to an equirectangular image and linearly blends the configured
-overlap (64 pixels by default). It is intentionally not camera calibration, optical-flow seam
+packing. Track 1 supplies `LEFT / FRONT / RIGHT`; track 2 supplies `DOWN / BACK / TOP`. Each face
+is 1344 pixels wide, with 64 retained pixels distributed through the two side-face regions. The
+transform applies the MAX equal-angular cube mapping, correct face rotations, and linear blending
+of wrapped side-face duplicates. It is intentionally not camera calibration, optical-flow seam
 stitching, stabilization, or exposure matching.
 
 On the fingerprinted private sample, both HEVC streams decode at identical requested PTS values.
-The reference transform also exposes a near-black center face in stream 5, producing a missing
-BACK region. The tool does not hide or synthesize that region. Until its cause and the required
-mode/calibration interpretation are established, the M3 navigable-panorama gate remains open.
+The reference transform exposes a near-black `BACK` face in stream 5 of the fingerprinted sample.
+A direct source-region measurement confirms that those pixels are black before reconstruction;
+the tool does not hide or synthesize them. This is a limitation of that evidence recording, not a
+gap in the six-face mapping.
 
 ## Requirements and limitations
 
 Build/runtime decoding uses FFmpeg libraries (libavformat, libavcodec, libavutil, and libswscale).
 The decoder available in the installed FFmpeg build determines codec support. Only software
 decoding and RGB24 output are implemented; hardware acceleration, edit-list normalization,
-fragmented input validation, batch extraction, EAC output, and virtual-camera projection are not.
+fragmented input validation, batch extraction, and EAC output are not. Virtual-camera projection
+is available in `gb-project`, not this extraction CLI.
 The CPU panorama path favors reproducibility over interactive speed and accepts bounded output
 dimensions only.

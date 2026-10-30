@@ -1,6 +1,6 @@
 # Dependencies
 
-## Required now (M0/M1/M2 and the `gb-frames` M3 slice)
+## Required now (M0 through M3)
 
 The supported baseline is Ubuntu 22.04 or newer with:
 
@@ -10,6 +10,8 @@ The supported baseline is Ubuntu 22.04 or newer with:
 - pkg-config; and
 - FFmpeg 4.4+ development/runtime packages providing libavformat 58+, libavcodec 58+, libavutil
   56+, and libswscale 5+; and
+- Qt 6.2+ development packages providing Core, Gui, QML, Quick, Widgets, and Shader Tools, plus
+  the Qt Quick Controls/QML runtime modules used by `gb-project`; and
 - the C++ standard library supplied with the compiler.
 
 Exact Ubuntu packages:
@@ -17,11 +19,15 @@ Exact Ubuntu packages:
 ```sh
 sudo apt update
 sudo apt install build-essential cmake ninja-build pkg-config ffmpeg \
-  libavformat-dev libavcodec-dev libavutil-dev libswscale-dev
+  libavformat-dev libavcodec-dev libavutil-dev libswscale-dev \
+  qt6-base-dev qt6-declarative-dev libqt6shadertools6-dev qt6-shader-baker \
+  qml6-module-qtqml qml6-module-qtqml-models qml6-module-qtqml-workerscript \
+  qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts \
+  qml6-module-qtquick-nativestyle qml6-module-qtquick-templates qml6-module-qtquick-window
 ```
 
-The build has no downloaded dependencies. The M0-M2 tools retain no non-system runtime
-dependency; `gb-frames` dynamically uses the packaged FFmpeg libraries.
+The build has no downloaded dependencies. The terminal tools dynamically use the packaged FFmpeg
+libraries; `gb-project` additionally uses the packaged Qt 6 libraries and QML modules.
 The versions above match the initial verified development environment; CI should continuously
 exercise the oldest supported baseline.
 
@@ -32,13 +38,14 @@ infrastructure only and is not a build or runtime dependency of `gb-inspect`.
 
 ## Explicitly not required yet
 
-Qt, ExifTool, the GoPro GPMF parser, and map/rendering libraries are not runtime dependencies.
-FFmpeg is required by the current all-target build for `gb-frames`, but remains unnecessary when
-building the earlier library/tool targets in isolation.
+ExifTool, the GoPro GPMF parser, and map/rendering libraries are not runtime dependencies. FFmpeg
+and Qt are required by the current all-target build, but remain unnecessary when building the
+earlier library/tool targets in isolation.
 
 The project license remains under review as directed by the blueprint. No third-party source code
-is vendored. `gb_media` links the system FFmpeg shared libraries; binary redistribution must
-review the selected FFmpeg build configuration and LGPL/GPL obligations.
+is vendored. `gb_media` links the system FFmpeg shared libraries and `gb-project` links the system
+Qt 6 libraries; binary redistribution must review the selected builds and their applicable
+LGPL/GPL or commercial-license obligations.
 
 ## FFmpeg review
 
