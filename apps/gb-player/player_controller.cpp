@@ -157,6 +157,10 @@ PlayerController::PlayerController(PlayerOptions options, QObject *parent)
           [this] { setStatus(QStringLiteral("End of media")); });
   diagnostics_timer_.setInterval(1000);
   connect(&diagnostics_timer_, &QTimer::timeout, this, &PlayerController::updateDiagnostics);
+  if (options_.map_tiles.user_agent.isEmpty()) {
+    options_.map_tiles.user_agent = QStringLiteral("gb-player/%1").arg(QStringLiteral(GB_PLAYER_VERSION));
+  }
+  tiles_ = new gb::tiles::TileFetcher(options_.map_provider, options_.map_tiles, this);
 }
 
 PlayerController::~PlayerController() {
@@ -165,6 +169,12 @@ PlayerController::~PlayerController() {
 }
 
 QString PlayerController::displayName() const { return QStringLiteral(GB_PLAYER_DISPLAY_NAME); }
+const gb::telemetry::Extraction *PlayerController::telemetry() const {
+  return metadata_ && metadata_->telemetry ? &*metadata_->telemetry : nullptr;
+}
+QString PlayerController::mapAttribution() const { return QString::fromStdString(tiles_->provider().attribution); }
+QString PlayerController::mapAttributionUrl() const { return QString::fromStdString(tiles_->provider().attribution_url); }
+QString PlayerController::mapProviderName() const { return QString::fromStdString(tiles_->provider().name); }
 QObject *PlayerController::engine() { return &engine_; }
 PlaybackEngine &PlayerController::playbackEngine() { return engine_; }
 QString PlayerController::inputName() const { return QFileInfo(input_path_).fileName(); }
@@ -256,6 +266,8 @@ bool PlayerController::open(const QString &path, const double start_seconds) {
   gpmf_rows_ = {};
   gpmf_title_ = QStringLiteral("Loading metadata…");
   gpmf_sample_.reset();
+  map_route_.clear();
+  setMapPosition(QStringLiteral("loading"), QStringLiteral("Loading GPS telemetry…"), std::nullopt, std::nullopt);
   buildFileRows();
   emit fileChanged();
   emit audioChanged();
@@ -264,6 +276,7 @@ bool PlayerController::open(const QString &path, const double start_seconds) {
   emit metadataChanged();
   emit gpmfChanged();
   emit positionChanged();
+  emit mapRouteChanged();
   setStatus(QString::fromStdString(source_->layout.description));
   previous_statistics_ = engine_.statistics();
   previous_usage_ = sample_process_usage();
@@ -394,8 +407,17 @@ void PlayerController::applyMetadata(const std::uint64_t generation, std::shared
   } else {
     telemetry_state_ = QStringLiteral("none");
   }
+  map_route_.clear();
+  if (metadata_->telemetry.has_value()) {
+    for (const auto &point : metadata_->telemetry->gps) {
+      map_route_.push_back({{static_cast<double>(point.latitude), static_cast<double>(point.longitude)},
+                            point.media_time_ticks,
+                            point.validity == gb::telemetry::Validity::valid});
+    }
+  }
   emit metadataChanged();
   emit timelineChanged();
+  emit mapRouteChanged();
   updateTelemetry();
   updateGpmfSample();
   emit metadataReady();
@@ -418,6 +440,9 @@ void PlayerController::updateTelemetry() {
     rows.push_back(row(QStringLiteral("GPS"), QStringLiteral("loading…"), QStringLiteral("unavailable")));
     telemetry_rows_ = rows;
     emit telemetryChanged();
+    if (engine_.isOpen()) {
+      setMapPosition(QStringLiteral("loading"), QStringLiteral("Loading GPS telemetry…"), std::nullopt, std::nullopt);
+    }
     return;
   }
   const auto *telemetry = metadata_ && metadata_->telemetry ? &*metadata_->telemetry : nullptr;
@@ -428,6 +453,8 @@ void PlayerController::updateTelemetry() {
     rows.push_back(row(QStringLiteral("GPS"), unavailable() + QStringLiteral(" — ") + reason, QStringLiteral("unavailable")));
     telemetry_rows_ = rows;
     emit telemetryChanged();
+    setMapPosition(QStringLiteral("none"), QStringLiteral("No GPS in this recording (%1)").arg(reason), std::nullopt,
+                   std::nullopt);
     return;
   }
   const auto metadata_ticks = gb::media::rescale_ticks(position_ticks, video_base, *telemetry_base);
@@ -477,6 +504,75 @@ void PlayerController::updateTelemetry() {
   rows.push_back(row(QStringLiteral("Speed 3D"), speedText(point->speed_3d), state));
   telemetry_rows_ = rows;
   emit telemetryChanged();
+
+  const auto record = static_cast<std::size_t>(point - telemetry->gps.data());
+  const auto any_valid = std::any_of(map_route_.begin(), map_route_.end(), [](const auto &item) { return item.usable; });
+  if (!any_valid) {
+    setMapPosition(QStringLiteral("none"), QStringLiteral("The recording has GPS records but no valid fix"), std::nullopt,
+                   std::nullopt);
+  } else if (point->validity != gb::telemetry::Validity::valid) {
+    setMapPosition(QStringLiteral("invalid"),
+                   QStringLiteral("No valid GPS fix at this time (nearest record: %1)")
+                       .arg(QString::fromStdString(gb::telemetry::validity_name(point->validity))),
+                   record, std::nullopt);
+  } else if (gap != nullptr) {
+    setMapPosition(QStringLiteral("gap"),
+                   QStringLiteral("GPS gap (%1). The ring marks the nearest recorded fix, %2 ms away.")
+                       .arg(QString::fromStdString(gap->reason))
+                       .arg(offset_ms, 0, 'f', 0),
+                   record, std::nullopt);
+  } else {
+    setMapPosition(QStringLiteral("valid"), QString(), record,
+                   azimuth.has_value() ? std::optional<double>(static_cast<double>(*azimuth)) : std::nullopt);
+  }
+}
+
+void PlayerController::setMapPosition(const QString &state, const QString &message,
+                                      const std::optional<std::size_t> record, const std::optional<double> course) {
+  if (state == map_state_ && message == map_message_ && record == map_record_ && course == map_course_) return;
+  map_state_ = state;
+  map_message_ = message;
+  map_record_ = record;
+  map_course_ = course;
+  emit mapPositionChanged();
+}
+
+QVariantList PlayerController::routeCandidates(const double latitude, const double longitude,
+                                               const double tolerance_metres) const {
+  QVariantList result;
+  const auto *telemetry = metadata_ && metadata_->telemetry ? &*metadata_->telemetry : nullptr;
+  const auto telemetry_base = telemetry != nullptr ? mediaRational(telemetry->time_base) : std::nullopt;
+  if (!engine_.isOpen() || !telemetry_base.has_value()) return result;
+  const auto candidates = gb::geo::route_candidates(map_route_, {latitude, longitude}, tolerance_metres);
+  const auto now = engine_.positionTicks();
+  const auto last = std::max<std::int64_t>(0, engine_.durationTicks() - 1);
+  std::optional<std::size_t> nearest;
+  std::int64_t nearest_distance = std::numeric_limits<std::int64_t>::max();
+  std::vector<std::int64_t> ticks;
+  for (std::size_t index = 0; index < candidates.size(); ++index) {
+    const auto video = std::clamp<std::int64_t>(
+        gb::media::rescale_ticks(candidates[index].ticks, *telemetry_base, engine_.timeBase()), 0, last);
+    ticks.push_back(video);
+    const auto distance = video >= now ? video - now : now - video;
+    if (distance < nearest_distance) {
+      nearest_distance = distance;
+      nearest = index;
+    }
+  }
+  for (std::size_t index = 0; index < candidates.size(); ++index) {
+    result.push_back(QVariantMap{{QStringLiteral("ticks"), static_cast<double>(ticks[index])},
+                                 {QStringLiteral("timeText"), formatTicks(ticks[index])},
+                                 {QStringLiteral("distanceMetres"), candidates[index].distance_metres},
+                                 {QStringLiteral("record"), static_cast<qulonglong>(candidates[index].index)},
+                                 {QStringLiteral("nearestToNow"), nearest == index}});
+  }
+  return result;
+}
+
+void PlayerController::seekTicks(const double ticks) {
+  if (!engine_.isOpen() || !std::isfinite(ticks)) return;
+  const auto last = std::max<std::int64_t>(0, engine_.durationTicks() - 1);
+  engine_.seek(std::clamp<std::int64_t>(std::llround(ticks), 0, last));
 }
 
 void PlayerController::updateGpmfSample() {
@@ -605,6 +701,25 @@ void PlayerController::updateDiagnostics() {
                        engine_.audioError().isEmpty() ? audio_description_ : engine_.audioError(),
                        QStringLiteral("unavailable")));
   }
+  const auto tiles = tiles_->statistics();
+  rows.push_back(row(QStringLiteral("Map tiles"),
+                     QStringLiteral("%1 from cache (%2 revalidated), %3 requests: %4 downloaded (%5 KiB), "
+                                    "%6 not modified, %7 failed; %8 in flight, %9 queued")
+                         .arg(tiles.cache_fresh + tiles.cache_stale)
+                         .arg(tiles.cache_stale)
+                         .arg(tiles.network_requests)
+                         .arg(tiles.downloaded)
+                         .arg(tiles.downloaded_bytes / 1024U)
+                         .arg(tiles.not_modified)
+                         .arg(tiles.failures)
+                         .arg(tiles.in_flight)
+                         .arg(tiles.queued),
+                     tiles.blocked || tiles.failures > 0U ? QStringLiteral("invalid") : QStringLiteral("ok")));
+  rows.push_back(row(QStringLiteral("Map source"),
+                     QStringLiteral("%1; %2; cache %3")
+                         .arg(mapProviderName())
+                         .arg(tiles_->networkEnabled() ? QStringLiteral("network on") : QStringLiteral("network off"))
+                         .arg(tiles_->diskCacheEnabled() ? tiles_->cacheDirectory() : QStringLiteral("memory only"))));
   rows.push_back(row(QStringLiteral("Decoder threads"),
                      options_.decoder_threads == 0 ? QStringLiteral("automatic, per stream")
                                                    : QStringLiteral("%1 per stream").arg(options_.decoder_threads)));

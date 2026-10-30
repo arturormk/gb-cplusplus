@@ -14,6 +14,8 @@ recordings read-only and plays them without conversion:
   It is silent while the timeline is dragged, while a seek is decoding, for 250 ms after each
   seek, and while paused or stepping. Holding an arrow key or scrubbing therefore never produces
   sound fragments. See ADR-0008.
+- **Map**: an OpenStreetMap map of the recorded GPS route with the current position, kept in
+  step with the displayed frame. Click the route to seek there. See ADR-0009.
 
 ## Use
 
@@ -23,6 +25,8 @@ gb-player --time 120 --view panorama recording.360
 gb-player --play --decoder-threads 4 recording.360
 gb-player --benchmark 60 --seeks 20 --time 60 recording.360 > benchmark.json
 gb-player --screenshot view.png --time 5 recording.360
+gb-player --map-no-network recording.360        # cached map tiles only
+gb-player --map-cache /tmp/tiles recording.360  # use another tile cache
 ```
 
 | Input | Action |
@@ -35,6 +39,9 @@ gb-player --screenshot view.png --time 5 recording.360
 | Timeline press and drag | scrub: frames follow the pointer, clock held, audio silent until release + 250 ms |
 | M | mute / unmute (the audio clock keeps running) |
 | R / F / Ctrl+O | reset view / full screen / open file |
+| Map: drag, wheel, `+` / `−` | pan (stops following), zoom |
+| Map: click on the route | seek there; if the route passes several times, choose the time |
+| Map: `⤢` / `◎` | fit the whole route / follow the current position |
 
 Seeking is accurate. The displayed frame is the latest frame whose presentation time is not after
 the requested time. Frame stepping and the timeline both use the first stream's integer ticks.
@@ -59,17 +66,60 @@ the requested time. Frame stepping and the timeline both use the first stream's 
 
 The timeline marks `gpmd` sample positions, GPS coverage, and reported telemetry gaps.
 
+## Map
+
+The map pane sits above the panels; drag the divider to resize it. It shows:
+
+- **Route**: one point per recorded `GPS5` record. Only valid fixes are drawn, one line per run
+  of valid fixes, so an invalid stretch appears as a break. The part already travelled is
+  orange; the rest is blue. A green dot marks the start and a red square the end.
+- **Marker**: the same nearest record the Telemetry panel shows. It is never interpolated. The
+  arrow is the direction of travel, not the camera heading. If the nearest record is not a valid
+  fix, no marker is drawn and the map says so. Inside a reported GPS gap, a hollow dashed ring
+  marks the nearest recorded fix, with its time offset. Recordings without GPS show a message and
+  make no tile requests.
+- **Click-to-seek**: a click within 10 pixels (at least 5 m) of the route seeks to the nearest
+  recorded point. When the route passed there more than once, each pass is listed by time, with
+  the one nearest the current time marked.
+- **Follow mode** (on by default) recentres the map when the marker leaves the middle of the
+  view. Dragging turns it off; `◎` turns it back on.
+
+Tiles come from the OpenStreetMap standard tile layer, under its
+[tile usage policy](https://operations.osmfoundation.org/policies/tiles/):
+
+- the User-Agent names the application;
+- at most two requests run at once;
+- only tiles covering the visible area are requested, with no prefetching;
+- `Cache-Control`, `Expires` and `ETag` are honoured, with a 7-day fallback, and expired tiles are
+  revalidated with conditional requests; and
+- the attribution "© OpenStreetMap contributors" stays visible.
+
+If the server refuses service (HTTP 403, 418 or 429), the player stops requesting tiles for the
+session and says so. Requests reveal the viewed area to the tile server, but never the recording
+or its track. `--map-no-network` shows only cached tiles.
+
+Tiles are cached at `$XDG_CACHE_HOME/gb/tiles/<provider>/<z>/<x>/<y>.png` (default
+`~/.cache/gb/tiles`), each with a `.meta` file holding its expiry and validators. The cache has no
+size limit and can be deleted at any time. Set the `GB_MAP_CONTACT` CMake cache variable to add a
+contact URL or e-mail to the User-Agent. Providers are descriptions (`gb::geo::TileProvider`);
+`--map-provider` selects one, and `osm` is currently the only one built in.
+
 ## Benchmark report
 
 `--benchmark SECONDS` waits for the first drawn frame and loaded metadata. It then plays from
 `--time` for the requested wall-clock duration, pauses, and performs `--seeks` random accurate
 seeks (deterministic with `--seed`). Finally it prints a `gb.player.benchmark/v1` JSON report and
-exits non-zero if any seek shows a frame that does not cover its target. Between playback and the
+exits non-zero if any seek shows a frame that does not cover its target, or if the map is not
+aligned. Between playback and the
 seeks it checks audio gating: audio must be heard while playing and must resume afterwards. No
 audible frame is allowed during a timeline scrub, during a burst of seeks while playing, or while
 paused; any violation also makes the run fail. Seek latency runs from
 the request to the first drawn frame. CPU is process CPU time over wall time. GPU time measures
-texture upload plus drawing on the GPU. The report contains no telemetry values. Results describe
+texture upload plus drawing on the GPU. The `map` section reports how the drawn map marker
+compares with the GPS record nearest to the displayed PTS. The record is sampled about every
+100 ms while playing, where up to two frames of lag is allowed. After the pause and after every
+seek it must match exactly. The section also gives tile cache and request counts. The report
+contains no telemetry values. Results describe
 the machine they were measured on; see `research/findings/` for recorded runs.
 
 ## Requirements and limitations
@@ -78,7 +128,9 @@ the machine they were measured on; see `research/findings/` for recorded runs.
   software backend, decoding, presentation and telemetry still work, but no image is shown.
 - Audio: the first mono or stereo stream plays through SDL2 (`--no-audio` disables it). The MAX
   four-channel spatial track is not rendered. Hardware decoding (VA-API), edit lists,
-  multi-chapter grouping, photos, maps, and export are not implemented.
+  multi-chapter grouping, photos, and export are not implemented.
+- The map is raster only, and tiles can look soft on HiDPI screens. Routes crossing the
+  antimeridian are not drawn across it. The tile cache is never pruned automatically.
 - MAX reconstruction requires the verified two-stream geometry. The near-black `BACK` face of the
   fingerprinted sample is shown as recorded.
 - Fisheye-family views keep the shared reference convention of normalizing each axis separately,

@@ -1,6 +1,6 @@
 # Dependencies
 
-## Required now (M0 through M4)
+## Required now (M0 through M5)
 
 The supported baseline is Ubuntu 22.04 or newer with:
 
@@ -11,7 +11,8 @@ The supported baseline is Ubuntu 22.04 or newer with:
 - FFmpeg 4.4+ development/runtime packages providing libavformat 58+, libavcodec 58+, libavutil
   56+, and libswscale 5+; and
 - SDL 2.0.10+ development package (`libsdl2-dev`), used by `gb-player` for audio output only; and
-- Qt 6.2+ development packages providing Core, Gui, QML, Quick, Widgets, and Shader Tools, plus
+- Qt 6.2+ development packages providing Core, Gui, Network, QML, Quick, Widgets, and Shader
+  Tools, plus
   the Qt Quick Controls/QML runtime modules used by `gb-project`; and
 - the C++ standard library supplied with the compiler.
 
@@ -33,6 +34,13 @@ The M4 video baseline added no packages. M4 audio adds SDL2: `gb-player` uses on
 subsystem, with signal handlers disabled. SDL2 is zlib-licensed. `gb-player` issues OpenGL calls through `QOpenGLExtraFunctions` from Qt GUI
 and does not need the Qt OpenGL module. At runtime it needs an OpenGL 3.3 or OpenGL ES 3.0 driver
 to display video; the Mesa drivers in Ubuntu 22.04 provide this.
+M5 adds no packages. The map uses Qt Network, which is part of `qt6-base-dev`. HTTPS uses Qt's
+OpenSSL TLS backend plugin from `libqt6network6`, which loads the system `libssl3` at runtime.
+At runtime the map talks to the OpenStreetMap tile server under its
+[tile usage policy](https://operations.osmfoundation.org/policies/tiles/), reviewed 2026-10-30;
+see ADR-0009. Map tiles are © OpenStreetMap contributors and are shown with that attribution.
+`--map-no-network` removes the network dependency. MapLibre Native Qt and Qt Location were
+evaluated but are unavailable for Qt 6.2 on Ubuntu 22.04.
 The versions above match the initial verified development environment; CI should continuously
 exercise the oldest supported baseline.
 
@@ -43,7 +51,7 @@ infrastructure only and is not a build or runtime dependency of `gb-inspect`.
 
 ## Explicitly not required yet
 
-ExifTool, the GoPro GPMF parser, and map/rendering libraries are not runtime dependencies. FFmpeg
+ExifTool, the GoPro GPMF parser, and map rendering libraries (MapLibre) are not runtime dependencies. FFmpeg
 and Qt are required by the current all-target build, but remain unnecessary when building the
 earlier library/tool targets in isolation.
 

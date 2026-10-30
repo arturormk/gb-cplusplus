@@ -6,12 +6,13 @@ timestamped GPS telemetry, and diagnose media/GPS clock relationships. GoBro is 
 public-facing name and is not affiliated with, endorsed by, or sponsored by GoPro.
 
 The M0 baseline, M1 container/metadata laboratory, M2 telemetry/timing laboratory, and M3 native
-video reconstruction/projection laboratory are complete, and the M4 player baseline has met its
-gate. `gb-frames` provides exact native frame extraction and deterministic reconstruction, and
+video reconstruction/projection laboratory are complete, and the M4 player baseline and M5 map
+have met their gates. `gb-frames` provides exact native frame extraction and deterministic reconstruction, and
 `gb-project` provides the Qt visual comparison and interactive virtual camera. `gb-player` plays
 original MAX `.360` recordings directly, with GPU spherical viewing, accurate seeking, synchronized
 telemetry and metadata panels, synchronized audio that plays only during stable playback (never
-while scrubbing or seeking), and performance diagnostics.
+while scrubbing or seeking), a live OpenStreetMap route map with click-to-seek, and performance
+diagnostics.
 
 ## Build and test
 
@@ -36,7 +37,7 @@ cmake --build --preset dev
 ctest --preset dev
 ```
 
-No camera SDK, network access, or private media is required. FFmpeg and Qt 6 are required for the
+No camera SDK, network access, or private media is required to build and test. FFmpeg and Qt 6 are required for the
 M3 tools; see [`docs/dependencies.md`](docs/dependencies.md) for exact versions and packages.
 
 ## Use
@@ -58,6 +59,7 @@ build/dev/tools/gb-frames/gb-frames --reconstruct --stream 0 --stream 5 \
   --time 5 --output panorama.png recording.360
 build/dev/tools/gb-project/gb-project --time 5 recording.360
 build/dev/apps/gb-player/gb-player recording.360
+build/dev/apps/gb-player/gb-player --map-no-network recording.360
 build/dev/apps/gb-player/gb-player --benchmark 60 --seeks 20 recording.360 > benchmark.json
 ```
 
@@ -78,6 +80,11 @@ source color metadata. The face-specific MAX EAC reconstruction and virtual-came
 shared by `gb-frames`, `gb-project`, and `gb-player`; see their individual READMEs for controls and
 limitations. Player benchmark reports use `gb.player.benchmark/v1`; see
 [`apps/gb-player/README.md`](apps/gb-player/README.md).
+
+When a recording has GPS, `gb-player` requests OpenStreetMap tiles for the visible map area.
+This reveals the viewed area to the tile server, but never the recording or its track. Tiles are
+cached in `~/.cache/gb/tiles` (or `$XDG_CACHE_HOME/gb/tiles`) and can be deleted at any time. Use
+`--map-no-network` to show cached tiles only. Map data © OpenStreetMap contributors.
 
 ## Scope and project guidance
 

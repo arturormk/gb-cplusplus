@@ -1,4 +1,5 @@
 #include "benchmark.hpp"
+#include "map_view.hpp"
 #include "player_controller.hpp"
 #include "video_view.hpp"
 
@@ -17,6 +18,7 @@
 #include <clocale>
 #include <functional>
 #include <cmath>
+#include <filesystem>
 #include <iostream>
 #include <optional>
 #include <stdexcept>
@@ -36,6 +38,9 @@ struct Options {
   std::uint32_t seed{1};
   QString screenshot;
   bool smoke_test{};
+  std::string map_provider{"osm"};
+  bool map_network{true};
+  std::optional<std::filesystem::path> map_cache;
 };
 
 constexpr std::array<std::string_view, 8> kViewNames{
@@ -55,6 +60,10 @@ void help() {
          "  --decoder-threads N   decoder threads per stream, 0 = automatic (default 0)\n"
          "  --queue N             decoded frame sets buffered ahead, 1..32 (default 4)\n"
          "  --no-audio            do not open an audio device\n"
+         "  --map-provider ID     map tile provider (default osm: OpenStreetMap)\n"
+         "  --map-no-network      never request map tiles; show cached tiles only\n"
+         "  --map-cache DIR       map tile cache directory\n"
+         "                        (default $XDG_CACHE_HOME/gb/tiles or ~/.cache/gb/tiles)\n"
          "  --benchmark SECONDS   play for SECONDS, check that scrubbing and seeking stay\n"
          "                        silent, run random seeks, print a gb.player.benchmark/v1\n"
          "                        JSON report, and exit\n"
@@ -66,7 +75,11 @@ void help() {
          "Keys: Space play/pause, Left/Right seek 5 s, ,/. step one frame, M mute,\n"
          "F full screen, R reset view, 1-8 select view mode.\n\n"
          "Audio plays only during stable playback. It is silent while paused, while the\n"
-         "timeline is dragged, while a seek is decoding, and for 250 ms after each seek.\n";
+         "timeline is dragged, while a seek is decoding, and for 250 ms after each seek.\n\n"
+         "Map: when a recording has GPS, the map requests the tiles covering the visible\n"
+         "area from the provider. This tells the tile server which area you are viewing,\n"
+         "but never sends the recording or its GPS track. Tiles are cached on disk and\n"
+         "reused according to the server's caching headers. Click the route to seek.\n";
 }
 
 double parseNumber(const std::string_view text, const char *what) {
@@ -113,6 +126,17 @@ Options parse(const int argc, char **argv) {
       options.player.queue_capacity = static_cast<std::size_t>(parseInteger(value(), "queue size", 1, 32));
     } else if (argument == "--no-audio") {
       options.player.audio = false;
+    } else if (argument == "--map-provider") {
+      options.map_provider = std::string(value());
+      if (gb::geo::find_provider(options.map_provider) == nullptr) {
+        throw std::runtime_error("unknown map provider: " + options.map_provider);
+      }
+    } else if (argument == "--map-no-network") {
+      options.map_network = false;
+    } else if (argument == "--map-cache") {
+      const auto directory = value();
+      if (directory.empty()) throw std::runtime_error("--map-cache requires a directory");
+      options.map_cache = std::filesystem::absolute(std::filesystem::path(std::string(directory)));
     } else if (argument == "--benchmark") {
       BenchmarkOptions benchmark;
       benchmark.play_seconds = parseNumber(value(), "benchmark duration");
@@ -143,6 +167,19 @@ Options parse(const int argc, char **argv) {
   }
   if ((options.benchmark.has_value() || !options.screenshot.isEmpty()) && options.path.isEmpty()) {
     throw std::runtime_error("--benchmark and --screenshot require an input file");
+  }
+  options.player.map_provider = *gb::geo::find_provider(options.map_provider);
+  options.player.map_tiles.network = options.map_network;
+  options.player.map_tiles.cache_root = options.map_cache.has_value() ? options.map_cache : gb::geo::default_tile_cache_root();
+  // Tile servers require a stable User-Agent naming the application (OSM tile usage policy).
+  std::string agent = "gb-player/" GB_PLAYER_VERSION " (gb-cplusplus";
+  if (const std::string contact = GB_MAP_CONTACT; !contact.empty()) agent += "; " + contact;
+  agent += ")";
+  options.player.map_tiles.user_agent = QString::fromStdString(agent);
+  if (options.smoke_test) {
+    // Tests never touch the network or the user's cache.
+    options.player.map_tiles.network = false;
+    options.player.map_tiles.cache_root.reset();
   }
   return options;
 }
@@ -201,6 +238,7 @@ int main(int argc, char **argv) {
   QCoreApplication::setApplicationVersion(QStringLiteral(GB_PLAYER_VERSION));
   QCoreApplication::setOrganizationName(QStringLiteral("gb"));
   qmlRegisterType<VideoView>("Gb.Player", 1, 0, "VideoView");
+  qmlRegisterType<MapView>("Gb.Player", 1, 0, "MapView");
 
   PlayerController controller(options.player);
   QQmlApplicationEngine engine;
@@ -255,7 +293,8 @@ int main(int argc, char **argv) {
         std::cout << "gb-player smoke: layout=" << (controller.sourceLayout() == 1 ? "max_dual_eac" : "flat")
                   << " streams=" << current.frames->pictures.size() << " pts=" << current.frames->pts
                   << " telemetry=" << controller.telemetryState().toStdString()
-                  << " audio=" << (controller.hasAudio() ? "open" : "none") << '\n';
+                  << " audio=" << (controller.hasAudio() ? "open" : "none")
+                  << " map=" << controller.mapState().toStdString() << '\n';
         application.quit();
       });
     }

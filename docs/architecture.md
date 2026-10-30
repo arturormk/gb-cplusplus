@@ -13,6 +13,8 @@ Architecture decisions are stored as individual records under [`adr/`](adr/):
 - [ADR-0005: Native FFmpeg frame decoding with a CPU projection reference](adr/0005-native-ffmpeg-frame-decoding.md)
 - [ADR-0006: Face-specific MAX reconstruction and Qt projection laboratory](adr/0006-max-reconstruction-and-qt-projection-laboratory.md)
 - [ADR-0007: Native player playback architecture](adr/0007-native-player-playback-architecture.md)
+- [ADR-0008: Player audio output, audio-master clock and stable-playback gating](adr/0008-player-audio-and-stable-playback-gating.md)
+- [ADR-0009: Player map, tile providers and tile cache](adr/0009-player-map-tiles-and-route.md)
 
 ## Current boundaries
 
@@ -27,7 +29,13 @@ Architecture decisions are stored as individual records under [`adr/`](adr/):
   single-stream video through the shared libraries, never by invoking a tool. Decoding runs on a
   worker thread, presentation follows a wall clock, and a single OpenGL shader pass goes from
   YUV planes through the MAX face mapping to the view. Telemetry and GPMF panels follow the
-  displayed frame.
+  displayed frame. Since M5 a map pane above the panels shows the recorded GPS route and the
+  current record from OpenStreetMap tiles, and a click on the route seeks there (ADR-0009).
+- `gb_geo` is dependency-free: Web Mercator and tile math, tile provider descriptions and their
+  usage policy, the on-disk tile cache and its HTTP freshness rules, and route runs and
+  click-to-seek candidates.
+- `gb_tiles` (Qt Core and Network) fetches tiles for an interactive view through the `gb_geo`
+  cache. It sends conditional requests, limits concurrency, and never prefetches.
 - `gb_container` performs bounded, read-only ISO BMFF structural inspection.
 - `gb_image` performs bounded, read-only JPEG marker and codestream inspection.
 - `gb_metadata` performs bounded, loss-aware GPMF KLV parsing and normalization.
@@ -65,6 +73,14 @@ Architecture decisions are stored as individual records under [`adr/`](adr/):
   separately, so non-square outputs are elliptical.
 - The fingerprinted `.360` decodes both streams at matching PTS, but its source `BACK` face is
   near-black. Reconstruction preserves that evidence rather than fabricating image content.
+
+- `gb-player` requests map tiles from `tile.openstreetmap.org` by default, which reveals the
+  viewed area to that server (never the recording or its track). `--map-no-network` disables it.
+  The tile cache has no size limit or eviction. OSM service is best-effort and can be withdrawn.
+  The map is raster only and can look soft on HiDPI screens. Routes crossing the antimeridian are
+  not drawn across it.
+- Map behaviour for invalid fixes, GPS gaps and repeated passes is tested synthetically only; the
+  available real samples are valid throughout their GPS coverage.
 
 ## ADR convention
 

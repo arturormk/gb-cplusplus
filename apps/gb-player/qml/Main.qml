@@ -199,125 +199,141 @@ ApplicationWindow {
             }
         }
 
-        Rectangle {
+        SplitView {
             Layout.preferredWidth: 440
             Layout.fillHeight: true
-            color: "#121a21"
-            radius: 3
+            orientation: Qt.Vertical
+            handle: Rectangle {
+                implicitHeight: 6
+                color: SplitHandle.pressed ? "#4b94ba" : SplitHandle.hovered ? "#2f789f" : "#0b1015"
+            }
 
-            ColumnLayout {
-                anchors.fill: parent
-                anchors.margins: 8
-                spacing: 6
+            MapPanel {
+                id: mapPanel
+                SplitView.preferredHeight: 380
+                SplitView.minimumHeight: 160
+            }
 
-                TabBar {
-                    id: tabs
-                    Layout.fillWidth: true
-                    background: Rectangle { color: "#121a21" }
-                    Repeater {
-                        model: ["Telemetry", "Metadata", "Performance"]
-                        TabButton {
-                            text: modelData
-                            contentItem: Text {
-                                text: parent.text
-                                color: tabs.currentIndex === index ? "#61dc97" : "#9fb0bd"
-                                font.bold: tabs.currentIndex === index
-                                horizontalAlignment: Text.AlignHCenter
-                            }
-                            background: Rectangle {
-                                color: tabs.currentIndex === index ? "#1b2833" : "#121a21"
-                                border.color: "#26343f"
-                            }
-                        }
-                    }
-                }
+            Rectangle {
+                SplitView.fillHeight: true
+                SplitView.minimumHeight: 180
+                color: "#121a21"
+                radius: 3
 
-                StackLayout {
-                    currentIndex: tabs.currentIndex
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
+                ColumnLayout {
+                    anchors.fill: parent
+                    anchors.margins: 8
+                    spacing: 6
 
-                    ScrollView {
-                        clip: true
-                        contentWidth: availableWidth
-                        ColumnLayout {
-                            width: parent.width
-                            spacing: 8
-                            Label {
-                                text: "Synchronized to the displayed frame. Values are the nearest recorded "
-                                      + "GPS5 record; nothing is interpolated."
-                                color: "#7f919f"
-                                wrapMode: Text.Wrap
-                                Layout.fillWidth: true
-                            }
-                            InfoTable { rows: player.telemetryRows; Layout.fillWidth: true }
-                        }
-                    }
-
-                    ScrollView {
-                        clip: true
-                        contentWidth: availableWidth
-                        ColumnLayout {
-                            width: parent.width
-                            spacing: 8
-                            Label { text: "File"; color: "#61dc97"; font.bold: true }
-                            InfoTable { rows: player.fileRows; Layout.fillWidth: true }
-                            Label { text: "Tracks"; color: "#61dc97"; font.bold: true }
-                            Repeater {
-                                model: tabs.currentIndex === 1 ? player.trackRows : []
-                                Text {
-                                    Layout.fillWidth: true
-                                    wrapMode: Text.WrapAnywhere
-                                    font.family: "monospace"
-                                    font.pixelSize: 11
-                                    color: "#d2dde4"
-                                    text: "#" + modelData.id + " " + modelData.handler + " " + modelData.codec
-                                          + " — " + modelData.name + "\n   " + modelData.samples + " samples, "
-                                          + modelData.duration + " ticks @ " + modelData.timeBase
-                                          + (modelData.geometry.length ? ", " + modelData.geometry : "")
+                    TabBar {
+                        id: tabs
+                        Layout.fillWidth: true
+                        background: Rectangle { color: "#121a21" }
+                        Repeater {
+                            model: ["Telemetry", "Metadata", "Performance"]
+                            TabButton {
+                                text: modelData
+                                contentItem: Text {
+                                    text: parent.text
+                                    color: tabs.currentIndex === index ? "#61dc97" : "#9fb0bd"
+                                    font.bold: tabs.currentIndex === index
+                                    horizontalAlignment: Text.AlignHCenter
                                 }
-                            }
-                            Label { text: "GPMF at playback time"; color: "#61dc97"; font.bold: true }
-                            Label {
-                                text: player.gpmfTitle
-                                color: "#9fb0bd"
-                                wrapMode: Text.Wrap
-                                Layout.fillWidth: true
-                            }
-                            Repeater {
-                                // Hundreds of rows: only instantiate while the tab is visible.
-                                model: tabs.currentIndex === 1 ? player.gpmfRows : []
-                                Text {
-                                    Layout.fillWidth: true
-                                    leftPadding: modelData.depth * 14
-                                    wrapMode: Text.WrapAnywhere
-                                    font.family: "monospace"
-                                    font.pixelSize: 11
-                                    textFormat: Text.PlainText
-                                    color: modelData.known ? "#d2dde4" : "#ffb35c"
-                                    text: modelData.key + " [" + modelData.type
-                                          + (modelData.repeat > 1 ? "×" + modelData.repeat : "") + "] "
-                                          + modelData.detail + (modelData.unit.length ? " " + modelData.unit : "")
-                                          + (modelData.known ? "" : "   (unknown key)")
+                                background: Rectangle {
+                                    color: tabs.currentIndex === index ? "#1b2833" : "#121a21"
+                                    border.color: "#26343f"
                                 }
                             }
                         }
                     }
 
-                    ScrollView {
-                        clip: true
-                        contentWidth: availableWidth
-                        ColumnLayout {
-                            width: parent.width
-                            spacing: 8
-                            Label {
-                                text: "Updated every second. Seek latency is measured from request to the "
-                                      + "first drawn frame. Run gb-player --benchmark for a reproducible report."
-                                color: "#7f919f"
-                                wrapMode: Text.Wrap
-                                Layout.fillWidth: true
+                    StackLayout {
+                        currentIndex: tabs.currentIndex
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+
+                        ScrollView {
+                            clip: true
+                            contentWidth: availableWidth
+                            ColumnLayout {
+                                width: parent.width
+                                spacing: 8
+                                Label {
+                                    text: "Synchronized to the displayed frame. Values are the nearest recorded "
+                                          + "GPS5 record; nothing is interpolated."
+                                    color: "#7f919f"
+                                    wrapMode: Text.Wrap
+                                    Layout.fillWidth: true
+                                }
+                                InfoTable { rows: player.telemetryRows; Layout.fillWidth: true }
                             }
-                            InfoTable { rows: player.diagnosticsRows; labelWidth: 120; Layout.fillWidth: true }
+                        }
+
+                        ScrollView {
+                            clip: true
+                            contentWidth: availableWidth
+                            ColumnLayout {
+                                width: parent.width
+                                spacing: 8
+                                Label { text: "File"; color: "#61dc97"; font.bold: true }
+                                InfoTable { rows: player.fileRows; Layout.fillWidth: true }
+                                Label { text: "Tracks"; color: "#61dc97"; font.bold: true }
+                                Repeater {
+                                    model: tabs.currentIndex === 1 ? player.trackRows : []
+                                    Text {
+                                        Layout.fillWidth: true
+                                        wrapMode: Text.WrapAnywhere
+                                        font.family: "monospace"
+                                        font.pixelSize: 11
+                                        color: "#d2dde4"
+                                        text: "#" + modelData.id + " " + modelData.handler + " " + modelData.codec
+                                              + " — " + modelData.name + "\n   " + modelData.samples + " samples, "
+                                              + modelData.duration + " ticks @ " + modelData.timeBase
+                                              + (modelData.geometry.length ? ", " + modelData.geometry : "")
+                                    }
+                                }
+                                Label { text: "GPMF at playback time"; color: "#61dc97"; font.bold: true }
+                                Label {
+                                    text: player.gpmfTitle
+                                    color: "#9fb0bd"
+                                    wrapMode: Text.Wrap
+                                    Layout.fillWidth: true
+                                }
+                                Repeater {
+                                    // Hundreds of rows: only instantiate while the tab is visible.
+                                    model: tabs.currentIndex === 1 ? player.gpmfRows : []
+                                    Text {
+                                        Layout.fillWidth: true
+                                        leftPadding: modelData.depth * 14
+                                        wrapMode: Text.WrapAnywhere
+                                        font.family: "monospace"
+                                        font.pixelSize: 11
+                                        textFormat: Text.PlainText
+                                        color: modelData.known ? "#d2dde4" : "#ffb35c"
+                                        text: modelData.key + " [" + modelData.type
+                                              + (modelData.repeat > 1 ? "×" + modelData.repeat : "") + "] "
+                                              + modelData.detail + (modelData.unit.length ? " " + modelData.unit : "")
+                                              + (modelData.known ? "" : "   (unknown key)")
+                                    }
+                                }
+                            }
+                        }
+
+                        ScrollView {
+                            clip: true
+                            contentWidth: availableWidth
+                            ColumnLayout {
+                                width: parent.width
+                                spacing: 8
+                                Label {
+                                    text: "Updated every second. Seek latency is measured from request to the "
+                                          + "first drawn frame. Run gb-player --benchmark for a reproducible report."
+                                    color: "#7f919f"
+                                    wrapMode: Text.Wrap
+                                    Layout.fillWidth: true
+                                }
+                                InfoTable { rows: player.diagnosticsRows; labelWidth: 120; Layout.fillWidth: true }
+                            }
                         }
                     }
                 }

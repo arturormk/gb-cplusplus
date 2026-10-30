@@ -16,6 +16,7 @@
 #include <utility>
 #include <vector>
 
+class MapView;
 class PlayerController;
 class QQuickWindow;
 
@@ -29,6 +30,8 @@ struct BenchmarkOptions {
 // Drives the real player through continuous playback, an audio gating check (timeline scrubbing
 // and a burst of seeks while playing must stay silent, and audio must resume afterwards), and
 // random paused seeks, then prints a schema-versioned JSON report (gb.player.benchmark/v1).
+// Throughout, it checks that the marker the map actually painted is the GPS record nearest to the
+// displayed frame, computed independently from the frame's PTS.
 class BenchmarkRunner final : public QObject {
   Q_OBJECT
 
@@ -52,6 +55,12 @@ private:
   void seekCompleted(double latency_ms);
   void report();
   void fail(const QString &message);
+  // GPS record the map must show for the displayed frame: the nearest record if it is a valid fix,
+  // otherwise -1 (no filled marker).
+  [[nodiscard]] long long expectedMapRecord() const;
+  [[nodiscard]] double recordSeparationMs(long long first, long long second) const;
+  void sampleMapDuringPlayback();
+  void checkMapStill(int &checks, int &mismatches);
 
   PlayerController &controller_;
   PlaybackEngine &engine_;
@@ -76,4 +85,14 @@ private:
   std::int64_t seek_target_{};
   bool awaiting_seek_{};
   QMetaObject::Connection seek_connection_;
+
+  QPointer<MapView> map_;
+  QTimer map_poll_;
+  int map_playback_samples_{};
+  int map_playback_lagging_{};
+  double map_playback_max_lag_ms_{};
+  int map_pause_checks_{};
+  int map_pause_mismatches_{};
+  int map_seek_checks_{};
+  int map_seek_mismatches_{};
 };

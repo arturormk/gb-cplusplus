@@ -3,6 +3,10 @@
 #include "playback_engine.hpp"
 #include "process_usage.hpp"
 
+#include "gb/geo/route.hpp"
+#include "gb/telemetry/telemetry.hpp"
+#include "gb/tiles/tile_fetcher.hpp"
+
 #include <QElapsedTimer>
 #include <QObject>
 #include <QString>
@@ -20,6 +24,8 @@ struct PlayerOptions {
   int decoder_threads{0};
   std::size_t queue_capacity{4};
   bool audio{true};
+  gb::geo::TileProvider map_provider;
+  gb::tiles::FetcherOptions map_tiles;
 };
 
 // QML-facing application state: file, transport, telemetry, metadata and diagnostics.
@@ -54,6 +60,11 @@ class PlayerController final : public QObject {
   Q_PROPERTY(bool hasAudio READ hasAudio NOTIFY audioChanged)
   Q_PROPERTY(bool audioMuted READ audioMuted WRITE setAudioMuted NOTIFY audioChanged)
   Q_PROPERTY(QString audioState READ audioState NOTIFY audioChanged)
+  Q_PROPERTY(QString mapState READ mapState NOTIFY mapPositionChanged)
+  Q_PROPERTY(QString mapMessage READ mapMessage NOTIFY mapPositionChanged)
+  Q_PROPERTY(QString mapAttribution READ mapAttribution CONSTANT)
+  Q_PROPERTY(QString mapAttributionUrl READ mapAttributionUrl CONSTANT)
+  Q_PROPERTY(QString mapProviderName READ mapProviderName CONSTANT)
 
 public:
   explicit PlayerController(PlayerOptions options, QObject *parent = nullptr);
@@ -94,6 +105,21 @@ public:
   [[nodiscard]] QString audioDescription() const { return audio_description_; }
   [[nodiscard]] bool metadataLoading() const { return loader_.joinable() && !metadata_loaded_; }
 
+  // Map: one route point per GPS record (same indices as the telemetry), the record nearest to
+  // the displayed frame, and its state: "nomedia", "loading", "none" (no GPS), "valid",
+  // "invalid" (nearest record has no valid fix) or "gap" (time falls in a reported GPS gap).
+  [[nodiscard]] gb::tiles::TileFetcher *tileFetcher() { return tiles_; }
+  // Extracted telemetry once metadata has loaded, else nullptr.
+  [[nodiscard]] const gb::telemetry::Extraction *telemetry() const;
+  [[nodiscard]] const std::vector<gb::geo::RoutePoint> &mapRoute() const { return map_route_; }
+  [[nodiscard]] std::optional<std::size_t> mapRecord() const { return map_record_; }
+  [[nodiscard]] std::optional<double> mapCourse() const { return map_course_; }
+  [[nodiscard]] QString mapState() const { return map_state_; }
+  [[nodiscard]] QString mapMessage() const { return map_message_; }
+  [[nodiscard]] QString mapAttribution() const;
+  [[nodiscard]] QString mapAttributionUrl() const;
+  [[nodiscard]] QString mapProviderName() const;
+
   Q_INVOKABLE void openDialog();
   Q_INVOKABLE bool open(const QString &path, double start_seconds = 0.0);
   Q_INVOKABLE void togglePlay();
@@ -105,6 +131,10 @@ public:
   // Timeline drag: the clock holds and audio stays silent until the scrub ends and settles.
   Q_INVOKABLE void beginScrub();
   Q_INVOKABLE void endScrub();
+  // Seek targets near a clicked map position, in media order: one per separate pass of the route,
+  // each {ticks, timeText, distanceMetres, record, nearestToNow}. ticks are video ticks.
+  Q_INVOKABLE QVariantList routeCandidates(double latitude, double longitude, double toleranceMetres) const;
+  Q_INVOKABLE void seekTicks(double ticks);
 
 signals:
   void fileChanged();
@@ -118,6 +148,8 @@ signals:
   void diagnosticsChanged();
   void metadataReady();
   void audioChanged();
+  void mapRouteChanged();
+  void mapPositionChanged();
 
 private:
   struct LoadedMetadata;
@@ -131,6 +163,8 @@ private:
   void updateGpmfSample();
   void updateDiagnostics();
   void buildFileRows();
+  void setMapPosition(const QString &state, const QString &message, std::optional<std::size_t> record,
+                      std::optional<double> course);
   [[nodiscard]] std::int64_t ticksForSeconds(double seconds) const;
   [[nodiscard]] QString formatTicks(std::int64_t ticks) const;
 
@@ -162,4 +196,11 @@ private:
   PlaybackStatistics previous_statistics_;
   ProcessUsage previous_usage_;
   QVariantList diagnostics_rows_;
+
+  gb::tiles::TileFetcher *tiles_{};
+  std::vector<gb::geo::RoutePoint> map_route_;
+  std::optional<std::size_t> map_record_;
+  std::optional<double> map_course_;
+  QString map_state_{QStringLiteral("nomedia")};
+  QString map_message_{QStringLiteral("Open a recording to see its GPS route")};
 };

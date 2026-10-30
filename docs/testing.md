@@ -57,8 +57,36 @@ using the real benchmark. It fails if any audio frame is emitted while scrubbing
 seeks while playing, or while paused, or if audio does not resume after each. A deliberately
 broken gate was confirmed to fail this test.
 
+`gb_geo_tests` covers Web Mercator round trips, known tile indices, haversine distance and
+scale, provider validation (path characters in ids, missing attribution, non-HTTP URLs),
+URL templates with subdomains, and the tile cache. Cache checks include layout, metadata round
+trips, the freshness boundary, sidecar injection attempts, a missing or corrupt sidecar, and
+leftover temporary files. It also covers `Cache-Control`/`Expires` precedence and image
+signatures. Route checks cover out-and-back passes (one candidate per pass, the nearest record
+of each), the jitter hysteresis, invalid fixes splitting passes, usable runs, and bounds.
+
+`gb_tiles_tests` runs `TileFetcher` against a local HTTP server; it never uses the external
+network. It checks that:
+
+- one request is made per tile, with at most two in flight;
+- the configured User-Agent is sent, with no `Cache-Control` or `Pragma` header;
+- the server's `max-age` and ETag are stored;
+- a new session serves fresh tiles with no request;
+- an expired tile is shown at once and revalidated with `If-None-Match`, and its `304`
+  refreshes the expiry;
+- offline sessions make no requests;
+- HTML error bodies are rejected and not cached;
+- a `429` stops all further requests; and
+- queued tiles that leave the view are dropped without an answer.
+
+The `gb-player` smoke tests force the map offline with a memory-only cache. The playback smoke
+test expects `map=none` for the GPS-less fixture.
+
 GPU rendering, real-time smoothness, and seek latency need a display and real media. They are
 measured with `gb-player --benchmark` and recorded under `research/findings/`, not in CTest.
+The benchmark also checks map alignment. It compares the marker the map actually painted with
+the GPS record nearest to the displayed PTS: during playback, after the pause, and after every
+seek. A deliberately broken map repaint was confirmed to fail it.
 
 The test suite also invokes all six tools' and `gb-player`'s `--help` and `--version`, generates isolated ISO BMFF,
 GPMF, and JPEG CLI fixtures, checks all JSON schema IDs, and verifies that corrupt inputs fail.

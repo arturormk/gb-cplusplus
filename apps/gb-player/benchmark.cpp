@@ -1,6 +1,7 @@
 #include "benchmark.hpp"
 
 #include "audio_output.hpp"
+#include "map_view.hpp"
 #include "player_controller.hpp"
 #include "gb/media/playback.hpp"
 #include "video_view.hpp"
@@ -8,11 +9,13 @@
 #include <QCoreApplication>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QQuickItem>
 #include <QQuickWindow>
 
 #include <algorithm>
 #include <cmath>
 #include <iostream>
+#include <limits>
 #include <numeric>
 #include <thread>
 
@@ -49,6 +52,51 @@ BenchmarkRunner::BenchmarkRunner(PlayerController &controller, QQuickWindow *win
   poll_.setInterval(20);
   timeout_.setSingleShot(true);
   connect(&timeout_, &QTimer::timeout, this, [this] { fail(QStringLiteral("benchmark step timed out")); });
+  if (window_ != nullptr) map_ = window_->findChild<MapView *>(QStringLiteral("routeMap"));
+  map_poll_.setInterval(97);
+  connect(&map_poll_, &QTimer::timeout, this, &BenchmarkRunner::sampleMapDuringPlayback);
+}
+
+long long BenchmarkRunner::expectedMapRecord() const {
+  const auto *telemetry = controller_.telemetry();
+  if (telemetry == nullptr || telemetry->gps.empty() || telemetry->time_base.numerator == 0U) return -1;
+  const gb::media::Rational base{static_cast<std::int32_t>(telemetry->time_base.numerator),
+                                 static_cast<std::int32_t>(telemetry->time_base.denominator)};
+  const auto ticks = gb::media::rescale_ticks(engine_.positionTicks(), engine_.timeBase(), base);
+  const auto *point = gb::telemetry::nearest_point(*telemetry, ticks);
+  if (point == nullptr || point->validity != gb::telemetry::Validity::valid) return -1;
+  return static_cast<long long>(point - telemetry->gps.data());
+}
+
+double BenchmarkRunner::recordSeparationMs(const long long first, const long long second) const {
+  const auto *telemetry = controller_.telemetry();
+  if (first < 0 || second < 0 || telemetry == nullptr) return std::numeric_limits<double>::infinity();
+  const auto &a = telemetry->gps[static_cast<std::size_t>(first)];
+  const auto &b = telemetry->gps[static_cast<std::size_t>(second)];
+  const auto ticks = std::abs(a.media_time_ticks - b.media_time_ticks);
+  return static_cast<double>(ticks) * 1000.0 * static_cast<double>(telemetry->time_base.numerator) /
+         static_cast<double>(telemetry->time_base.denominator);
+}
+
+// While playing the map may lag the frame by the time it takes to paint; more than two video
+// frames counts as lagging.
+void BenchmarkRunner::sampleMapDuringPlayback() {
+  if (map_ == nullptr || !map_->hasRoute()) return;
+  const auto expected = expectedMapRecord();
+  const auto painted = map_->paintedRecord();
+  ++map_playback_samples_;
+  if (painted == expected) return;
+  const auto lag = recordSeparationMs(painted, expected);
+  const auto frame_ms = static_cast<double>(seconds(engine_.frameDurationTicks(), engine_.timeBase())) * 1000.0;
+  if (std::isfinite(lag)) map_playback_max_lag_ms_ = std::max(map_playback_max_lag_ms_, lag);
+  if (!(lag <= 2.0 * frame_ms)) ++map_playback_lagging_;
+}
+
+// Paused: the painted marker must be exactly the expected record.
+void BenchmarkRunner::checkMapStill(int &checks, int &mismatches) {
+  if (map_ == nullptr || !map_->hasRoute()) return;
+  ++checks;
+  if (map_->paintedRecord() != expectedMapRecord()) ++mismatches;
 }
 
 void BenchmarkRunner::start() {
@@ -85,6 +133,7 @@ void BenchmarkRunner::startPlayback() {
   wall_.start();
   controller_.play();
   timeout_.stop();
+  map_poll_.start();
   QTimer::singleShot(static_cast<int>(std::lround(options_.play_seconds * 1000.0)), this,
                      &BenchmarkRunner::finishPlayback);
 }
@@ -94,6 +143,7 @@ void BenchmarkRunner::finishPlayback() {
   const auto statistics = engine_.statistics();
   const auto usage = sample_process_usage();
   const auto audio = engine_.audioStatistics();
+  map_poll_.stop();
   controller_.pause();
   const auto base = engine_.timeBase();
   const auto media = static_cast<double>(seconds(engine_.positionTicks() - start_ticks_, base));
@@ -145,6 +195,7 @@ void BenchmarkRunner::runSteps() {
 }
 
 void BenchmarkRunner::checkAudioGating() {
+  checkMapStill(map_pause_checks_, map_pause_mismatches_);
   if (!engine_.hasAudio()) {
     audio_ = {{QStringLiteral("available"), false},
               {QStringLiteral("reason"), engine_.audioError().isEmpty() ? controller_.audioDescription() : engine_.audioError()}};
@@ -251,6 +302,7 @@ void BenchmarkRunner::seekCompleted(const double latency_ms) {
                                {QStringLiteral("latency_ms"), rounded(latency_ms, 1)},
                                {QStringLiteral("exact"), exact}});
   ++seek_index_;
+  QTimer::singleShot(150, this, [this] { checkMapStill(map_seek_checks_, map_seek_mismatches_); });
   QTimer::singleShot(250, this, &BenchmarkRunner::nextSeek);
 }
 
@@ -294,6 +346,31 @@ void BenchmarkRunner::report() {
                              {QStringLiteral("max"), rounded(*std::max_element(latencies_.begin(), latencies_.end()), 1)},
                              {QStringLiteral("mean"), rounded(std::accumulate(latencies_.begin(), latencies_.end(), 0.0) / static_cast<double>(latencies_.size()), 1)}});
   }
+  QJsonObject map{{QStringLiteral("route_shown"), map_ != nullptr && map_->hasRoute()},
+                  {QStringLiteral("state_at_end"), controller_.mapState()}};
+  bool map_ok = true;
+  if (map_ != nullptr && map_->hasRoute()) {
+    map_ok = map_seek_mismatches_ == 0 && map_pause_mismatches_ == 0;
+    map.insert(QStringLiteral("checked_against"), QStringLiteral("nearest GPS record to the displayed PTS"));
+    map.insert(QStringLiteral("playback_samples"), map_playback_samples_);
+    map.insert(QStringLiteral("playback_lagging_samples"), map_playback_lagging_);
+    map.insert(QStringLiteral("playback_max_lag_ms"), rounded(map_playback_max_lag_ms_, 1));
+    map.insert(QStringLiteral("pause_checks"), map_pause_checks_);
+    map.insert(QStringLiteral("pause_mismatches"), map_pause_mismatches_);
+    map.insert(QStringLiteral("seek_checks"), map_seek_checks_);
+    map.insert(QStringLiteral("seek_mismatches"), map_seek_mismatches_);
+    map.insert(QStringLiteral("paints"), static_cast<qint64>(map_->paintCount()));
+    map.insert(QStringLiteral("aligned"), map_ok);
+  }
+  const auto tiles = controller_.tileFetcher()->statistics();
+  map.insert(QStringLiteral("tiles"),
+             QJsonObject{{QStringLiteral("network"), controller_.tileFetcher()->networkEnabled()},
+                         {QStringLiteral("cache_fresh"), static_cast<qint64>(tiles.cache_fresh)},
+                         {QStringLiteral("cache_stale"), static_cast<qint64>(tiles.cache_stale)},
+                         {QStringLiteral("requests"), static_cast<qint64>(tiles.network_requests)},
+                         {QStringLiteral("downloaded"), static_cast<qint64>(tiles.downloaded)},
+                         {QStringLiteral("not_modified"), static_cast<qint64>(tiles.not_modified)},
+                         {QStringLiteral("failures"), static_cast<qint64>(tiles.failures)}});
   const QJsonObject root{
       {QStringLiteral("schema"), QStringLiteral("gb.player.benchmark/v1")},
       {QStringLiteral("version"), QCoreApplication::applicationVersion()},
@@ -309,8 +386,9 @@ void BenchmarkRunner::report() {
       {QStringLiteral("playback"), playback_},
       {QStringLiteral("audio"), audio_},
       {QStringLiteral("seeks"), seeks},
+      {QStringLiteral("map"), map},
       {QStringLiteral("resources"), QJsonObject{{QStringLiteral("peak_rss_mib"), mebibytes(usage.peak_resident_bytes)},
                                                 {QStringLiteral("rss_mib_end"), mebibytes(usage.resident_bytes)}}}};
   std::cout << QJsonDocument(root).toJson(QJsonDocument::Indented).toStdString();
-  emit finished(exact == static_cast<qint64>(latencies_.size()) && audio_ok_ ? 0 : 1);
+  emit finished(exact == static_cast<qint64>(latencies_.size()) && audio_ok_ && map_ok ? 0 : 1);
 }

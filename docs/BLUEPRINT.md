@@ -443,6 +443,20 @@ photos remain outside M4.
 
 ### M5 — Geography and maps
 
+**Status: Gate met (2026-10-30).** `gb-player` shows a live OpenStreetMap raster map of the
+recorded route. The route is drawn per run of valid fixes and split into travelled and remaining
+parts. It shows the current record with its direction of travel, follow mode, zoom and pan, and
+mandatory attribution. Clicking the route seeks to it, and repeated passes are offered as
+separate times. Missing GPS, invalid fixes and reported gaps are shown as such; nothing is
+interpolated. Tile providers are data (`gb::geo::TileProvider`). Tiles are cached under XDG cache
+by HTTP caching rules, revalidated conditionally, fetched two at a time, and never prefetched
+(ADR-0009). Measured on both samples, the painted marker matched the record nearest to the
+displayed PTS in every sample during playback, after the pause, and after 20/20 random seeks per
+run, with no frame loss. See
+[`research/findings/2026-10-30-gb-player-m5-map.md`](../research/findings/2026-10-30-gb-player-m5-map.md).
+Invalid-fix, gap and repeated-pass behaviour is tested synthetically only. MapLibre and Qt
+Location are unavailable for Qt 6.2, so the map uses its own renderer.
+
 - Live OSM-compatible map, current position, route, click-to-seek.
 - Missing GPS and ambiguous repeated coordinates handled gracefully.
 - **Gate:** map/telemetry/video remain aligned during play, pause and random seeks.

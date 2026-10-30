@@ -19,7 +19,16 @@ target_link_libraries(gb_media_tests PRIVATE gb::media gb_project_options)
 add_executable(gb_playback_tests unit/playback_test.cpp)
 target_link_libraries(gb_playback_tests PRIVATE gb::media gb_project_options)
 
+add_executable(gb_geo_tests unit/geo_test.cpp)
+target_link_libraries(gb_geo_tests PRIVATE gb::geo gb_project_options)
+
+add_executable(gb_tiles_tests unit/tiles_test.cpp)
+target_link_libraries(gb_tiles_tests PRIVATE gb::tiles gb_project_options)
+
 add_test(NAME gb_container_tests COMMAND gb_container_tests)
+add_test(NAME gb_geo_tests COMMAND gb_geo_tests)
+add_test(NAME gb_tiles_tests COMMAND gb_tiles_tests)
+set_tests_properties(gb_tiles_tests PROPERTIES TIMEOUT 60)
 add_test(NAME gb_image_tests COMMAND gb_image_tests)
 add_test(NAME gb_metadata_tests COMMAND gb_metadata_tests)
 add_test(NAME gb_media_tests COMMAND gb_media_tests)
@@ -44,6 +53,8 @@ add_test(NAME gb_player_version COMMAND gb_player --version)
 add_test(NAME gb_player_qml_smoke COMMAND gb_player --smoke-test)
 add_test(NAME gb_player_rejects_unknown_view COMMAND gb_player --view sideways)
 set_tests_properties(gb_player_rejects_unknown_view PROPERTIES WILL_FAIL TRUE)
+add_test(NAME gb_player_rejects_unknown_map_provider COMMAND gb_player --map-provider nowhere)
+set_tests_properties(gb_player_rejects_unknown_map_provider PROPERTIES WILL_FAIL TRUE)
 set_tests_properties(gb_player_qml_smoke PROPERTIES
   ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
@@ -110,7 +121,7 @@ set_tests_properties(gb_player_playback_smoke PROPERTIES
   FIXTURES_REQUIRED gb_playback_media
   ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
   TIMEOUT 60
-  PASS_REGULAR_EXPRESSION "gb-player smoke: layout=max_dual_eac streams=2 pts=[1-9][0-9]* telemetry=none audio=")
+  PASS_REGULAR_EXPRESSION "gb-player smoke: layout=max_dual_eac streams=2 pts=[1-9][0-9]* telemetry=none audio=[a-z]+ map=none")
 
 add_test(NAME gb_frames_list_json
   COMMAND gb_frames --list --json "${GB_CLI_FIXTURE_DIR}/two-video.mp4")
