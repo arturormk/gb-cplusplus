@@ -268,11 +268,18 @@ ApplicationWindow {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
 
-                        ScrollView {
+                        // A plain Flickable: ScrollView's automatic content sizing loops with a
+                        // graph that takes the height the text leaves.
+                        Flickable {
+                            id: telemetryScroll
                             clip: true
-                            contentWidth: availableWidth
+                            boundsBehavior: Flickable.StopAtBounds
+                            contentWidth: width
+                            contentHeight: telemetryText.height + (profileBlock.visible ? 8 + profileBlock.height : 0)
+                            ScrollBar.vertical: ScrollBar {}
                             ColumnLayout {
-                                width: parent.width
+                                id: telemetryText
+                                width: telemetryScroll.width
                                 spacing: 8
                                 Label {
                                     text: "Synchronized to the displayed frame. Values are the nearest recorded "
@@ -282,6 +289,69 @@ ApplicationWindow {
                                     Layout.fillWidth: true
                                 }
                                 InfoTable { rows: player.telemetryRows; Layout.fillWidth: true }
+                            }
+                            // GPS profile over the whole recording; press or drag to seek. It takes
+                            // the height the text leaves, down to a minimum; below that the tab scrolls.
+                            // Shown only once the recording's GPS records have loaded.
+                            Item {
+                                id: profileBlock
+                                visible: player.telemetryState === "ready"
+                                y: telemetryText.height + 8
+                                width: telemetryScroll.width
+                                height: Math.max(150, telemetryScroll.height - y - 2)
+                                ColumnLayout {
+                                    anchors.fill: parent
+                                    spacing: -1  // the selected tab overlaps the frame's top border
+                                    TabBar {
+                                        id: profileTabs
+                                        z: 1
+                                        spacing: 2
+                                        background: Item {}
+                                        Repeater {
+                                            model: ["Height", "Speed"]
+                                            TabButton {
+                                                readonly property bool selected: profileTabs.currentIndex === index
+                                                text: modelData
+                                                width: 80
+                                                implicitHeight: 26
+                                                contentItem: Text {
+                                                    text: parent.text
+                                                    color: parent.selected ? "#61dc97" : "#9fb0bd"
+                                                    font.bold: parent.selected
+                                                    horizontalAlignment: Text.AlignHCenter
+                                                    verticalAlignment: Text.AlignVCenter
+                                                }
+                                                background: Rectangle {
+                                                    color: parent.selected ? "#121a21" : "#0d1419"
+                                                    border.color: "#26343f"
+                                                    // Open towards the graph: hide the bottom border when selected.
+                                                    Rectangle {
+                                                        visible: parent.parent.selected
+                                                        anchors.left: parent.left
+                                                        anchors.right: parent.right
+                                                        anchors.bottom: parent.bottom
+                                                        anchors.margins: 1
+                                                        anchors.bottomMargin: 0
+                                                        height: 1
+                                                        color: parent.color
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    Rectangle {
+                                        Layout.fillWidth: true
+                                        Layout.fillHeight: true
+                                        color: "#121a21"
+                                        border.color: "#26343f"
+                                        ProfileView {
+                                            anchors.fill: parent
+                                            anchors.margins: 1
+                                            controller: player
+                                            quantity: profileTabs.currentIndex === 0 ? ProfileView.Height : ProfileView.Speed
+                                        }
+                                    }
+                                }
                             }
                         }
 

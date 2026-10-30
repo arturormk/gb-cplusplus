@@ -1,6 +1,7 @@
 #include "benchmark.hpp"
 #include "map_view.hpp"
 #include "player_controller.hpp"
+#include "profile_view.hpp"
 #include "video_view.hpp"
 
 #include "gb/media/playback.hpp"
@@ -239,6 +240,7 @@ int main(int argc, char **argv) {
   QCoreApplication::setOrganizationName(QStringLiteral("gb"));
   qmlRegisterType<VideoView>("Gb.Player", 1, 0, "VideoView");
   qmlRegisterType<MapView>("Gb.Player", 1, 0, "MapView");
+  qmlRegisterType<ProfileView>("Gb.Player", 1, 0, "ProfileView");
 
   // A benchmark measures one file; it must not run on into the next chapter.
   if (options.benchmark.has_value()) options.player.continue_sequence = false;

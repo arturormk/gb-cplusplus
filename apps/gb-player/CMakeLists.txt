@@ -22,6 +22,8 @@ qt_add_executable(gb_player
   player_controller.hpp
   process_usage.cpp
   process_usage.hpp
+  profile_view.cpp
+  profile_view.hpp
   video_view.cpp
   video_view.hpp)
 set_target_properties(gb_player PROPERTIES

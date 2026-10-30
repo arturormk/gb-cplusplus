@@ -58,13 +58,19 @@ the requested time. Frame stepping and the timeline both use the first stream's 
 ## Panels
 
 - **Telemetry**: synchronized to the displayed frame. It shows the nearest recorded `GPS5`
-  record: GPS UTC (marked recorded GPSU or derived), validity, fix, DOP, latitude, longitude,
+  record: GPS UTC, fix, DOP, latitude, longitude,
   WGS 84 altitude, 2D/3D speed, and the azimuth of the 2D speed vector (`0` north, `90` east,
   `180` south, `270` west) with its 16-point compass direction, e.g. `67.5°  ENE`. That azimuth is the direction of travel derived from neighbouring
   distinct positions, not the camera's pointing direction; it is unavailable when stationary
-  (2D speed ≤ 0.01 m/s) or when no distinct neighbouring fix exists. It also shows the record's tick offset from the frame and its
-  timing uncertainty. Missing data is shown as unavailable, invalid fixes are highlighted, and a
-  reported gap is named. Positions are never interpolated.
+  (2D speed ≤ 0.01 m/s) or when no distinct neighbouring fix exists. Missing data is shown as
+  unavailable, values from a record without a valid fix are shown in yellow, and a reported gap
+  is named. Positions are never interpolated. Below the values, a graph of height (WGS 84) or 2D speed against media time
+  covers the whole recording, with a cursor at the displayed frame; it fills the rest of the
+  panel, and its Height/Speed tabs switch between them. It is shown once the recording's GPS
+  records have loaded. Records without a valid fix are left out, and the line breaks across
+  them. Click or drag on the graph to seek. The mouse wheel zooms the time axis around the
+  pointer, from the whole recording down to 30 seconds, and dragging with the middle button pans;
+  the view never extends past the start or end of the video.
 - **Metadata**: file and stream properties, the ISO BMFF track table, and the GPMF tree of the
   `gpmd` sample covering the playback time. Unknown keys are flagged.
 - **Performance**: displayed, presented and decoded rates, dropped frames (late or not drawn),

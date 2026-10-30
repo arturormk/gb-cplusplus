@@ -85,9 +85,9 @@ QString clockText(const long double total_seconds) {
 QString fixName(const std::optional<std::uint32_t> fix) {
   if (!fix.has_value()) return unavailable();
   switch (*fix) {
-  case 0U: return QStringLiteral("no fix (0)");
-  case 2U: return QStringLiteral("2D (2)");
-  case 3U: return QStringLiteral("3D (3)");
+  case 0U: return QStringLiteral("no fix");
+  case 2U: return QStringLiteral("2D");
+  case 3U: return QStringLiteral("3D");
   default: return QStringLiteral("recorded value %1").arg(*fix);
   }
 }
@@ -481,25 +481,13 @@ void PlayerController::updateTelemetry() {
     }
   }
   const auto offset_ms = static_cast<double>(seconds(point->media_time_ticks - metadata_ticks, *telemetry_base) * 1000.0L);
-  rows.push_back(row(QStringLiteral("Nearest GPS record"),
-                     QStringLiteral("sample %1 record %2, tick %3 @ %4 (%5%6 ms, ±%7 ticks)")
-                         .arg(point->source_sample)
-                         .arg(point->record_index)
-                         .arg(point->media_time_ticks)
-                         .arg(rational(telemetry->time_base.numerator, telemetry->time_base.denominator))
-                         .arg(offset_ms >= 0.0 ? QStringLiteral("+") : QString())
-                         .arg(offset_ms, 0, 'f', 0)
-                         .arg(point->timing_uncertainty_ticks)));
   if (gap != nullptr) {
     rows.push_back(row(QStringLiteral("GPS gap"), QString::fromStdString(gap->reason), QStringLiteral("unavailable")));
   }
   const auto state = point->validity == gb::telemetry::Validity::valid ? QStringLiteral("ok")
                                                                         : QStringLiteral("invalid");
-  rows.push_back(row(QStringLiteral("Validity"), QString::fromStdString(gb::telemetry::validity_name(point->validity)), state));
   rows.push_back(point->utc.has_value()
-                     ? row(QStringLiteral("GPS UTC"),
-                           QString::fromStdString(*point->utc) +
-                               (point->utc_recorded ? QStringLiteral("  (recorded GPSU)") : QStringLiteral("  (derived from GPSU)")))
+                     ? row(QStringLiteral("GPS UTC"), QString::fromStdString(*point->utc))
                      : row(QStringLiteral("GPS UTC"), unavailable(), QStringLiteral("unavailable")));
   rows.push_back(row(QStringLiteral("Fix"), fixName(point->fix), point->fix.has_value() ? state : QStringLiteral("unavailable")));
   rows.push_back(point->dop.has_value() ? row(QStringLiteral("DOP"), number(*point->dop, 2), state)
