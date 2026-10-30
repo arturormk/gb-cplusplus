@@ -50,6 +50,7 @@ struct ViewParameters {
   int mode{};
   int layout{};
   float overlap{};
+  QRectF crop{0.0, 0.0, 1.0, 1.0};
   float yaw{};
   float pitch{};
   float roll{};
@@ -348,6 +349,9 @@ private:
     f->glUniform1i(uniform(Uniform::layout), parameters_.layout);
     f->glUniform1i(uniform(Uniform::has_frame), picture != nullptr ? 1 : 0);
     f->glUniform1f(uniform(Uniform::overlap), parameters_.overlap);
+    f->glUniform4f(uniform(Uniform::crop), static_cast<float>(parameters_.crop.x()),
+                   static_cast<float>(parameters_.crop.y()), static_cast<float>(parameters_.crop.width()),
+                   static_cast<float>(parameters_.crop.height()));
     f->glUniform1f(uniform(Uniform::yaw), parameters_.yaw);
     f->glUniform1f(uniform(Uniform::pitch), parameters_.pitch);
     f->glUniform1f(uniform(Uniform::roll), parameters_.roll);
@@ -362,12 +366,12 @@ private:
   }
 
   enum class Uniform {
-    matrix, size, source, mode, layout, has_frame, overlap, yaw, pitch, roll, field_of_view,
+    matrix, size, source, mode, layout, has_frame, overlap, crop, yaw, pitch, roll, field_of_view,
     zoom, pan, luma_red, luma_blue, full_range, count
   };
   static constexpr std::array<const char *, static_cast<std::size_t>(Uniform::count)> uniform_names_{
-      "uMatrix", "uSize", "uSource", "uMode", "uLayout", "uHasFrame", "uOverlap", "uYaw", "uPitch",
-      "uRoll", "uFieldOfView", "uZoom", "uPan", "uKr", "uKb", "uFullRange"};
+      "uMatrix", "uSize", "uSource", "uMode", "uLayout", "uHasFrame", "uOverlap", "uCrop", "uYaw",
+      "uPitch", "uRoll", "uFieldOfView", "uZoom", "uPan", "uKr", "uKb", "uFullRange"};
   [[nodiscard]] GLint uniform(const Uniform name) const {
     return uniforms_[static_cast<std::size_t>(name)];
   }
@@ -461,6 +465,12 @@ void VideoView::setOverlap(const int value) {
   emit viewChanged();
 }
 
+void VideoView::setPanoramaCrop(const QRectF &value) {
+  if (panorama_crop_ == value || !value.isValid()) return;
+  panorama_crop_ = value;
+  emit viewChanged();
+}
+
 void VideoView::setYaw(const double value) { setValue(yaw_, value); }
 void VideoView::setPitch(const double value) { setValue(pitch_, value); }
 void VideoView::setRoll(const double value) { setValue(roll_, value); }
@@ -489,6 +499,7 @@ QSGNode *VideoView::updatePaintNode(QSGNode *old, UpdatePaintNodeData *) {
   parameters.mode = mode_;
   parameters.layout = source_layout_;
   parameters.overlap = static_cast<float>(overlap_);
+  parameters.crop = panorama_crop_;
   parameters.yaw = radians(yaw_);
   parameters.pitch = radians(pitch_);
   parameters.roll = radians(roll_);

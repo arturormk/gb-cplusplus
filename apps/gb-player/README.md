@@ -25,6 +25,12 @@ recordings read-only and plays them without conversion:
   running. When playback reaches the end of a chapter, the next one opens and plays. Each chapter
   stays a separate file: timeline, telemetry and map cover only the open one (GPS track export
   covers them all).
+- **Photos**: MAX JPEG photos open as a still image, recognised by content rather than file
+  name. Equirectangular photos, which carry an XMP GPano crop, get the spherical views: the 360°
+  `GS__nnnn.JPG` and the superwide `GP__nnnn.JPG`, which is a 270°×90° crop of the 360° canvas.
+  Outside the crop the view shows the background. Other photos, such as the single-lens wide
+  `GP__nnnn.JPG`, are shown flat with zoom and pan. There is no transport, timeline, height/speed
+  graph or audio. See [Photos](#photos) and ADR-0011.
 
 ## Use
 
@@ -36,6 +42,7 @@ gb-player --benchmark 60 --seeks 20 --time 60 recording.360 > benchmark.json
 gb-player --screenshot view.png --time 5 recording.360
 gb-player --map-no-network recording.360        # cached map tiles only
 gb-player --map-cache /tmp/tiles recording.360  # use another tile cache
+gb-player --view panorama GS__0033.JPG           # a 360° photo
 ```
 
 | Input | Action |
@@ -87,6 +94,30 @@ the requested time. Frame stepping and the timeline both use the first stream's 
   latency estimate, audio underruns, and alignment counters.
 
 The timeline marks `gpmd` sample positions, GPS coverage, and reported telemetry gaps.
+
+## Photos
+
+For a photo, the panels show what the file records about its capture:
+
+- **Telemetry**: the EXIF GPS position (UTC, latitude, longitude, altitude, and DOP and speed
+  when present). It is a single position, with no track. Then **Camera**: the field-of-view class
+  and the evidence for it, image size, capture time from the camera clock (EXIF has no time
+  zone), camera and firmware, shutter speed, aperture, ISO, exposure bias, program, metering, white
+  balance and focal length. GoPro settings from the APP6 segment follow: resolution, projection,
+  field of view, stabilization, auto-ISO range and Protune. A value the photo does not record is
+  marked "not recorded". MAX superwide and 360 photos, for example, carry no EXIF shutter speed
+  or ISO.
+- **Metadata**: file properties, JPEG codestream count (the second is the camera's preview),
+  EXIF byte order, the GPano crop, and the full GoPro APP6 GPMF tree.
+- **Map**: the photo's position as a single marker, without route, start, end or direction. A
+  photo without EXIF GPS shows a message.
+
+The field of view is classified as follows. A GPano equirectangular crop covering the whole
+canvas is **360°**; a narrower crop is **superwide**, with its horizontal angle. Otherwise the
+GoPro projection (`PRJT`: `ERP0` 360°, `PANO` superwide) decides, and failing that the lens letter
+ending the GoPro resolution (`PRES`, for example `5.5MP_W`): **wide**, **linear** or **narrow**.
+The MAX's "normal" photo mode records the wide lens. Only `W` has been seen in a real file; `L`
+and `N` are inferred.
 
 ## Map
 

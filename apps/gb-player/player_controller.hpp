@@ -9,6 +9,7 @@
 
 #include <QElapsedTimer>
 #include <QObject>
+#include <QRectF>
 #include <QString>
 #include <QStringList>
 #include <QTimer>
@@ -41,6 +42,9 @@ class PlayerController final : public QObject {
   Q_PROPERTY(QStringList sequenceNames READ sequenceNames NOTIFY fileChanged)
   Q_PROPERTY(int sequenceIndex READ sequenceIndex NOTIFY fileChanged)
   Q_PROPERTY(bool hasMedia READ hasMedia NOTIFY fileChanged)
+  Q_PROPERTY(bool isPhoto READ isPhoto NOTIFY fileChanged)
+  Q_PROPERTY(QRectF panoramaCrop READ panoramaCrop NOTIFY fileChanged)
+  Q_PROPERTY(QVariantList photoRows READ photoRows NOTIFY fileChanged)
   Q_PROPERTY(int sourceLayout READ sourceLayout NOTIFY fileChanged)
   Q_PROPERTY(QString layoutDescription READ layoutDescription NOTIFY fileChanged)
   Q_PROPERTY(int overlap READ overlap NOTIFY fileChanged)
@@ -87,6 +91,11 @@ public:
   [[nodiscard]] QStringList sequenceNames() const;
   [[nodiscard]] int sequenceIndex() const { return sequence_index_; }
   [[nodiscard]] bool hasMedia() const { return engine_.isOpen(); }
+  // A JPEG photo is shown as a still: no transport, one GPS position at most, no track.
+  [[nodiscard]] bool isPhoto() const { return engine_.isStill(); }
+  [[nodiscard]] QRectF panoramaCrop() const { return panorama_crop_; }
+  // Capture settings of an open photo: classification, exposure and GoPro settings.
+  [[nodiscard]] QVariantList photoRows() const { return photo_rows_; }
   [[nodiscard]] int sourceLayout() const;
   [[nodiscard]] QString layoutDescription() const;
   [[nodiscard]] int overlap() const;
@@ -172,6 +181,7 @@ private:
   struct LoadedMetadata;
   struct Source;
 
+  bool openPhoto(const QString &path);
   void setStatus(const QString &message, bool error = false);
   void finishTrackExport(const QString &message, bool error);
   void onEndReached();
@@ -207,6 +217,8 @@ private:
   QVariantList timeline_gaps_;
   QVariantMap gps_coverage_;
   QVariantList file_rows_;
+  QVariantList photo_rows_;
+  QRectF panorama_crop_{0.0, 0.0, 1.0, 1.0};
   QVariantList track_rows_;
   QString gpmf_title_;
   QVariantList gpmf_rows_;

@@ -68,6 +68,8 @@ public:
   void open(const std::string &path, const gb::media::PlaybackLayout &layout,
             int decoder_threads, std::size_t queue_capacity, std::int64_t start_ticks,
             std::optional<int> audio_stream, const std::string &application_name);
+  // Shows one decoded picture (a photo) with no decoder, clock, audio or seeking.
+  void openStill(std::shared_ptr<const gb::media::FrameSet> frames);
   void close();
   void play();
   void pause();
@@ -77,6 +79,7 @@ public:
   void setAudioMuted(bool muted);
 
   [[nodiscard]] bool isOpen() const noexcept;
+  [[nodiscard]] bool isStill() const noexcept { return still_; }
   [[nodiscard]] bool playing() const noexcept;
   [[nodiscard]] bool seeking() const;
   [[nodiscard]] bool scrubbing() const noexcept { return scrubbing_; }
@@ -131,6 +134,7 @@ private:
   void stopWorker();
 
   std::unique_ptr<gb::media::SynchronizedReader> reader_;
+  bool still_{};
   std::int32_t time_base_numerator_{1};
   std::int32_t time_base_denominator_{1};
   std::int64_t duration_ticks_{};

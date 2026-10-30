@@ -441,15 +441,17 @@ void MapView::paint(QPainter *painter) {
   stroke(remaining, kRemaining);
   stroke(travelled, kTravelled);
 
-  // Start and end of the recorded route.
+  // Start and end of the recorded route. A single position (a photo) has neither.
   const auto first_usable = std::find(usable_.begin(), usable_.end(), true) - usable_.begin();
   const auto last_usable = usable_.rend() - std::find(usable_.rbegin(), usable_.rend(), true) - 1;
-  painter->setPen(QPen(Qt::white, 2.0));
-  painter->setBrush(QColor(0x2f, 0x9e, 0x44));
-  painter->drawEllipse(screen(route_[static_cast<std::size_t>(first_usable)]), 5.5, 5.5);
-  painter->setBrush(QColor(0xc9, 0x2a, 0x2a));
-  const auto end_point = screen(route_[static_cast<std::size_t>(last_usable)]);
-  painter->drawRect(QRectF(end_point.x() - 5.0, end_point.y() - 5.0, 10.0, 10.0));
+  if (route_.size() > 1U) {
+    painter->setPen(QPen(Qt::white, 2.0));
+    painter->setBrush(QColor(0x2f, 0x9e, 0x44));
+    painter->drawEllipse(screen(route_[static_cast<std::size_t>(first_usable)]), 5.5, 5.5);
+    painter->setBrush(QColor(0xc9, 0x2a, 0x2a));
+    const auto end_point = screen(route_[static_cast<std::size_t>(last_usable)]);
+    painter->drawRect(QRectF(end_point.x() - 5.0, end_point.y() - 5.0, 10.0, 10.0));
+  }
 
   long long drawn_record = -1;
   if (record.has_value() && *record < route_.size() && usable_[*record]) {

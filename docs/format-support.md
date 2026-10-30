@@ -33,8 +33,12 @@
   Single-stream video plays flat with zoom and pan.
 - Content-based JPEG detection with checked marker and entropy termination parsing.
 - JPEG dimensions, precision, component count, and directly appended codestream enumeration.
-- Structural detection of JFIF, EXIF, XMP, MPF and APP6 payloads without interpreting private
-  metadata values.
+- Structural detection of JFIF, EXIF, XMP, MPF and APP6 payloads.
+- Photo metadata: EXIF camera, exposure and GPS fields, XMP GPano crop geometry, and the GoPro APP6
+  GPMF settings. Field-of-view classification uses that evidence: 360°, superwide (with its
+  horizontal angle), wide, linear, or narrow.
+- Photos in `gb-player`: a still view, with spherical views for equirectangular photos, the EXIF
+  position on the map, and the capture settings in the panel (ADR-0011).
 
 ## Evidence from GoPro MAX (2025) samples
 
@@ -48,9 +52,10 @@ near-black `BACK` source face in stream 5 of the `.360` sample rather than conce
 ## Not implemented
 
 - Stabilization, optical-flow seam correction, recovered camera calibration, spatial
-  (multichannel/ambisonic) audio rendering, hardware decoding, and photo viewing in the player.
+  (multichannel/ambisonic) audio rendering, and hardware decoding.
 - Fragmented-media sample mapping, edit lists, multiple sample descriptions, compressed/complex
-  GPMF values, GPS9, sensor-series export, EXIF, XMP, MPF, or APP6 metadata decoding.
+  GPMF values, GPS9, sensor-series export, and MPF decoding. EXIF and XMP are interpreted only
+  for the fields listed above.
 - General payload extraction, HEIF item interpretation, or file repair. Raw `gpmd` sample export is
   explicitly supported by `gb-metadata`.
 

@@ -17,7 +17,9 @@ ApplicationWindow {
     readonly property var modeNames: ["Rectilinear", "Fisheye", "Stereographic", "Little Planet",
                                       "Panorama (equirectangular)", "Raw track 1", "Raw track 2",
                                       "Original"]
-    readonly property var availableModes: player.sourceLayout === 1 ? [0, 1, 2, 3, 4, 5, 6] : [7]
+    // MAX dual-stream video, equirectangular photo, anything else flat.
+    readonly property var availableModes: player.sourceLayout === 1 ? [0, 1, 2, 3, 4, 5, 6]
+                                        : player.sourceLayout === 2 ? [0, 1, 2, 3, 4, 7] : [7]
     readonly property bool spherical: view.mode <= 3
     property int requestedMode: initialView
 
@@ -136,6 +138,7 @@ ApplicationWindow {
                 engine: player.engine
                 sourceLayout: player.sourceLayout
                 overlap: player.overlap
+                panoramaCrop: player.panoramaCrop
                 Component.onCompleted: window.selectMode(initialView)
             }
 
@@ -203,7 +206,7 @@ ApplicationWindow {
                 Label {
                     anchors.horizontalCenter: parent.horizontalCenter
                     text: !view.gpuAvailable ? "GPU view unavailable: OpenGL 3.3 is required"
-                                             : "Open a GoPro .360 or MP4 recording (Ctrl+O)"
+                                             : "Open a GoPro .360 or MP4 recording, or a JPG photo (Ctrl+O)"
                     color: "#8193a1"
                     font.pixelSize: 16
                 }
@@ -282,13 +285,29 @@ ApplicationWindow {
                                 width: telemetryScroll.width
                                 spacing: 8
                                 Label {
-                                    text: "Synchronized to the displayed frame. Values are the nearest recorded "
-                                          + "GPS5 record; nothing is interpolated."
+                                    text: player.isPhoto
+                                          ? "The position recorded in the photo's EXIF GPS fields. A photo has "
+                                            + "one position and no track."
+                                          : "Synchronized to the displayed frame. Values are the nearest recorded "
+                                            + "GPS5 record; nothing is interpolated."
                                     color: "#7f919f"
                                     wrapMode: Text.Wrap
                                     Layout.fillWidth: true
                                 }
                                 InfoTable { rows: player.telemetryRows; Layout.fillWidth: true }
+                                // Photo capture settings from EXIF and the GoPro APP6 segment.
+                                Label {
+                                    visible: player.isPhoto
+                                    text: "Camera"
+                                    color: "#61dc97"
+                                    font.bold: true
+                                }
+                                InfoTable {
+                                    visible: player.isPhoto
+                                    rows: player.photoRows
+                                    labelWidth: 150
+                                    Layout.fillWidth: true
+                                }
                             }
                             // GPS profile over the whole recording; press or drag to seek. It takes
                             // the height the text leaves, down to a minimum; below that the tab scrolls.
@@ -437,7 +456,7 @@ ApplicationWindow {
                                 spacing: 8
                                 Label { text: "File"; color: "#61dc97"; font.bold: true }
                                 InfoTable { rows: player.fileRows; Layout.fillWidth: true }
-                                Label { text: "Tracks"; color: "#61dc97"; font.bold: true }
+                                Label { visible: !player.isPhoto; text: "Tracks"; color: "#61dc97"; font.bold: true }
                                 Repeater {
                                     model: tabs.currentIndex === 1 ? player.trackRows : []
                                     Text {
@@ -452,7 +471,11 @@ ApplicationWindow {
                                               + (modelData.geometry.length ? ", " + modelData.geometry : "")
                                     }
                                 }
-                                Label { text: "GPMF at playback time"; color: "#61dc97"; font.bold: true }
+                                Label {
+                                    text: player.isPhoto ? "GoPro metadata (GPMF)" : "GPMF at playback time"
+                                    color: "#61dc97"
+                                    font.bold: true
+                                }
                                 Label {
                                     text: player.gpmfTitle
                                     color: "#9fb0bd"
@@ -511,8 +534,10 @@ ApplicationWindow {
             anchors.leftMargin: 10
             anchors.rightMargin: 10
             spacing: 2
+            // A photo has no time: no transport, timeline or audio.
             RowLayout {
                 Layout.fillWidth: true
+                visible: !player.isPhoto
                 spacing: 8
                 DarkButton { text: "◀|"; implicitWidth: 44; enabled: player.hasMedia; onClicked: player.stepFrames(-1) }
                 DarkButton {

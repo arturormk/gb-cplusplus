@@ -61,6 +61,24 @@ void PlaybackEngine::open(const std::string &path, const gb::media::PlaybackLayo
   seek(start_ticks);
 }
 
+void PlaybackEngine::openStill(std::shared_ptr<const gb::media::FrameSet> frames) {
+  close();
+  still_ = true;
+  time_base_numerator_ = frames->time_base.numerator;
+  time_base_denominator_ = frames->time_base.denominator;
+  duration_ticks_ = 0;
+  resetStatistics();
+  {
+    const std::lock_guard lock(statistics_mutex_);
+    statistics_.presented_frames = 1;
+  }
+  {
+    const std::lock_guard lock(current_mutex_);
+    current_ = {std::move(frames), ++serial_, generation_};
+  }
+  emit frameChanged();
+}
+
 void PlaybackEngine::stopWorker() {
   {
     const std::lock_guard lock(mutex_);
@@ -78,6 +96,7 @@ void PlaybackEngine::close() {
   scrubbing_ = false;
   stopWorker();
   reader_.reset();
+  still_ = false;
   {
     const std::lock_guard lock(mutex_);
     queue_.clear();
@@ -95,7 +114,7 @@ void PlaybackEngine::close() {
   emit audioChanged();
 }
 
-bool PlaybackEngine::isOpen() const noexcept { return reader_ != nullptr; }
+bool PlaybackEngine::isOpen() const noexcept { return reader_ != nullptr || still_; }
 bool PlaybackEngine::playing() const noexcept { return playing_; }
 std::int64_t PlaybackEngine::durationTicks() const noexcept { return duration_ticks_; }
 gb::media::Rational PlaybackEngine::timeBase() const noexcept {
@@ -123,7 +142,7 @@ std::int64_t PlaybackEngine::frameDurationTicks() const {
 }
 
 void PlaybackEngine::play() {
-  if (!isOpen() || playing_) return;
+  if (reader_ == nullptr || playing_) return;
   bool restart{};
   {
     const std::lock_guard lock(mutex_);
@@ -146,7 +165,7 @@ void PlaybackEngine::pause() {
 }
 
 void PlaybackEngine::setScrubbing(const bool scrubbing) {
-  if (scrubbing == scrubbing_ || !isOpen()) return;
+  if (scrubbing == scrubbing_ || reader_ == nullptr) return;
   const auto now = SteadyClock::now();
   if (scrubbing) {
     disengageAudio();
@@ -167,7 +186,7 @@ void PlaybackEngine::setAudioMuted(const bool muted) {
 }
 
 void PlaybackEngine::seek(std::int64_t ticks) {
-  if (!isOpen()) return;
+  if (reader_ == nullptr) return;
   ticks = std::max<std::int64_t>(0, ticks);
   if (duration_ticks_ > 0) ticks = std::min(ticks, duration_ticks_ - 1);
   disengageAudio();

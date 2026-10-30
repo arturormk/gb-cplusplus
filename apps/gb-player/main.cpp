@@ -263,6 +263,10 @@ int main(int argc, char **argv) {
   }
 
   BenchmarkRunner *benchmark = nullptr;
+  if (options.benchmark.has_value() && controller.isPhoto()) {
+    std::cerr << "gb-player: --benchmark requires a video, not a photo\n";
+    return 1;
+  }
   if (options.benchmark.has_value()) {
     benchmark = new BenchmarkRunner(controller, window, *options.benchmark, &application);
     QObject::connect(benchmark, &BenchmarkRunner::finished, &application, &QCoreApplication::exit);
@@ -294,7 +298,9 @@ int main(int argc, char **argv) {
           application.exit(1);
           return;
         }
-        std::cout << "gb-player smoke: layout=" << (controller.sourceLayout() == 1 ? "max_dual_eac" : "flat")
+        const auto layout = controller.sourceLayout();
+        std::cout << "gb-player smoke: layout="
+                  << (layout == 1 ? "max_dual_eac" : layout == 2 ? "equirectangular" : "flat")
                   << " streams=" << current.frames->pictures.size() << " pts=" << current.frames->pts
                   << " telemetry=" << controller.telemetryState().toStdString()
                   << " audio=" << (controller.hasAudio() ? "open" : "none")
