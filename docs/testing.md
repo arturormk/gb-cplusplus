@@ -42,10 +42,20 @@ mismatched streams, no video), floor-rounded tick rescaling and overflow rejecti
 the synchronized reader against an FFmpeg-generated 20-frame, two-stream MPEG-4 fixture with a
 5-frame GOP. The reader must pair every frame, keep the PTS sequence exact, preserve stream order
 and limited-range planes, seek accurately inside a GOP, hold the last frame past the end, and
-reject invalid selections. `gb_telemetry_tests` also checks the shared nearest-record tie policy.
+reject invalid selections. The same executable checks audio stream selection. Stereo is chosen,
+and MAX-style four-channel audio and missing audio are rejected. `AudioReader` must produce
+contiguous AAC blocks of the right length and duration from the fixture's audio track. On a
+generated mono PCM ramp, whose sample values encode their own positions, every decoded sample must
+match its reported position after sample-accurate seeks, and mono must be duplicated to both
+channels. `gb_telemetry_tests` also checks the shared nearest-record tie policy.
 The offscreen `gb-player` smoke tests load the QML scene with the software scene graph and play
 the fixture from 1.05 s. The first presented frame must be the 1.0 s frame of the dual-stream
 layout, with telemetry correctly reported as absent.
+
+`gb_player_audio_gating` plays a generated 10 s clip with tone through SDL's dummy audio driver
+using the real benchmark. It fails if any audio frame is emitted while scrubbing, during a burst of
+seeks while playing, or while paused, or if audio does not resume after each. A deliberately
+broken gate was confirmed to fail this test.
 
 GPU rendering, real-time smoothness, and seek latency need a display and real media. They are
 measured with `gb-player --benchmark` and recorded under `research/findings/`, not in CTest.

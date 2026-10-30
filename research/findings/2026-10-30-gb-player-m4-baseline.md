@@ -73,5 +73,28 @@ Screenshots include the telemetry panel and therefore private coordinates; do no
 
 ## Not established
 
-Audio synchronization, hardware decoding, longer soak tests, other GPUs and drivers, Wayland, high
+Acoustic measurement of the audio/video offset (see the audio addendum), hardware decoding, longer soak tests, other GPUs and drivers, Wayland, high
 DPI displays, and recordings with other resolutions, frame rates, or chapter boundaries.
+
+## Audio addendum (2026-10-30)
+
+M4 audio (ADR-0008) was measured on the same machine. The window was rendered offscreen
+(`QT_QPA_PLATFORM=offscreen`, OpenGL) because a background window is frame-throttled by the
+compositor. That throttling made the commit-`aececde` build fall to about 0.9 fps as well, so it
+is an environment effect, not a player one. Output went to the real PulseAudio (PipeWire) device:
+48 kHz float stereo, 1024-frame buffer, latency estimate 21.3 ms.
+
+```sh
+QT_QPA_PLATFORM=offscreen gb-player --benchmark 20 --seeks 5 --time 60 __stuff/GS040047.360
+QT_QPA_PLATFORM=offscreen gb-player --benchmark 20 --seeks 5 --time 60 __stuff/GH050083.MP4
+```
+
+| Sample | Media / wall s | Displayed fps | Dropped | Audio s | Audio underruns | Audible frames: scrub / seek burst / paused | Exact seeks |
+|---|---|---|---|---|---|---|---|
+| `.360` (AAC stream 1; 4-ch PCM stream 6 not played) | 20.40 / 20.42 | 24.98 | 0 | 20.42 | 0 | 0 / 0 / 0 | 5/5 |
+| MP4 (AAC stream 1) | 19.64 / 19.65 | 24.99 | 0 | 19.65 | 0 | 0 / 0 / 0 | 5/5 |
+
+Audio resumed after the scrub and after the seek burst in both runs, with 4 engagements per run.
+Media time tracking wall time while audio is the master clock shows that the audio clock and the
+presentation path agree. The acoustic A/V offset was not measured. It depends on the one-buffer
+latency estimate.

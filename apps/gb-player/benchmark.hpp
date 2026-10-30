@@ -11,7 +11,10 @@
 #include <QTimer>
 
 #include <cstdint>
+#include <functional>
 #include <random>
+#include <utility>
+#include <vector>
 
 class PlayerController;
 class QQuickWindow;
@@ -23,8 +26,9 @@ struct BenchmarkOptions {
   int view_mode{};
 };
 
-// Drives the real player through continuous playback and random paused seeks, then prints a
-// schema-versioned JSON report (gb.player.benchmark/v1) to stdout.
+// Drives the real player through continuous playback, an audio gating check (timeline scrubbing
+// and a burst of seeks while playing must stay silent, and audio must resume afterwards), and
+// random paused seeks, then prints a schema-versioned JSON report (gb.player.benchmark/v1).
 class BenchmarkRunner final : public QObject {
   Q_OBJECT
 
@@ -40,6 +44,10 @@ private:
   void waitUntilReady();
   void startPlayback();
   void finishPlayback();
+  void checkAudioGating();
+  void startSeeks();
+  void runSteps();
+  [[nodiscard]] std::uint64_t audibleFrames() const;
   void nextSeek();
   void seekCompleted(double latency_ms);
   void report();
@@ -58,6 +66,10 @@ private:
   ProcessUsage start_usage_;
   std::int64_t start_ticks_{};
   QJsonObject playback_;
+  QJsonObject audio_;
+  bool audio_ok_{true};
+  std::vector<std::pair<int, std::function<void()>>> steps_;
+  std::size_t step_{};
   QJsonArray seeks_;
   std::vector<double> latencies_;
   int seek_index_{};

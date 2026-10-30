@@ -1,6 +1,7 @@
 import QtQuick
 
-// Seek bar with metadata sample positions, GPS coverage and reported telemetry gaps.
+// Seek bar with metadata sample positions, GPS coverage and reported telemetry gaps. A press
+// starts a scrub that lasts until release; the player keeps audio silent throughout.
 Item {
     id: root
     property real position: 0
@@ -9,6 +10,8 @@ Item {
     property var gaps: []
     property var coverage: ({})
     signal seekRequested(real fraction)
+    signal scrubStarted()
+    signal scrubFinished()
     implicitHeight: 34
 
     readonly property real fraction: duration > 0 ? Math.min(1, Math.max(0, position / duration)) : 0
@@ -81,7 +84,9 @@ Item {
         anchors.fill: parent
         enabled: root.duration > 0
         function request(x) { root.seekRequested(Math.min(1, Math.max(0, x / width))) }
-        onPressed: function(mouse) { request(mouse.x) }
+        onPressed: function(mouse) { root.scrubStarted(); request(mouse.x) }
         onPositionChanged: function(mouse) { if (pressed) request(mouse.x) }
+        onReleased: root.scrubFinished()
+        onCanceled: root.scrubFinished()
     }
 }

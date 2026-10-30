@@ -52,8 +52,10 @@ Architecture decisions are stored as individual records under [`adr/`](adr/):
   GPSU UTC anchors, but sensor capture time, TimeWarp cadence, GPS9, and edit lists remain open.
 - The project license remains unresolved. FFmpeg and Qt 6 are now required; enabled codec/build
   license obligations and application distribution still require review.
-- The player has no audio output or audio clock, and no hardware decoding. Software HEVC decoding
-  of both MAX streams uses about 2.3 cores at 25 fps on the development machine.
+- The player plays mono or stereo audio only (ADR-0008); the MAX four-channel spatial track is not
+  rendered. Audio-to-video offset relies on a one-buffer latency estimate because SDL2 cannot
+  report device latency. There is no hardware decoding. Software HEVC decoding of both MAX streams
+  uses about 2.3 cores at 25 fps on the development machine.
 - The player's GPU face mapping duplicates the CPU reference in GLSL. Their agreement is checked by
   recorded image comparison, not by an automated test, so changes must be made in both.
 - The format libraries parse and format numbers with locale-sensitive C/C++ functions. Command-line

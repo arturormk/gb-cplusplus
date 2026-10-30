@@ -1,5 +1,6 @@
 #include "benchmark.hpp"
 
+#include "audio_output.hpp"
 #include "player_controller.hpp"
 #include "gb/media/playback.hpp"
 #include "video_view.hpp"
@@ -92,6 +93,7 @@ void BenchmarkRunner::finishPlayback() {
   const auto wall = static_cast<double>(wall_.nsecsElapsed()) / 1.0e9;
   const auto statistics = engine_.statistics();
   const auto usage = sample_process_usage();
+  const auto audio = engine_.audioStatistics();
   controller_.pause();
   const auto base = engine_.timeBase();
   const auto media = static_cast<double>(seconds(engine_.positionTicks() - start_ticks_, base));
@@ -122,10 +124,103 @@ void BenchmarkRunner::finishPlayback() {
       {QStringLiteral("cpu_percent_one_core"), rounded(cpu, 1)},
       {QStringLiteral("cpu_percent_all_threads"), rounded(cpu / std::max(1U, std::thread::hardware_concurrency()), 1)},
       {QStringLiteral("rss_mib_end"), mebibytes(usage.resident_bytes)}};
+  if (engine_.hasAudio()) {
+    playback_.insert(QStringLiteral("audio_seconds"),
+                     audio.sample_rate > 0 ? rounded(static_cast<double>(audio.audible_frames) / audio.sample_rate) : 0.0);
+    playback_.insert(QStringLiteral("audio_underruns"), static_cast<qint64>(audio.underruns));
+  }
+  // Let the pause settle before the audio gating check.
+  QTimer::singleShot(500, this, &BenchmarkRunner::checkAudioGating);
+}
+
+std::uint64_t BenchmarkRunner::audibleFrames() const { return engine_.audioStatistics().audible_frames; }
+
+void BenchmarkRunner::runSteps() {
+  if (step_ >= steps_.size()) return;
+  const auto [delay, action] = steps_[step_++];
+  QTimer::singleShot(delay, this, [this, action = action] {
+    action();
+    runSteps();
+  });
+}
+
+void BenchmarkRunner::checkAudioGating() {
+  if (!engine_.hasAudio()) {
+    audio_ = {{QStringLiteral("available"), false},
+              {QStringLiteral("reason"), engine_.audioError().isEmpty() ? controller_.audioDescription() : engine_.audioError()}};
+    startSeeks();
+    return;
+  }
+  const auto statistics = engine_.audioStatistics();
+  audio_ = {{QStringLiteral("available"), true},
+            {QStringLiteral("stream"), controller_.audioDescription()},
+            {QStringLiteral("driver"), QString::fromStdString(statistics.driver)},
+            {QStringLiteral("sample_rate"), statistics.sample_rate},
+            {QStringLiteral("buffer_frames"), statistics.buffer_frames},
+            {QStringLiteral("latency_estimate_ms"), rounded(statistics.latency_ms, 1)}};
+  const auto duration = engine_.durationTicks();
+  const auto random_fraction = [this] { return std::uniform_real_distribution<double>(0.0, 0.9)(random_); };
+  auto mark = std::make_shared<std::uint64_t>();
+  const auto check = [this](const QString &name, const bool ok) {
+    audio_.insert(name, ok);
+    audio_ok_ = audio_ok_ && ok;
+  };
+  const auto silent = [this, mark](const QString &name) {
+    const auto heard = audibleFrames() - *mark;
+    audio_.insert(name, static_cast<qint64>(heard));
+    audio_ok_ = audio_ok_ && heard == 0U;
+  };
+  steps_.clear();
+  step_ = 0;
+  // Stable playback: audio must start.
+  steps_.emplace_back(0, [this, mark] {
+    *mark = audibleFrames();
+    controller_.play();
+  });
+  steps_.emplace_back(1500, [mark, check, this] { check(QStringLiteral("heard_during_playback"), audibleFrames() > *mark); });
+  // Timeline drag while playing: 40 seeks 50 ms apart. The 100 ms margin covers the 5 ms fade.
+  steps_.emplace_back(0, [this] { controller_.beginScrub(); });
+  steps_.emplace_back(100, [this, mark] { *mark = audibleFrames(); });
+  for (int index = 0; index < 40; ++index) {
+    steps_.emplace_back(50, [this, random_fraction] { controller_.seekFraction(random_fraction()); });
+  }
+  steps_.emplace_back(400, [silent] { silent(QStringLiteral("scrub_audible_frames")); });
+  steps_.emplace_back(0, [this] { controller_.endScrub(); });
+  steps_.emplace_back(1500, [this, mark, check] {
+    check(QStringLiteral("resumed_after_scrub"), audibleFrames() > *mark);
+    *mark = audibleFrames();
+  });
+  // Held arrow key while playing: seeks 150 ms apart, inside the settle hold.
+  steps_.emplace_back(0, [this, duration, random_fraction] {
+    engine_.seek(static_cast<std::int64_t>(random_fraction() * static_cast<double>(duration)));
+  });
+  steps_.emplace_back(100, [this, mark] { *mark = audibleFrames(); });
+  for (int index = 0; index < 15; ++index) {
+    steps_.emplace_back(150, [this, duration, random_fraction] {
+      engine_.seek(static_cast<std::int64_t>(random_fraction() * static_cast<double>(duration)));
+    });
+  }
+  steps_.emplace_back(0, [silent] { silent(QStringLiteral("seek_burst_audible_frames")); });
+  steps_.emplace_back(1500, [this, mark, check] {
+    check(QStringLiteral("resumed_after_seeks"), audibleFrames() > *mark);
+    controller_.pause();
+    *mark = audibleFrames();
+  });
+  steps_.emplace_back(500, [this, silent] {
+    silent(QStringLiteral("paused_audible_frames"));
+    const auto statistics = engine_.audioStatistics();
+    audio_.insert(QStringLiteral("starts"), static_cast<qint64>(statistics.starts));
+    audio_.insert(QStringLiteral("underruns"), static_cast<qint64>(statistics.underruns));
+    audio_.insert(QStringLiteral("gating_ok"), audio_ok_);
+    startSeeks();
+  });
+  runSteps();
+}
+
+void BenchmarkRunner::startSeeks() {
   seek_connection_ = gpu_ ? connect(&engine_, &PlaybackEngine::seekRendered, this, &BenchmarkRunner::seekCompleted)
                           : connect(&engine_, &PlaybackEngine::seekPresented, this, &BenchmarkRunner::seekCompleted);
-  // Let the pause settle before measuring seeks.
-  QTimer::singleShot(500, this, &BenchmarkRunner::nextSeek);
+  nextSeek();
 }
 
 void BenchmarkRunner::nextSeek() {
@@ -212,9 +307,10 @@ void BenchmarkRunner::report() {
                    {QStringLiteral("view_mode"), options_.view_mode},
                    {QStringLiteral("window"), window}}},
       {QStringLiteral("playback"), playback_},
+      {QStringLiteral("audio"), audio_},
       {QStringLiteral("seeks"), seeks},
       {QStringLiteral("resources"), QJsonObject{{QStringLiteral("peak_rss_mib"), mebibytes(usage.peak_resident_bytes)},
                                                 {QStringLiteral("rss_mib_end"), mebibytes(usage.resident_bytes)}}}};
   std::cout << QJsonDocument(root).toJson(QJsonDocument::Indented).toStdString();
-  emit finished(exact == static_cast<qint64>(latencies_.size()) ? 0 : 1);
+  emit finished(exact == static_cast<qint64>(latencies_.size()) && audio_ok_ ? 0 : 1);
 }

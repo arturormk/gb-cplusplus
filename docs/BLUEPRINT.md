@@ -430,8 +430,12 @@ exact random seeks. Measured `.360` seek latency was 354 ms median and 520 ms ma
 cores of CPU, 2.4 ms GPU time per frame, and 0.43–0.79 GiB peak RSS depending on decoder
 threads. See
 [`research/findings/2026-10-30-gb-player-m4-baseline.md`](../research/findings/2026-10-30-gb-player-m4-baseline.md).
-Audio output and audio-master synchronization, hardware decoding, and photos are not part of this
-baseline.
+Audio was added to complete M4 (ADR-0008). The stereo AAC track plays with an audio-master clock
+and sample-accurate alignment to the video clock. It is heard only during stable playback: never
+while scrubbing, while a seek is decoding, within 250 ms after a seek, or while paused. On both
+samples, 20 s runs played with 0 dropped frames and 0 audio underruns, and the benchmark recorded
+no audible frames during scrubs, seek bursts or pauses. Hardware decoding, spatial audio and
+photos remain outside M4.
 
 - Open file, play/pause/seek, spherical viewing, metadata panel.
 - Synchronize telemetry and media timeline; basic performance diagnostics.

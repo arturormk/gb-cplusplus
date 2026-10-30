@@ -9,6 +9,11 @@ recordings read-only and plays them without conversion:
   fisheye, stereographic, Little Planet, the full equirectangular panorama, or either raw track.
 - **Single-stream video** (for example a MAX "superwide" MP4): shown flat with zoom and pan. No
   projection is inferred from the capture mode.
+- **Audio**: the first mono or stereo track (the stereo AAC track on MAX and MP4) plays in sync,
+  with the audio device as the master clock. Audio plays only during normal, stable playback.
+  It is silent while the timeline is dragged, while a seek is decoding, for 250 ms after each
+  seek, and while paused or stepping. Holding an arrow key or scrubbing therefore never produces
+  sound fragments. See ADR-0008.
 
 ## Use
 
@@ -27,6 +32,8 @@ gb-player --screenshot view.png --time 5 recording.360
 | `,` / `.` or `Ctrl+←` / `Ctrl+→` | step one frame back / forward (pauses) |
 | Drag, wheel | look around and change FOV (spherical modes); pan and zoom (2D modes) |
 | 1–8 | rectilinear, fisheye, stereographic, Little Planet, panorama, raw 1, raw 2, original |
+| Timeline press and drag | scrub: frames follow the pointer, clock held, audio silent until release + 250 ms |
+| M | mute / unmute (the audio clock keeps running) |
 | R / F / Ctrl+O | reset view / full screen / open file |
 
 Seeking is accurate. The displayed frame is the latest frame whose presentation time is not after
@@ -46,7 +53,9 @@ the requested time. Frame stepping and the timeline both use the first stream's 
   `gpmd` sample covering the playback time. Unknown keys are flagged.
 - **Performance**: displayed, presented and decoded rates, dropped frames (late or not drawn),
   decoder underruns, queue depth, unpaired frames, seek latency, texture upload time, GPU time
-  (OpenGL timer queries), process CPU, RSS, and the OpenGL renderer.
+  (OpenGL timer queries), process CPU, RSS, and the OpenGL renderer. It also shows the audio state
+  and why it is silent (paused, scrubbing, seeking, or settling), the output driver, buffer and
+  latency estimate, audio underruns, and alignment counters.
 
 The timeline marks `gpmd` sample positions, GPS coverage, and reported telemetry gaps.
 
@@ -55,7 +64,10 @@ The timeline marks `gpmd` sample positions, GPS coverage, and reported telemetry
 `--benchmark SECONDS` waits for the first drawn frame and loaded metadata. It then plays from
 `--time` for the requested wall-clock duration, pauses, and performs `--seeks` random accurate
 seeks (deterministic with `--seed`). Finally it prints a `gb.player.benchmark/v1` JSON report and
-exits non-zero if any seek shows a frame that does not cover its target. Seek latency runs from
+exits non-zero if any seek shows a frame that does not cover its target. Between playback and the
+seeks it checks audio gating: audio must be heard while playing and must resume afterwards. No
+audible frame is allowed during a timeline scrub, during a burst of seeks while playing, or while
+paused; any violation also makes the run fail. Seek latency runs from
 the request to the first drawn frame. CPU is process CPU time over wall time. GPU time measures
 texture upload plus drawing on the GPU. The report contains no telemetry values. Results describe
 the machine they were measured on; see `research/findings/` for recorded runs.
@@ -64,7 +76,8 @@ the machine they were measured on; see `research/findings/` for recorded runs.
 
 - Requires an OpenGL 3.3 (or OpenGL ES 3.0) Qt Quick scene graph for the picture. With the
   software backend, decoding, presentation and telemetry still work, but no image is shown.
-- No audio yet: playback runs on a wall clock. Hardware decoding (VA-API), edit lists,
+- Audio: the first mono or stereo stream plays through SDL2 (`--no-audio` disables it). The MAX
+  four-channel spatial track is not rendered. Hardware decoding (VA-API), edit lists,
   multi-chapter grouping, photos, maps, and export are not implemented.
 - MAX reconstruction requires the verified two-stream geometry. The near-black `BACK` face of the
   fingerprinted sample is shown as recorded.

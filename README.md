@@ -10,7 +10,8 @@ video reconstruction/projection laboratory are complete, and the M4 player basel
 gate. `gb-frames` provides exact native frame extraction and deterministic reconstruction, and
 `gb-project` provides the Qt visual comparison and interactive virtual camera. `gb-player` plays
 original MAX `.360` recordings directly, with GPU spherical viewing, accurate seeking, synchronized
-telemetry and metadata panels, and performance diagnostics.
+telemetry and metadata panels, synchronized audio that plays only during stable playback (never
+while scrubbing or seeking), and performance diagnostics.
 
 ## Build and test
 

@@ -66,14 +66,43 @@ add_test(NAME gb_playback_fixture_setup
   COMMAND "${GB_FFMPEG_EXECUTABLE}" -v error
     -f lavfi -i color=c=red:s=104x32:r=10:d=2
     -f lavfi -i color=c=blue:s=104x32:r=10:d=2
-    -map 0:v -map 1:v -c:v mpeg4 -g 5 -bf 0 -y "${GB_CLI_FIXTURE_DIR}/playback.mp4")
+    -f lavfi -i sine=frequency=440:sample_rate=48000:duration=2
+    -map 0:v -map 1:v -map 2:a -c:v mpeg4 -g 5 -bf 0 -c:a aac -y "${GB_CLI_FIXTURE_DIR}/playback.mp4")
 set_tests_properties(gb_playback_fixture_setup PROPERTIES
   FIXTURES_REQUIRED gb_cli_media
   FIXTURES_SETUP gb_playback_media)
 
+# Mono PCM ramp: sample n holds ((n mod 1000) - 500) / 1000, so content identifies position.
+add_test(NAME gb_audio_fixture_setup
+  COMMAND "${GB_FFMPEG_EXECUTABLE}" -v error
+    -f lavfi -i "aevalsrc=exprs=(mod(n\\,1000)-500)/1000:s=48000:d=2"
+    -c:a pcm_s16le -y "${GB_CLI_FIXTURE_DIR}/ramp.wav")
+set_tests_properties(gb_audio_fixture_setup PROPERTIES
+  FIXTURES_REQUIRED gb_cli_media
+  FIXTURES_SETUP gb_playback_media)
+
 add_test(NAME gb_playback_tests
-  COMMAND gb_playback_tests "${GB_CLI_FIXTURE_DIR}/playback.mp4")
+  COMMAND gb_playback_tests "${GB_CLI_FIXTURE_DIR}/playback.mp4" "${GB_CLI_FIXTURE_DIR}/ramp.wav")
 set_tests_properties(gb_playback_tests PROPERTIES FIXTURES_REQUIRED gb_playback_media)
+
+add_test(NAME gb_audio_gating_fixture_setup
+  COMMAND "${GB_FFMPEG_EXECUTABLE}" -v error
+    -f lavfi -i testsrc=s=160x90:r=25:d=10
+    -f lavfi -i sine=frequency=440:sample_rate=48000:duration=10
+    -map 0:v -map 1:a -c:v mpeg4 -g 25 -bf 0 -c:a aac -y "${GB_CLI_FIXTURE_DIR}/audio-gating.mp4")
+set_tests_properties(gb_audio_gating_fixture_setup PROPERTIES
+  FIXTURES_REQUIRED gb_cli_media
+  FIXTURES_SETUP gb_audio_gating_media)
+
+# Real playback with SDL's dummy audio device: audio must be heard during stable playback and
+# stay silent while scrubbing, during a burst of seeks while playing, and while paused.
+add_test(NAME gb_player_audio_gating
+  COMMAND gb_player --benchmark 2 --seeks 2 "${GB_CLI_FIXTURE_DIR}/audio-gating.mp4")
+set_tests_properties(gb_player_audio_gating PROPERTIES
+  FIXTURES_REQUIRED gb_audio_gating_media
+  ENVIRONMENT "QT_QPA_PLATFORM=offscreen;SDL_AUDIODRIVER=dummy"
+  TIMEOUT 90
+  PASS_REGULAR_EXPRESSION "\"gating_ok\": true")
 
 add_test(NAME gb_player_playback_smoke
   COMMAND gb_player --smoke-test --time 1.05 "${GB_CLI_FIXTURE_DIR}/playback.mp4")
@@ -81,7 +110,7 @@ set_tests_properties(gb_player_playback_smoke PROPERTIES
   FIXTURES_REQUIRED gb_playback_media
   ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
   TIMEOUT 60
-  PASS_REGULAR_EXPRESSION "gb-player smoke: layout=max_dual_eac streams=2 pts=[1-9][0-9]* telemetry=none")
+  PASS_REGULAR_EXPRESSION "gb-player smoke: layout=max_dual_eac streams=2 pts=[1-9][0-9]* telemetry=none audio=")
 
 add_test(NAME gb_frames_list_json
   COMMAND gb_frames --list --json "${GB_CLI_FIXTURE_DIR}/two-video.mp4")

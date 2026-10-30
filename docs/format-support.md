@@ -47,8 +47,8 @@ near-black `BACK` source face in stream 5 of the `.360` sample rather than conce
 
 ## Not implemented
 
-- Stabilization, optical-flow seam correction, recovered camera calibration, audio playback,
-  hardware decoding, and photo viewing in the player.
+- Stabilization, optical-flow seam correction, recovered camera calibration, spatial
+  (multichannel/ambisonic) audio rendering, hardware decoding, and photo viewing in the player.
 - Fragmented-media sample mapping, edit lists, multiple sample descriptions, compressed/complex
   GPMF values, GPS9, sensor-series export, EXIF, XMP, MPF, or APP6 metadata decoding.
 - General payload extraction, HEIF item interpretation, or file repair. Raw `gpmd` sample export is

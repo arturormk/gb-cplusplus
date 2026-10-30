@@ -19,6 +19,7 @@
 struct PlayerOptions {
   int decoder_threads{0};
   std::size_t queue_capacity{4};
+  bool audio{true};
 };
 
 // QML-facing application state: file, transport, telemetry, metadata and diagnostics.
@@ -50,6 +51,9 @@ class PlayerController final : public QObject {
   Q_PROPERTY(QString gpmfTitle READ gpmfTitle NOTIFY gpmfChanged)
   Q_PROPERTY(QVariantList gpmfRows READ gpmfRows NOTIFY gpmfChanged)
   Q_PROPERTY(QVariantList diagnosticsRows READ diagnosticsRows NOTIFY diagnosticsChanged)
+  Q_PROPERTY(bool hasAudio READ hasAudio NOTIFY audioChanged)
+  Q_PROPERTY(bool audioMuted READ audioMuted WRITE setAudioMuted NOTIFY audioChanged)
+  Q_PROPERTY(QString audioState READ audioState NOTIFY audioChanged)
 
 public:
   explicit PlayerController(PlayerOptions options, QObject *parent = nullptr);
@@ -83,6 +87,11 @@ public:
   [[nodiscard]] QString gpmfTitle() const { return gpmf_title_; }
   [[nodiscard]] QVariantList gpmfRows() const { return gpmf_rows_; }
   [[nodiscard]] QVariantList diagnosticsRows() const { return diagnostics_rows_; }
+  [[nodiscard]] bool hasAudio() const { return engine_.hasAudio(); }
+  [[nodiscard]] bool audioMuted() const { return engine_.audioMuted(); }
+  void setAudioMuted(bool muted) { engine_.setAudioMuted(muted); }
+  [[nodiscard]] QString audioState() const { return engine_.audioState(); }
+  [[nodiscard]] QString audioDescription() const { return audio_description_; }
   [[nodiscard]] bool metadataLoading() const { return loader_.joinable() && !metadata_loaded_; }
 
   Q_INVOKABLE void openDialog();
@@ -93,6 +102,9 @@ public:
   Q_INVOKABLE void seekSeconds(double seconds);
   Q_INVOKABLE void seekFraction(double fraction);
   Q_INVOKABLE void stepFrames(int frames);
+  // Timeline drag: the clock holds and audio stays silent until the scrub ends and settles.
+  Q_INVOKABLE void beginScrub();
+  Q_INVOKABLE void endScrub();
 
 signals:
   void fileChanged();
@@ -105,6 +117,7 @@ signals:
   void gpmfChanged();
   void diagnosticsChanged();
   void metadataReady();
+  void audioChanged();
 
 private:
   struct LoadedMetadata;
@@ -125,6 +138,7 @@ private:
   PlaybackEngine engine_;
   std::unique_ptr<Source> source_;
   QString input_path_;
+  QString audio_description_;
   QString status_;
   bool status_is_error_{};
 

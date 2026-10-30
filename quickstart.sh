@@ -59,6 +59,9 @@ if ! command -v pkg-config >/dev/null 2>&1 ||
    ! pkg-config --exists libavformat libavcodec libavutil libswscale; then
   missing_packages+=(libavformat-dev libavcodec-dev libavutil-dev libswscale-dev)
 fi
+if ! pkg-config --exists sdl2 2>/dev/null; then
+  missing_packages+=(libsdl2-dev)
+fi
 if ! compgen -G '/usr/lib/*/cmake/Qt6/Qt6Config.cmake' >/dev/null ||
    ! compgen -G '/usr/lib/*/cmake/Qt6OpenGL/Qt6OpenGLConfig.cmake' >/dev/null ||
    ! compgen -G '/usr/lib/*/cmake/Qt6ShaderTools/Qt6ShaderToolsConfig.cmake' >/dev/null ||

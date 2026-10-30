@@ -1,5 +1,7 @@
+#include "gb/media/audio.hpp"
 #include "gb/media/playback.hpp"
 
+#include <cmath>
 #include <cstdint>
 #include <cstdlib>
 #include <exception>
@@ -150,16 +152,102 @@ void reader_tests(const char *path) {
           "missing stream was not rejected");
 }
 
+gb::media::AudioStream audio(const int index, const std::int32_t channels) {
+  gb::media::AudioStream result;
+  result.index = index;
+  result.codec = "aac";
+  result.sample_rate = 48000;
+  result.channels = channels;
+  return result;
+}
+
+void audio_selection_tests() {
+  // MAX: stereo AAC is played; the four-channel ambisonic PCM track is reported, not downmixed.
+  const auto max = gb::media::select_playback_audio({audio(1, 2), audio(6, 4)});
+  require(max.stream == 1 && max.description.find("not played: stream 6") != std::string::npos,
+          "MAX stereo track was not selected");
+  require(!gb::media::select_playback_audio({audio(6, 4)}).stream.has_value(),
+          "multichannel audio must not be selected");
+  require(gb::media::select_playback_audio({audio(3, 1)}).stream == 3, "mono stream was not selected");
+  require(!gb::media::select_playback_audio({}).stream.has_value(), "no-audio input selected a stream");
+}
+
+void audio_aac_tests(const char *path) {
+  const auto selection = gb::media::select_playback_audio(gb::media::audio_streams(path));
+  require(selection.stream == 2, "fixture AAC stream was not selected");
+  gb::media::AudioReader reader(path, *selection.stream);
+  require(reader.sample_rate() == 48000, "unexpected AAC sample rate");
+  std::int64_t expected{};
+  std::int64_t total{};
+  float peak{};
+  while (auto block = reader.next()) {
+    require(block->first_sample == expected, "AAC blocks are not contiguous");
+    expected += block->frames();
+    total += block->frames();
+    for (std::size_t index = 0; index < block->samples.size(); index += 2U) {
+      require(block->samples[index] == block->samples[index + 1U], "mono fixture channels differ");
+      peak = std::max(peak, std::abs(block->samples[index]));
+    }
+  }
+  require(std::llabs(total - 96000) <= 1024, "AAC duration is not two seconds");
+  require(peak > 0.05F && peak <= 1.0F, "AAC signal level is implausible");
+
+  reader.seek(30000);
+  const auto block = reader.next();
+  require(block.has_value() && block->first_sample == 30000, "AAC accurate seek is not exact");
+}
+
+void audio_pcm_tests(const char *path) {
+  const auto streams = gb::media::audio_streams(path);
+  require(streams.size() == 1U && streams.front().channels == 1, "ramp fixture is not mono");
+  gb::media::AudioReader reader(path, streams.front().index);
+  const auto value_at = [](const std::int64_t sample) {
+    return static_cast<float>((sample % 1000) - 500) / 1000.0F;
+  };
+  const auto check = [&](const gb::media::AudioBlock &block) {
+    for (std::int64_t frame = 0; frame < block.frames(); ++frame) {
+      const auto left = block.samples[static_cast<std::size_t>(frame) * 2U];
+      require(std::abs(left - value_at(block.first_sample + frame)) < 1.0e-3F,
+              "PCM sample does not match its position");
+      require(left == block.samples[static_cast<std::size_t>(frame) * 2U + 1U], "mono was not duplicated");
+    }
+  };
+  std::int64_t total{};
+  while (auto block = reader.next()) {
+    require(block->first_sample == total, "PCM blocks are not contiguous");
+    check(*block);
+    total += block->frames();
+  }
+  require(total == 96000, "PCM fixture length is wrong");
+
+  for (const std::int64_t target : {12345LL, 0LL, 95999LL, 47999LL}) {
+    reader.seek(target);
+    const auto block = reader.next();
+    require(block.has_value() && block->first_sample == target, "PCM accurate seek is not exact");
+    check(*block);
+  }
+  reader.seek(200000);
+  require(!reader.next().has_value(), "seek beyond the end must end the stream");
+  require(rejects([&reader] { reader.seek(-1); }, gb::media::ErrorKind::invalid_argument),
+          "negative audio seek was not rejected");
+  require(rejects([path] { gb::media::AudioReader invalid(path, 5); },
+                  gb::media::ErrorKind::invalid_argument),
+          "missing audio stream was not rejected");
+}
+
 } // namespace
 
 int main(const int argc, char **argv) {
-  if (argc != 2) {
-    std::cerr << "usage: gb_playback_tests <two-stream fixture>\n";
+  if (argc != 3) {
+    std::cerr << "usage: gb_playback_tests <two-stream fixture with audio> <mono PCM ramp>\n";
     return 2;
   }
   try {
     layout_tests();
     reader_tests(argv[1]);
+    audio_selection_tests();
+    audio_aac_tests(argv[1]);
+    audio_pcm_tests(argv[2]);
     return 0;
   } catch (const std::exception &error) {
     std::cerr << "playback test failure: " << error.what() << '\n';

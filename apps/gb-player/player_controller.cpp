@@ -1,6 +1,8 @@
 #include "player_controller.hpp"
 
+#include "audio_output.hpp"
 #include "gb/container/iso_bmff.hpp"
+#include "gb/media/audio.hpp"
 #include "gb/media/playback.hpp"
 #include "gb/metadata/gpmf.hpp"
 #include "gb/telemetry/telemetry.hpp"
@@ -148,6 +150,7 @@ PlayerController::PlayerController(PlayerOptions options, QObject *parent)
   status_ = QStringLiteral("Open a GoPro video to begin");
   connect(&engine_, &PlaybackEngine::frameChanged, this, &PlayerController::onFrameChanged);
   connect(&engine_, &PlaybackEngine::playingChanged, this, &PlayerController::playingChanged);
+  connect(&engine_, &PlaybackEngine::audioChanged, this, &PlayerController::audioChanged);
   connect(&engine_, &PlaybackEngine::errorOccurred, this,
           [this](const QString &message) { setStatus(QStringLiteral("Decode error: ") + message, true); });
   connect(&engine_, &PlaybackEngine::endReached, this,
@@ -227,7 +230,19 @@ bool PlayerController::open(const QString &path, const double start_seconds) {
     const auto start = std::isfinite(start_seconds) && start_seconds > 0.0
                            ? gb::media::rescale_ticks(std::llround(start_seconds * 1000.0), {1, 1000}, base)
                            : 0;
-    engine_.open(source, layout, options_.decoder_threads, options_.queue_capacity, start);
+    gb::media::AudioSelection audio;
+    try {
+      audio = gb::media::select_playback_audio(gb::media::audio_streams(source));
+    } catch (const std::exception &error) {
+      audio.description = std::string("audio streams cannot be read: ") + error.what();
+    }
+    if (!options_.audio && audio.stream.has_value()) {
+      audio.description = "disabled by --no-audio (" + audio.description + ")";
+      audio.stream.reset();
+    }
+    audio_description_ = QString::fromStdString(audio.description);
+    engine_.open(source, layout, options_.decoder_threads, options_.queue_capacity, start, audio.stream,
+                 displayName().toStdString());
   } catch (const std::exception &error) {
     setStatus(QStringLiteral("Cannot open %1: %2").arg(QFileInfo(path).fileName(), QString::fromUtf8(error.what())), true);
     return false;
@@ -243,6 +258,7 @@ bool PlayerController::open(const QString &path, const double start_seconds) {
   gpmf_sample_.reset();
   buildFileRows();
   emit fileChanged();
+  emit audioChanged();
   emit telemetryChanged();
   emit timelineChanged();
   emit metadataChanged();
@@ -264,6 +280,13 @@ void PlayerController::buildFileRows() {
   file_rows_.push_back(row(QStringLiteral("Size"), QStringLiteral("%L1 bytes").arg(info.size())));
   file_rows_.push_back(row(QStringLiteral("Access"), QStringLiteral("read-only")));
   file_rows_.push_back(row(QStringLiteral("Playback layout"), QString::fromStdString(source_->layout.description)));
+  if (engine_.hasAudio()) {
+    file_rows_.push_back(row(QStringLiteral("Audio"), audio_description_));
+  } else {
+    auto reason = audio_description_;
+    if (!engine_.audioError().isEmpty()) reason += QStringLiteral(" — ") + engine_.audioError();
+    file_rows_.push_back(row(QStringLiteral("Audio"), reason, QStringLiteral("unavailable")));
+  }
   for (const auto &stream : source_->streams) {
     const auto selected = std::find(source_->layout.streams.begin(), source_->layout.streams.end(), stream.index) !=
                           source_->layout.streams.end();
@@ -558,6 +581,30 @@ void PlayerController::updateDiagnostics() {
                      QStringLiteral("RSS %1 MiB, peak %2 MiB")
                          .arg(static_cast<double>(usage.resident_bytes) / 1048576.0, 0, 'f', 0)
                          .arg(static_cast<double>(usage.peak_resident_bytes) / 1048576.0, 0, 'f', 0)));
+  if (engine_.hasAudio()) {
+    const auto audio = engine_.audioStatistics();
+    rows.push_back(row(QStringLiteral("Audio"), engine_.audioState()));
+    rows.push_back(row(QStringLiteral("Audio output"),
+                       QStringLiteral("%1, %2 Hz stereo float, %3-frame buffer, latency estimate %4 ms")
+                           .arg(QString::fromStdString(audio.driver))
+                           .arg(audio.sample_rate)
+                           .arg(audio.buffer_frames)
+                           .arg(audio.latency_ms, 0, 'f', 1)));
+    rows.push_back(row(QStringLiteral("Audio underruns"), QString::number(audio.underruns),
+                       audio.underruns > 0U ? QStringLiteral("invalid") : QStringLiteral("ok")));
+    rows.push_back(row(QStringLiteral("Audio alignment"),
+                       QStringLiteral("%1 starts, %2 frames trimmed, %3 frames of lead-in silence")
+                           .arg(audio.starts)
+                           .arg(audio.aligned_skip_frames)
+                           .arg(audio.aligned_silence_frames)));
+    if (!audio.error.empty()) {
+      rows.push_back(row(QStringLiteral("Audio decode"), QString::fromStdString(audio.error), QStringLiteral("invalid")));
+    }
+  } else {
+    rows.push_back(row(QStringLiteral("Audio"),
+                       engine_.audioError().isEmpty() ? audio_description_ : engine_.audioError(),
+                       QStringLiteral("unavailable")));
+  }
   rows.push_back(row(QStringLiteral("Decoder threads"),
                      options_.decoder_threads == 0 ? QStringLiteral("automatic, per stream")
                                                    : QStringLiteral("%1 per stream").arg(options_.decoder_threads)));
@@ -598,6 +645,10 @@ void PlayerController::seekFraction(const double fraction) {
   const auto clamped = std::clamp(fraction, 0.0, 1.0);
   engine_.seek(static_cast<std::int64_t>(std::floor(clamped * static_cast<double>(engine_.durationTicks()))));
 }
+
+void PlayerController::beginScrub() { engine_.setScrubbing(true); }
+
+void PlayerController::endScrub() { engine_.setScrubbing(false); }
 
 void PlayerController::stepFrames(const int frames) {
   if (!engine_.isOpen()) return;

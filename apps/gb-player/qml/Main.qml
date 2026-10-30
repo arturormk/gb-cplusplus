@@ -50,6 +50,7 @@ ApplicationWindow {
     Shortcut { sequence: "."; onActivated: player.stepFrames(1) }
     Shortcut { sequence: "Ctrl+Left"; onActivated: player.stepFrames(-1) }
     Shortcut { sequence: "Ctrl+Right"; onActivated: player.stepFrames(1) }
+    Shortcut { sequence: "M"; onActivated: player.audioMuted = !player.audioMuted }
     Shortcut { sequence: "F"; onActivated: window.visibility = window.visibility === Window.FullScreen ? Window.Windowed : Window.FullScreen }
     Shortcut { sequence: "Escape"; onActivated: if (window.visibility === Window.FullScreen) window.visibility = Window.Windowed }
     Shortcut { sequence: "R"; onActivated: window.resetView() }
@@ -358,11 +359,19 @@ ApplicationWindow {
                     gaps: player.timelineGaps
                     coverage: player.gpsCoverage
                     onSeekRequested: function(fraction) { player.seekFraction(fraction) }
+                    onScrubStarted: player.beginScrub()
+                    onScrubFinished: player.endScrub()
                 }
                 Label {
                     text: player.durationText
                     color: "#9fb0bd"
                     font.family: "monospace"
+                }
+                DarkButton {
+                    text: !player.hasAudio ? "No audio" : player.audioMuted ? "Unmute" : "Mute"
+                    implicitWidth: 80
+                    enabled: player.hasAudio
+                    onClicked: player.audioMuted = !player.audioMuted
                 }
             }
             RowLayout {

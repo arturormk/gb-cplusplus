@@ -43,7 +43,8 @@ and the Qt OpenGL module headers are not part of the supported dependency set.
    not interpolate positions. The metadata panel parses the `gpmd` sample covering the displayed
    frame and flags unknown keys.
 7. There is no audio clock in this baseline. Audio decoding, output, and audio-master sync are
-   deferred.
+   deferred. (Superseded by [ADR-0008](0008-player-audio-and-stable-playback-gating.md), which adds
+   audio, an audio-master clock and stable-playback gating, and makes SDL2 a dependency.)
 
 ## Consequences
 

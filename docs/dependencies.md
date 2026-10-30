@@ -10,6 +10,7 @@ The supported baseline is Ubuntu 22.04 or newer with:
 - pkg-config; and
 - FFmpeg 4.4+ development/runtime packages providing libavformat 58+, libavcodec 58+, libavutil
   56+, and libswscale 5+; and
+- SDL 2.0.10+ development package (`libsdl2-dev`), used by `gb-player` for audio output only; and
 - Qt 6.2+ development packages providing Core, Gui, QML, Quick, Widgets, and Shader Tools, plus
   the Qt Quick Controls/QML runtime modules used by `gb-project`; and
 - the C++ standard library supplied with the compiler.
@@ -19,7 +20,7 @@ Exact Ubuntu packages:
 ```sh
 sudo apt update
 sudo apt install build-essential cmake ninja-build pkg-config ffmpeg \
-  libavformat-dev libavcodec-dev libavutil-dev libswscale-dev \
+  libavformat-dev libavcodec-dev libavutil-dev libswscale-dev libsdl2-dev \
   qt6-base-dev qt6-declarative-dev libqt6shadertools6-dev qt6-shader-baker \
   qml6-module-qtqml qml6-module-qtqml-models qml6-module-qtqml-workerscript \
   qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts \
@@ -28,7 +29,8 @@ sudo apt install build-essential cmake ninja-build pkg-config ffmpeg \
 
 The build has no downloaded dependencies. The terminal tools dynamically use the packaged FFmpeg
 libraries. `gb-project` and `gb-player` also use the packaged Qt 6 libraries and QML modules.
-M4 adds no packages. `gb-player` issues OpenGL calls through `QOpenGLExtraFunctions` from Qt GUI
+The M4 video baseline added no packages. M4 audio adds SDL2: `gb-player` uses only its audio
+subsystem, with signal handlers disabled. SDL2 is zlib-licensed. `gb-player` issues OpenGL calls through `QOpenGLExtraFunctions` from Qt GUI
 and does not need the Qt OpenGL module. At runtime it needs an OpenGL 3.3 or OpenGL ES 3.0 driver
 to display video; the Mesa drivers in Ubuntu 22.04 provide this.
 The versions above match the initial verified development environment; CI should continuously

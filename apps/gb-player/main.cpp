@@ -54,15 +54,19 @@ void help() {
          "  --play                start playing after opening\n"
          "  --decoder-threads N   decoder threads per stream, 0 = automatic (default 0)\n"
          "  --queue N             decoded frame sets buffered ahead, 1..32 (default 4)\n"
-         "  --benchmark SECONDS   play for SECONDS, run random seeks, print a\n"
-         "                        gb.player.benchmark/v1 JSON report, and exit\n"
+         "  --no-audio            do not open an audio device\n"
+         "  --benchmark SECONDS   play for SECONDS, check that scrubbing and seeking stay\n"
+         "                        silent, run random seeks, print a gb.player.benchmark/v1\n"
+         "                        JSON report, and exit\n"
          "  --seeks N             benchmark seek count (default 10)\n"
          "  --seed N              benchmark seek seed (default 1)\n"
          "  --screenshot PATH     save a window screenshot after the first frame, then exit\n"
          "  --help                show this help and exit\n"
          "  --version             show the program version and exit\n\n"
-         "Keys: Space play/pause, Left/Right seek 5 s, ,/. step one frame, F full screen,\n"
-         "R reset view, 1-8 select view mode.\n";
+         "Keys: Space play/pause, Left/Right seek 5 s, ,/. step one frame, M mute,\n"
+         "F full screen, R reset view, 1-8 select view mode.\n\n"
+         "Audio plays only during stable playback. It is silent while paused, while the\n"
+         "timeline is dragged, while a seek is decoding, and for 250 ms after each seek.\n";
 }
 
 double parseNumber(const std::string_view text, const char *what) {
@@ -107,6 +111,8 @@ Options parse(const int argc, char **argv) {
       options.player.decoder_threads = parseInteger(value(), "decoder thread count", 0, 64);
     } else if (argument == "--queue") {
       options.player.queue_capacity = static_cast<std::size_t>(parseInteger(value(), "queue size", 1, 32));
+    } else if (argument == "--no-audio") {
+      options.player.audio = false;
     } else if (argument == "--benchmark") {
       BenchmarkOptions benchmark;
       benchmark.play_seconds = parseNumber(value(), "benchmark duration");
@@ -248,7 +254,8 @@ int main(int argc, char **argv) {
         }
         std::cout << "gb-player smoke: layout=" << (controller.sourceLayout() == 1 ? "max_dual_eac" : "flat")
                   << " streams=" << current.frames->pictures.size() << " pts=" << current.frames->pts
-                  << " telemetry=" << controller.telemetryState().toStdString() << '\n';
+                  << " telemetry=" << controller.telemetryState().toStdString()
+                  << " audio=" << (controller.hasAudio() ? "open" : "none") << '\n';
         application.quit();
       });
     }

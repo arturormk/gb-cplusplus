@@ -1,6 +1,5 @@
 #pragma once
 
-#include <QElapsedTimer>
 #include <QObject>
 #include <QString>
 #include <QTimer>
@@ -24,6 +23,9 @@ struct PlaybackLayout;
 struct Rational;
 class SynchronizedReader;
 } // namespace gb::media
+
+class AudioOutput;
+struct AudioStatistics;
 
 struct PresentedFrame {
   std::shared_ptr<const gb::media::FrameSet> frames;
@@ -52,8 +54,10 @@ struct PlaybackStatistics {
   std::string renderer;
 };
 
-// Owns a decode worker and presents frame sets against a monotonic wall clock. There is no audio
-// clock yet; late frames are skipped rather than slowing the timeline.
+// Owns a decode worker and presents frame sets against a monotonic clock. Late frames are skipped
+// rather than slowing the timeline. Audio is heard only during stable playback: playing, not
+// scrubbing, no seek in flight, and settled for a short hold after the last seek. While audio is
+// heard, its device position is the master clock; otherwise the wall clock continues from it.
 class PlaybackEngine final : public QObject {
   Q_OBJECT
 
@@ -62,15 +66,26 @@ public:
   ~PlaybackEngine() override;
 
   void open(const std::string &path, const gb::media::PlaybackLayout &layout,
-            int decoder_threads, std::size_t queue_capacity, std::int64_t start_ticks);
+            int decoder_threads, std::size_t queue_capacity, std::int64_t start_ticks,
+            std::optional<int> audio_stream, const std::string &application_name);
   void close();
   void play();
   void pause();
   void seek(std::int64_t ticks);
+  // While scrubbing, seeks are shown as they complete, the clock holds, and audio is silent.
+  void setScrubbing(bool scrubbing);
+  void setAudioMuted(bool muted);
 
   [[nodiscard]] bool isOpen() const noexcept;
   [[nodiscard]] bool playing() const noexcept;
   [[nodiscard]] bool seeking() const;
+  [[nodiscard]] bool scrubbing() const noexcept { return scrubbing_; }
+  [[nodiscard]] bool hasAudio() const noexcept { return audio_ != nullptr; }
+  [[nodiscard]] bool audioMuted() const noexcept { return audio_muted_; }
+  [[nodiscard]] QString audioError() const { return audio_error_; }
+  // Why audio is or is not heard right now, for diagnostics.
+  [[nodiscard]] QString audioState() const;
+  [[nodiscard]] AudioStatistics audioStatistics() const;
   [[nodiscard]] std::int64_t positionTicks() const;
   [[nodiscard]] std::int64_t frameDurationTicks() const;
   [[nodiscard]] std::int64_t durationTicks() const noexcept;
@@ -97,6 +112,7 @@ signals:
   void seekPresented(double latency_ms);
   void seekRendered(double latency_ms);
   void endReached();
+  void audioChanged();
 
 private:
   struct QueuedSet {
@@ -108,6 +124,10 @@ private:
   void tick(bool from_frame = false);
   void present(QueuedSet item);
   [[nodiscard]] std::int64_t clockTicks() const;
+  void rebaseClock(std::int64_t ticks, std::chrono::steady_clock::time_point at);
+  void syncClockToAudio();
+  void updateAudio(bool seek_pending);
+  void disengageAudio();
   void stopWorker();
 
   std::unique_ptr<gb::media::SynchronizedReader> reader_;
@@ -130,9 +150,16 @@ private:
   PresentedFrame current_;
 
   QTimer timer_;
-  QElapsedTimer clock_;
+  std::chrono::steady_clock::time_point clock_origin_;
   std::int64_t clock_base_ticks_{};
   bool playing_{};
+  bool scrubbing_{};
+
+  std::unique_ptr<AudioOutput> audio_;
+  QString audio_error_;
+  bool audio_engaged_{};
+  bool audio_muted_{};
+  std::chrono::steady_clock::time_point audio_hold_until_;
   bool frame_driven_{};
   bool awaiting_seek_{};
   bool in_underrun_{};
