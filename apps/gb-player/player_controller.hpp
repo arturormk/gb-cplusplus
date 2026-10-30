@@ -70,6 +70,7 @@ class PlayerController final : public QObject {
   Q_PROPERTY(QString mapAttribution READ mapAttribution CONSTANT)
   Q_PROPERTY(QString mapAttributionUrl READ mapAttributionUrl CONSTANT)
   Q_PROPERTY(QString mapProviderName READ mapProviderName CONSTANT)
+  Q_PROPERTY(bool exportingTrack READ exportingTrack NOTIFY trackExportChanged)
 
 public:
   explicit PlayerController(PlayerOptions options, QObject *parent = nullptr);
@@ -128,6 +129,7 @@ public:
   [[nodiscard]] QString mapAttribution() const;
   [[nodiscard]] QString mapAttributionUrl() const;
   [[nodiscard]] QString mapProviderName() const;
+  [[nodiscard]] bool exportingTrack() const { return exporter_.joinable(); }
 
   Q_INVOKABLE void openDialog();
   Q_INVOKABLE bool open(const QString &path, double start_seconds = 0.0);
@@ -146,6 +148,9 @@ public:
   // each {ticks, timeText, distanceMetres, record, nearestToNow}. ticks are video ticks.
   Q_INVOKABLE QVariantList routeCandidates(double latitude, double longitude, double toleranceMetres) const;
   Q_INVOKABLE void seekTicks(double ticks);
+  // Asks for a format and file, then writes the GPS track of every chapter of the open recording,
+  // in chapter order, in the background. The result is reported in the status line.
+  Q_INVOKABLE void exportTrackDialog();
 
 signals:
   void fileChanged();
@@ -161,12 +166,14 @@ signals:
   void audioChanged();
   void mapRouteChanged();
   void mapPositionChanged();
+  void trackExportChanged();
 
 private:
   struct LoadedMetadata;
   struct Source;
 
   void setStatus(const QString &message, bool error = false);
+  void finishTrackExport(const QString &message, bool error);
   void onEndReached();
   void startMetadataLoad(const std::string &path);
   void applyMetadata(std::uint64_t generation, std::shared_ptr<LoadedMetadata> loaded);
@@ -217,4 +224,8 @@ private:
   std::optional<double> map_course_;
   QString map_state_{QStringLiteral("nomedia")};
   QString map_message_{QStringLiteral("Open a recording to see its GPS route")};
+
+  std::thread exporter_;
+  QString export_directory_;
+  QString export_filter_;
 };

@@ -302,38 +302,112 @@ ApplicationWindow {
                                 ColumnLayout {
                                     anchors.fill: parent
                                     spacing: -1  // the selected tab overlaps the frame's top border
-                                    TabBar {
-                                        id: profileTabs
+                                    RowLayout {
+                                        Layout.fillWidth: true
                                         z: 1
-                                        spacing: 2
-                                        background: Item {}
-                                        Repeater {
-                                            model: ["Height", "Speed"]
-                                            TabButton {
-                                                readonly property bool selected: profileTabs.currentIndex === index
-                                                text: modelData
-                                                width: 80
-                                                implicitHeight: 26
-                                                contentItem: Text {
-                                                    text: parent.text
-                                                    color: parent.selected ? "#61dc97" : "#9fb0bd"
-                                                    font.bold: parent.selected
-                                                    horizontalAlignment: Text.AlignHCenter
-                                                    verticalAlignment: Text.AlignVCenter
+                                        spacing: 6
+                                        TabBar {
+                                            id: profileTabs
+                                            spacing: 2
+                                            background: Item {}
+                                            Repeater {
+                                                model: ["Height", "Speed"]
+                                                TabButton {
+                                                    readonly property bool selected: profileTabs.currentIndex === index
+                                                    text: modelData
+                                                    width: 80
+                                                    implicitHeight: 26
+                                                    contentItem: Text {
+                                                        text: parent.text
+                                                        color: parent.selected ? "#61dc97" : "#9fb0bd"
+                                                        font.bold: parent.selected
+                                                        horizontalAlignment: Text.AlignHCenter
+                                                        verticalAlignment: Text.AlignVCenter
+                                                    }
+                                                    background: Rectangle {
+                                                        color: parent.selected ? "#121a21" : "#0d1419"
+                                                        border.color: "#26343f"
+                                                        // Open towards the graph: hide the bottom border when selected.
+                                                        Rectangle {
+                                                            visible: parent.parent.selected
+                                                            anchors.left: parent.left
+                                                            anchors.right: parent.right
+                                                            anchors.bottom: parent.bottom
+                                                            anchors.margins: 1
+                                                            anchors.bottomMargin: 0
+                                                            height: 1
+                                                            color: parent.color
+                                                        }
+                                                    }
                                                 }
-                                                background: Rectangle {
-                                                    color: parent.selected ? "#121a21" : "#0d1419"
-                                                    border.color: "#26343f"
-                                                    // Open towards the graph: hide the bottom border when selected.
-                                                    Rectangle {
-                                                        visible: parent.parent.selected
-                                                        anchors.left: parent.left
-                                                        anchors.right: parent.right
-                                                        anchors.bottom: parent.bottom
-                                                        anchors.margins: 1
-                                                        anchors.bottomMargin: 0
-                                                        height: 1
-                                                        color: parent.color
+                                            }
+                                        }
+                                        Item { Layout.fillWidth: true }
+                                        // Export the GPS track of the whole recording (every chapter).
+                                        Button {
+                                            id: exportButton
+                                            enabled: !player.exportingTrack
+                                            implicitWidth: 24
+                                            implicitHeight: 24
+                                            padding: 0
+                                            Layout.bottomMargin: 3
+                                            hoverEnabled: true
+                                            ToolTip.visible: hovered
+                                            ToolTip.delay: 400
+                                            ToolTip.text: player.exportingTrack ? "Exporting GPS track…"
+                                                          : player.sequenceNames.length > 1
+                                                            ? "Export GPS track of all " + player.sequenceNames.length + " chapters…"
+                                                            : "Export GPS track…"
+                                            onClicked: player.exportTrackDialog()
+                                            background: Rectangle {
+                                                radius: 3
+                                                color: exportButton.down ? "#174b6b" : exportButton.hovered ? "#1b2833" : "#0d1419"
+                                                border.color: exportButton.hovered ? "#4b94ba" : "#26343f"
+                                            }
+                                            contentItem: Item {
+                                                // Arrow into a tray, drawn so it needs no icon font.
+                                                Canvas {
+                                                    anchors.fill: parent
+                                                    visible: !player.exportingTrack
+                                                    readonly property color ink: exportButton.hovered ? "#61dc97" : "#9fb0bd"
+                                                    onInkChanged: requestPaint()
+                                                    onPaint: {
+                                                        var context = getContext("2d")
+                                                        context.reset()
+                                                        context.strokeStyle = ink
+                                                        context.lineWidth = 1.5
+                                                        context.lineCap = "round"
+                                                        context.lineJoin = "round"
+                                                        var cx = width / 2
+                                                        context.beginPath()
+                                                        context.moveTo(cx, 5); context.lineTo(cx, 14)
+                                                        context.moveTo(cx - 4, 10); context.lineTo(cx, 14); context.lineTo(cx + 4, 10)
+                                                        context.moveTo(cx - 7, 15); context.lineTo(cx - 7, 18)
+                                                        context.lineTo(cx + 7, 18); context.lineTo(cx + 7, 15)
+                                                        context.stroke()
+                                                    }
+                                                }
+                                                // Spinner while the export runs: a three-quarter arc turning once a second.
+                                                Canvas {
+                                                    id: exportSpinner
+                                                    anchors.fill: parent
+                                                    visible: player.exportingTrack
+                                                    onPaint: {
+                                                        var context = getContext("2d")
+                                                        context.reset()
+                                                        context.strokeStyle = "#61dc97"
+                                                        context.lineWidth = 2
+                                                        context.lineCap = "round"
+                                                        context.beginPath()
+                                                        context.arc(width / 2, height / 2, 6.5, 0, 1.5 * Math.PI)
+                                                        context.stroke()
+                                                    }
+                                                    RotationAnimator on rotation {
+                                                        running: exportSpinner.visible
+                                                        from: 0
+                                                        to: 360
+                                                        duration: 1000
+                                                        loops: Animation.Infinite
                                                     }
                                                 }
                                             }

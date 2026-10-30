@@ -6,16 +6,23 @@
 #include "gb/media/chapters.hpp"
 #include "gb/media/playback.hpp"
 #include "gb/metadata/gpmf.hpp"
+#include "gb/telemetry/export.hpp"
 #include "gb/telemetry/telemetry.hpp"
 
+#include <QDir>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QSaveFile>
 #include <QThread>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <exception>
+#include <filesystem>
 #include <limits>
+#include <sstream>
+#include <stdexcept>
 #include <utility>
 
 #ifndef GB_PLAYER_DISPLAY_NAME
@@ -137,6 +144,23 @@ void flatten(const std::vector<gb::metadata::GpmfElement> &elements, const int d
   }
 }
 
+struct TrackFormat {
+  const char *filter;
+  gb::telemetry::ExportFormat format;
+};
+
+// Save-dialog choices, most widely used first.
+constexpr std::array kTrackFormats{
+    TrackFormat{"GPX track (*.gpx)", gb::telemetry::ExportFormat::gpx},
+    TrackFormat{"GeoJSON points (*.geojson)", gb::telemetry::ExportFormat::geojson},
+    TrackFormat{"CSV records (*.csv)", gb::telemetry::ExportFormat::csv},
+    TrackFormat{"gb-telemetry JSON (*.json)", gb::telemetry::ExportFormat::json}};
+
+QString trackExtension(const gb::telemetry::ExportFormat format) {
+  const auto extension = gb::telemetry::export_format_extension(format);
+  return QString::fromLatin1(extension.data(), static_cast<qsizetype>(extension.size()));
+}
+
 double percentile(std::vector<double> values, const double fraction) {
   if (values.empty()) return 0.0;
   std::sort(values.begin(), values.end());
@@ -167,6 +191,7 @@ PlayerController::PlayerController(PlayerOptions options, QObject *parent)
 PlayerController::~PlayerController() {
   engine_.close();
   if (loader_.joinable()) loader_.join();
+  if (exporter_.joinable()) exporter_.join();
 }
 
 QString PlayerController::displayName() const { return QStringLiteral(GB_PLAYER_DISPLAY_NAME); }
@@ -575,6 +600,101 @@ void PlayerController::seekTicks(const double ticks) {
   if (!engine_.isOpen() || !std::isfinite(ticks)) return;
   const auto last = std::max<std::int64_t>(0, engine_.durationTicks() - 1);
   engine_.seek(std::clamp<std::int64_t>(std::llround(ticks), 0, last));
+}
+
+void PlayerController::exportTrackDialog() {
+  if (exportingTrack() || input_path_.isEmpty()) return;
+  const auto chapters = sequence_paths_.isEmpty() ? QStringList{input_path_} : sequence_paths_;
+  QStringList filters;
+  for (const auto &choice : kTrackFormats) filters.push_back(QString::fromLatin1(choice.filter));
+  const auto chosenFormat = [&filters](const QString &filter) {
+    return kTrackFormats[static_cast<std::size_t>(std::max<qsizetype>(0, filters.indexOf(filter)))].format;
+  };
+  if (!filters.contains(export_filter_)) export_filter_ = filters.front();
+
+  const QFileInfo first(chapters.front());
+  QFileDialog dialog(nullptr, chapters.size() > 1
+                                  ? QStringLiteral("Export GPS track of %1 chapters").arg(chapters.size())
+                                  : QStringLiteral("Export GPS track"));
+  dialog.setAcceptMode(QFileDialog::AcceptSave);
+  dialog.setFileMode(QFileDialog::AnyFile);
+  dialog.setNameFilters(filters);
+  dialog.selectNameFilter(export_filter_);
+  dialog.setDefaultSuffix(trackExtension(chosenFormat(export_filter_)));
+  dialog.setDirectory(export_directory_.isEmpty() ? first.absolutePath() : export_directory_);
+  dialog.selectFile(first.completeBaseName() + QLatin1Char('.') + trackExtension(chosenFormat(export_filter_)));
+  connect(&dialog, &QFileDialog::filterSelected, &dialog,
+          [&dialog, &chosenFormat](const QString &filter) {
+            dialog.setDefaultSuffix(trackExtension(chosenFormat(filter)));
+          });
+  if (dialog.exec() != QDialog::Accepted || dialog.selectedFiles().isEmpty()) return;
+
+  const auto target = QFileInfo(dialog.selectedFiles().front()).absoluteFilePath();
+  export_filter_ = dialog.selectedNameFilter();
+  export_directory_ = QFileInfo(target).absolutePath();
+  // A typed known extension decides the format; otherwise the chosen file type does.
+  auto format = gb::telemetry::parse_export_format(QFileInfo(target).suffix().toLower().toStdString());
+  if (!format.has_value()) format = chosenFormat(export_filter_);
+  for (const auto &chapter : chapters) {
+    if (QFileInfo(chapter).canonicalFilePath() == QFileInfo(target).canonicalFilePath()) {
+      setStatus(QStringLiteral("Refusing to overwrite the recording %1").arg(QFileInfo(chapter).fileName()), true);
+      return;
+    }
+  }
+
+  // The open chapter's GPS records are already extracted; the others are read in the background.
+  std::optional<gb::telemetry::Extraction> loaded;
+  if (metadata_ && metadata_->telemetry.has_value()) loaded = metadata_->telemetry;
+  std::vector<std::filesystem::path> paths;
+  for (const auto &chapter : chapters) paths.emplace_back(chapter.toStdString());
+  const auto loaded_path = input_path_.toStdString();
+  setStatus(QStringLiteral("Exporting GPS track to %1…").arg(QDir::toNativeSeparators(target)));
+  exporter_ = std::thread([this, paths, loaded = std::move(loaded), loaded_path, target, format = *format] {
+    QThread::currentThread()->setPriority(QThread::LowPriority);
+    QString message;
+    auto error = false;
+    std::vector<gb::telemetry::ExportSource> sources;
+    std::size_t records{};
+    const auto keeps_invalid = format == gb::telemetry::ExportFormat::json || format == gb::telemetry::ExportFormat::csv;
+    try {
+      for (const auto &path : paths) {
+        try {
+          auto extraction = loaded.has_value() && path == loaded_path ? *loaded : gb::telemetry::extract(path);
+          for (const auto &point : extraction.gps) {
+            if (keeps_invalid || point.validity == gb::telemetry::Validity::valid) ++records;
+          }
+          sources.push_back({path, std::move(extraction)});
+        } catch (const std::exception &failure) {
+          throw std::runtime_error(path.filename().string() + ": " + failure.what());
+        }
+      }
+      std::ostringstream document;
+      gb::telemetry::write_export(document, sources, {format, false});
+      const auto bytes = std::move(document).str();
+      QSaveFile file(target);
+      if (!file.open(QIODevice::WriteOnly) ||
+          file.write(bytes.data(), static_cast<qint64>(bytes.size())) != static_cast<qint64>(bytes.size()) ||
+          !file.commit()) {
+        throw std::runtime_error(file.errorString().toStdString());
+      }
+      message = QStringLiteral("Exported %L1 GPS records%2 to %3")
+                    .arg(records)
+                    .arg(paths.size() > 1U ? QStringLiteral(" from %1 chapters").arg(paths.size()) : QString())
+                    .arg(QDir::toNativeSeparators(target));
+    } catch (const std::exception &failure) {
+      message = QStringLiteral("GPS track export failed: %1").arg(QString::fromUtf8(failure.what()));
+      error = true;
+    }
+    QMetaObject::invokeMethod(this, [this, message, error] { finishTrackExport(message, error); },
+                              Qt::QueuedConnection);
+  });
+  emit trackExportChanged();
+}
+
+void PlayerController::finishTrackExport(const QString &message, const bool error) {
+  if (exporter_.joinable()) exporter_.join();
+  setStatus(message, error);
+  emit trackExportChanged();
 }
 
 void PlayerController::updateGpmfSample() {

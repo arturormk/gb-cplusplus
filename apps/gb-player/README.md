@@ -23,7 +23,8 @@ recordings read-only and plays them without conversion:
   When the opened file is one of several chapters in its folder, the toolbar's file name becomes a
   drop-down listing them in order; choosing one opens it from the start, playing if playback was
   running. When playback reaches the end of a chapter, the next one opens and plays. Each chapter
-  stays a separate file: timeline, telemetry and map cover only the open one.
+  stays a separate file: timeline, telemetry and map cover only the open one (GPS track export
+  covers them all).
 
 ## Use
 
@@ -71,6 +72,12 @@ the requested time. Frame stepping and the timeline both use the first stream's 
   them. Click or drag on the graph to seek. The mouse wheel zooms the time axis around the
   pointer, from the whole recording down to 30 seconds, and dragging with the middle button pans;
   the view never extends past the start or end of the video.
+  The square button at the right of the Height/Speed tabs exports the GPS track as GPX, GeoJSON,
+  CSV or JSON, the formats of `gb-telemetry`: pick the file type and name in the save dialog. For
+  a chaptered recording the export always covers every chapter, in chapter order, in one file; see
+  [`gb-telemetry`](../../tools/gb-telemetry/README.md) for how chapters are represented. GPX and
+  GeoJSON omit records without a valid fix. The export runs in the background and its result is
+  shown in the status line.
 - **Metadata**: file and stream properties, the ISO BMFF track table, and the GPMF tree of the
   `gpmd` sample covering the playback time. Unknown keys are flagged.
 - **Performance**: displayed, presented and decoded rates, dropped frames (late or not drawn),
@@ -143,7 +150,7 @@ the machine they were measured on; see `research/findings/` for recorded runs.
   software backend, decoding, presentation and telemetry still work, but no image is shown.
 - Audio: the first mono or stereo stream plays through SDL2 (`--no-audio` disables it). The MAX
   four-channel spatial track is not rendered. Hardware decoding (VA-API), edit lists,
-  a joined timeline across chapters, photos, and export are not implemented.
+  a joined timeline across chapters, photos, and video export are not implemented.
 - The map is raster only, and tiles can look soft on HiDPI screens. Routes crossing the
   antimeridian are not drawn across it. The tile cache is never pruned automatically.
 - MAX reconstruction requires the verified two-stream geometry. The near-black `BACK` face of the
