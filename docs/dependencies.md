@@ -22,7 +22,7 @@ Exact Ubuntu packages:
 sudo apt update
 sudo apt install build-essential cmake ninja-build pkg-config ffmpeg \
   libavformat-dev libavcodec-dev libavutil-dev libswscale-dev libsdl2-dev \
-  qt6-base-dev qt6-declarative-dev libqt6shadertools6-dev qt6-shader-baker \
+  qt6-base-dev libqt6opengl6-dev qt6-declarative-dev libqt6shadertools6-dev qt6-shader-baker \
   qml6-module-qtqml qml6-module-qtqml-models qml6-module-qtqml-workerscript \
   qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts \
   qml6-module-qtquick-nativestyle qml6-module-qtquick-templates qml6-module-qtquick-window
