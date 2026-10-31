@@ -5,8 +5,6 @@ pkg_check_modules(GB_SDL2 REQUIRED IMPORTED_TARGET sdl2>=2.0.10)
 
 set(GB_PLAYER_DISPLAY_NAME "GoBro" CACHE STRING
   "Replaceable user-facing display name for gb-player")
-set(GB_MAP_CONTACT "" CACHE STRING
-  "Optional contact (URL or e-mail) appended to the map tile User-Agent")
 
 qt_add_executable(gb_player
   audio_output.cpp
@@ -47,7 +45,6 @@ target_link_libraries(gb_player PRIVATE
   Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::Widgets PkgConfig::GB_SDL2)
 target_compile_definitions(gb_player PRIVATE
   GB_PLAYER_VERSION="${PROJECT_VERSION}"
-  GB_PLAYER_DISPLAY_NAME="${GB_PLAYER_DISPLAY_NAME}"
-  GB_MAP_CONTACT="${GB_MAP_CONTACT}")
+  GB_PLAYER_DISPLAY_NAME="${GB_PLAYER_DISPLAY_NAME}")
 
 install(TARGETS gb_player RUNTIME DESTINATION bin)

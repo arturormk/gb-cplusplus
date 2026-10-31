@@ -226,7 +226,7 @@ PlayerController::PlayerController(PlayerOptions options, QObject *parent)
   diagnostics_timer_.setInterval(1000);
   connect(&diagnostics_timer_, &QTimer::timeout, this, &PlayerController::updateDiagnostics);
   if (options_.map_tiles.user_agent.isEmpty()) {
-    options_.map_tiles.user_agent = QStringLiteral("gb-player/%1").arg(QStringLiteral(GB_PLAYER_VERSION));
+    options_.map_tiles.user_agent = gb::tiles::application_user_agent("gb-player", GB_PLAYER_VERSION);
   }
   tiles_ = new gb::tiles::TileFetcher(options_.map_provider, options_.map_tiles, this);
 }

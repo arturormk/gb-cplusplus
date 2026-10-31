@@ -65,8 +65,11 @@ The [OSM tile usage policy](https://operations.osmfoundation.org/policies/tiles/
    viewed to the provider, but never the recording or its GPS track. The help text and README say
    so. No request is made for a recording without a valid fix. The smoke test forces network off
    and a memory-only cache. Library and command-line tools make no requests.
-7. **User-Agent** is `gb-player/<version> (gb-cplusplus[; contact])`. The optional contact comes
-   from the `GB_MAP_CONTACT` CMake cache variable, so the product name stays stable.
+7. **User-Agent** is `<application>/<version> (gb-cplusplus[; contact])`, for example
+   `gb-player/0.1.N (gb-cplusplus)`. The optional contact comes from the `GB_MAP_CONTACT` CMake
+   cache variable, so the product name stays stable. `gb::tiles::application_fetcher_options()`
+   builds this User-Agent and resolves the cache root (`--map-cache` or the default), so every
+   tool that fetches tiles shares the cache and identifies itself the same way.
 8. **Route and marker policy follows the telemetry panel.**
    - The route is one point per `GPS5` record, and only valid fixes are drawn. Each run of valid
      records is a separate polyline, so an invalid stretch is a visible break rather than a

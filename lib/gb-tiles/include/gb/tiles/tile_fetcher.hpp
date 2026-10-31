@@ -13,6 +13,7 @@
 #include <map>
 #include <optional>
 #include <set>
+#include <string_view>
 #include <vector>
 
 class QNetworkAccessManager;
@@ -29,6 +30,19 @@ struct FetcherOptions {
   QString user_agent;
   int transfer_timeout_ms{15000};
 };
+
+// User-Agent for an application in this project: "<application>/<version> (gb-cplusplus[; contact])".
+// The contact comes from the GB_MAP_CONTACT CMake cache variable. The tile usage policy requires a
+// stable name for the application, so every tool passes its own executable name here. Throws
+// std::invalid_argument for an empty name or version, or one containing whitespace, '/' or '()'.
+[[nodiscard]] QString application_user_agent(std::string_view application, std::string_view version);
+
+// Options for an application that shows interactive maps: network enabled, the given cache
+// directory or else geo::default_tile_cache_root(), and application_user_agent(). Any tool that
+// needs map tiles should start from these instead of assembling its own.
+[[nodiscard]] FetcherOptions application_fetcher_options(
+    std::string_view application, std::string_view version,
+    std::optional<std::filesystem::path> cache_root = std::nullopt);
 
 struct FetcherStatistics {
   std::uint64_t cache_fresh{};      // served from disk without a request

@@ -5,6 +5,7 @@
 #include "video_view.hpp"
 
 #include "gb/media/playback.hpp"
+#include "gb/tiles/tile_fetcher.hpp"
 
 #include <QApplication>
 #include <QQmlApplicationEngine>
@@ -183,13 +184,8 @@ Options parse(const int argc, char **argv) {
     throw std::runtime_error("--benchmark and --screenshot require an input file");
   }
   options.player.map_provider = *gb::geo::find_provider(options.map_provider);
+  options.player.map_tiles = gb::tiles::application_fetcher_options("gb-player", GB_PLAYER_VERSION, options.map_cache);
   options.player.map_tiles.network = options.map_network;
-  options.player.map_tiles.cache_root = options.map_cache.has_value() ? options.map_cache : gb::geo::default_tile_cache_root();
-  // Tile servers require a stable User-Agent naming the application (OSM tile usage policy).
-  std::string agent = "gb-player/" GB_PLAYER_VERSION " (gb-cplusplus";
-  if (const std::string contact = GB_MAP_CONTACT; !contact.empty()) agent += "; " + contact;
-  agent += ")";
-  options.player.map_tiles.user_agent = QString::fromStdString(agent);
   if (options.smoke_test) {
     // Tests never touch the network or the user's cache.
     options.player.map_tiles.network = false;

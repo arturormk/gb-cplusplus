@@ -9,6 +9,8 @@
 
 #include <algorithm>
 #include <exception>
+#include <stdexcept>
+#include <string>
 #include <span>
 #include <utility>
 
@@ -31,7 +33,33 @@ std::span<const std::uint8_t> bytes_of(const QByteArray &data) {
   return {reinterpret_cast<const std::uint8_t *>(data.constData()), static_cast<std::size_t>(data.size())};
 }
 
+void check_product_token(const std::string_view value, const char *what) {
+  const bool bad = value.empty() || std::any_of(value.begin(), value.end(), [](const char c) {
+    return c == '/' || c == '(' || c == ')' || static_cast<unsigned char>(c) <= ' ' ||
+           static_cast<unsigned char>(c) >= 0x7F;
+  });
+  if (bad) throw std::invalid_argument(std::string("invalid User-Agent ") + what);
+}
+
 } // namespace
+
+QString application_user_agent(const std::string_view application, const std::string_view version) {
+  check_product_token(application, "application name");
+  check_product_token(version, "version");
+  std::string agent = std::string(application) + "/" + std::string(version) + " (gb-cplusplus";
+  if (const std::string_view contact = GB_MAP_CONTACT; !contact.empty()) agent += "; " + std::string(contact);
+  agent += ")";
+  return QString::fromStdString(agent);
+}
+
+FetcherOptions application_fetcher_options(const std::string_view application, const std::string_view version,
+                                           std::optional<std::filesystem::path> cache_root) {
+  FetcherOptions options;
+  options.network = true;
+  options.cache_root = cache_root.has_value() ? std::move(cache_root) : geo::default_tile_cache_root();
+  options.user_agent = application_user_agent(application, version);
+  return options;
+}
 
 TileFetcher::TileFetcher(geo::TileProvider provider, FetcherOptions options, QObject *parent)
     : QObject(parent), provider_(std::move(provider)), options_(std::move(options)) {

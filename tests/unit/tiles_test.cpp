@@ -14,6 +14,7 @@
 #include <functional>
 #include <iostream>
 #include <map>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -135,6 +136,26 @@ int main(int argc, char **argv) {
   const auto root = std::filesystem::temp_directory_path() /
                     ("gb-tiles-test-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
   try {
+    // 0. Applications share one way to name themselves and find the cache.
+    {
+      const auto agent = gb::tiles::application_user_agent("gb-tool", "1.2.3").toStdString();
+      check(agent.starts_with("gb-tool/1.2.3 (gb-cplusplus") && agent.ends_with(")"), "application User-Agent");
+      for (const auto *bad : {"", "gb tool", "gb/tool", "gb(tool)"}) {
+        bool threw = false;
+        try {
+          (void)gb::tiles::application_user_agent(bad, "1");
+        } catch (const std::invalid_argument &) {
+          threw = true;
+        }
+        check(threw, "malformed application name rejected");
+      }
+      const auto explicit_root = gb::tiles::application_fetcher_options("gb-tool", "1", root);
+      check(explicit_root.network && explicit_root.cache_root == root, "explicit cache root kept");
+      check(explicit_root.user_agent == gb::tiles::application_user_agent("gb-tool", "1"), "options carry the agent");
+      const auto default_root = gb::tiles::application_fetcher_options("gb-tool", "1");
+      check(default_root.cache_root == gb::geo::default_tile_cache_root(), "default cache root shared");
+    }
+
     TileServer server;
     auto provider = gb::geo::openstreetmap_provider();
     provider.id = "local";
