@@ -14,6 +14,14 @@ format evidence before shared functionality moves into the player.
   ctest --preset dev
   ```
 
+- Format C++ sources with clang-format 15 (`sudo apt-get install clang-format-15`). The
+  rules are in `.clang-format`; the version is pinned because releases format differently.
+
+  ```sh
+  scripts/format.sh          # rewrite in place
+  scripts/format.sh --check  # report only
+  ```
+
 - Add synthetic or legally distributable tests for binary behavior. Keep source media
   (`.360`, `.mp4`, `.jpg`, …) and generated outputs out of Git.
 - Record new format findings under `research/findings/`. Include the commands, file

@@ -7,24 +7,31 @@ readonly SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 readonly PRESET="dev"
 readonly BUILD_DIR="${SCRIPT_DIR}/build/${PRESET}"
 readonly INSTALL_DIR="${BUILD_DIR}/install"
+# Pinned so every machine formats identically; keep in step with scripts/format.sh.
+readonly CLANG_FORMAT="clang-format-15"
 
 install_dependencies=true
 run_tests=true
+check_format=true
 
 usage() {
   cat <<'EOF'
 Usage: ./quickstart.sh [options]
 
-Configure, build, test, and locally install gb-cplusplus.
+Configure, build, test, and locally install gb-cplusplus, then check that the
+C++ sources are formatted.
 
 Options:
   --no-install-deps  Do not try to install missing Ubuntu packages
   --skip-tests       Build without running the test suite
+  --skip-format      Do not check C++ formatting
   -h, --help         Show this help and exit
 
 Missing build tools are installed with apt-get when it is available. The script
 uses sudo when needed and may prompt for the user's password. Build products stay
-inside build/dev; no project executable is installed system-wide.
+inside build/dev; no project executable is installed system-wide. A formatting
+problem is reported as a warning and does not fail the build; fix it with
+scripts/format.sh.
 EOF
 }
 
@@ -35,6 +42,9 @@ while (($# > 0)); do
       ;;
     --skip-tests)
       run_tests=false
+      ;;
+    --skip-format)
+      check_format=false
       ;;
     -h | --help)
       usage
@@ -55,6 +65,9 @@ command -v cmake >/dev/null 2>&1 || missing_packages+=(cmake)
 command -v ninja >/dev/null 2>&1 || missing_packages+=(ninja-build)
 command -v pkg-config >/dev/null 2>&1 || missing_packages+=(pkg-config)
 command -v ffmpeg >/dev/null 2>&1 || missing_packages+=(ffmpeg)
+if [[ "${check_format}" == true ]]; then
+  command -v "${CLANG_FORMAT}" >/dev/null 2>&1 || missing_packages+=("${CLANG_FORMAT}")
+fi
 if ! command -v pkg-config >/dev/null 2>&1 ||
    ! pkg-config --exists libavformat libavcodec libavutil libswscale; then
   missing_packages+=(libavformat-dev libavcodec-dev libavutil-dev libswscale-dev)
@@ -83,7 +96,7 @@ if ((${#missing_packages[@]} > 0)); then
   fi
   if ! command -v apt-get >/dev/null 2>&1; then
     printf 'Automatic installation currently supports apt-get-based systems only.\n' >&2
-    printf 'Install a C++20 compiler, CMake 3.22+, Ninja 1.10+, pkg-config, FFmpeg development libraries, and Qt 6 development/QML packages, then rerun.\n' >&2
+    printf 'Install a C++20 compiler, CMake 3.22+, Ninja 1.10+, pkg-config, FFmpeg development libraries, Qt 6 development/QML packages, and clang-format 15, then rerun.\n' >&2
     exit 1
   fi
 
@@ -111,6 +124,13 @@ cmake --build --preset "${PRESET}"
 if [[ "${run_tests}" == true ]]; then
   printf 'Running tests...\n'
   ctest --preset "${PRESET}" --output-on-failure
+fi
+
+if [[ "${check_format}" == true ]]; then
+  printf 'Checking C++ formatting...\n'
+  if ! CLANG_FORMAT="${CLANG_FORMAT}" "${SCRIPT_DIR}/scripts/format.sh" --check; then
+    printf 'Warning: formatting check failed (see above); the build itself succeeded.\n' >&2
+  fi
 fi
 
 printf 'Installing user-facing executables locally...\n'
