@@ -104,7 +104,8 @@ public:
 
   // When frame-driven, playback presentation happens from advanceFrame(), called once per
   // scene-graph frame, so every presented frame is synchronized for drawing. The internal timer
-  // still completes seeks and detects the end of the stream.
+  // still completes seeks and detects the end of the stream, and takes over presentation when
+  // scene-graph frames stop arriving (window hidden, screen locked) so video keeps pace with audio.
   void setFrameDriven(bool enabled);
   void advanceFrame();
 
@@ -165,6 +166,7 @@ private:
   bool audio_muted_{};
   std::chrono::steady_clock::time_point audio_hold_until_;
   bool frame_driven_{};
+  std::chrono::steady_clock::time_point last_frame_tick_;
   bool awaiting_seek_{};
   bool in_underrun_{};
   std::chrono::steady_clock::time_point seek_started_;

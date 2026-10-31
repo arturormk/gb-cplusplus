@@ -16,8 +16,8 @@ class PlayerController;
 // wheel, which keeps the time under the pointer fixed; dragging with the middle button pans. The
 // window never extends past the start or end of the video. Pressing the left button seeks to the
 // time under the pointer; dragging scrubs. With smoothed set, each value is the mean over a centred
-// time window, within the stretch of joined records it belongs to. The plot is drawn once per data, size or window change
-// and cached; the cursor is painted over the cached image.
+// time window, within the stretch of joined records it belongs to. The plot is drawn once per
+// data, size or window change and cached; the cursor is painted over the cached image.
 class ProfileView : public QQuickPaintedItem {
   Q_OBJECT
   Q_PROPERTY(QObject *controller READ controller WRITE setController NOTIFY controllerChanged)

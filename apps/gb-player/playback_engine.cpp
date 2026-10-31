@@ -15,6 +15,11 @@ using SteadyClock = std::chrono::steady_clock;
 // repeated clicks never produce fragments of sound between seeks.
 constexpr auto kAudioSettle = std::chrono::milliseconds(250);
 
+// When frame-driven and no scene-graph frame has arrived for this long, the window is not being
+// drawn (hidden, minimized, screen locked) and the timer presents instead. Otherwise the decoder
+// stalls on a full queue while audio runs on, and video has to race to catch up when drawing resumes.
+constexpr auto kFrameStall = std::chrono::milliseconds(100);
+
 double millisecondsSince(const std::chrono::steady_clock::time_point start) {
   return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
 }
@@ -327,7 +332,10 @@ void PlaybackEngine::present(QueuedSet item) {
 
 void PlaybackEngine::setFrameDriven(const bool enabled) { frame_driven_ = enabled; }
 
-void PlaybackEngine::advanceFrame() { tick(true); }
+void PlaybackEngine::advanceFrame() {
+  last_frame_tick_ = SteadyClock::now();
+  tick(true);
+}
 
 void PlaybackEngine::tick(const bool from_frame) {
   bool changed{};
@@ -355,7 +363,8 @@ void PlaybackEngine::tick(const bool from_frame) {
       statistics_.seek_present_ms.push_back(*seek_latency);
       seek_serial_ = serial_;
       seek_render_pending_ = true;
-    } else if (playing_ && !scrubbing_ && (from_frame || !frame_driven_)) {
+    } else if (playing_ && !scrubbing_ &&
+               (from_frame || !frame_driven_ || SteadyClock::now() - last_frame_tick_ > kFrameStall)) {
       const auto now = clockTicks();
       std::optional<QueuedSet> due;
       std::uint64_t late{};
