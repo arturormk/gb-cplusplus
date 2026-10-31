@@ -47,7 +47,8 @@ public:
         connect(socket, &QTcpSocket::disconnected, socket, &QObject::deleteLater);
       }
     });
-    if (!server_.listen(QHostAddress::LocalHost)) throw std::runtime_error("cannot listen");
+    if (!server_.listen(QHostAddress::LocalHost))
+      throw std::runtime_error("cannot listen");
   }
   [[nodiscard]] quint16 port() const { return server_.serverPort(); }
   std::vector<Request> requests;
@@ -58,14 +59,17 @@ private:
     auto &buffer = buffers_[socket];
     buffer += socket->readAll();
     const auto end = buffer.indexOf("\r\n\r\n");
-    if (end < 0) return;
+    if (end < 0)
+      return;
     const auto lines = buffer.left(end).split('\n');
     buffers_.erase(socket);
     Request request;
     request.path = lines.front().split(' ').value(1);
     for (qsizetype index = 1; index < lines.size(); ++index) {
       const auto colon = lines[index].indexOf(':');
-      if (colon > 0) request.headers[lines[index].left(colon).trimmed().toLower()] = lines[index].mid(colon + 1).trimmed();
+      if (colon > 0)
+        request.headers[lines[index].left(colon).trimmed().toLower()] =
+            lines[index].mid(colon + 1).trimmed();
     }
     requests.push_back(request);
     max_concurrent = std::max(max_concurrent, ++open_);
@@ -77,17 +81,23 @@ private:
   }
 
   static QByteArray respond(const Request &request) {
-    const auto reply = [](const QByteArray &status, const QByteArray &headers, const QByteArray &body) {
-      return "HTTP/1.1 " + status + "\r\nConnection: close\r\nContent-Length: " + QByteArray::number(body.size()) +
+    const auto reply = [](const QByteArray &status, const QByteArray &headers,
+                          const QByteArray &body) {
+      return "HTTP/1.1 " + status +
+             "\r\nConnection: close\r\nContent-Length: " + QByteArray::number(body.size()) +
              "\r\n" + headers + "\r\n" + body;
     };
-    if (request.path == "/9/0/0.png") return reply("200 OK", "Content-Type: text/html\r\n", "<html>error</html>");
-    if (request.path == "/10/0/0.png") return reply("429 Too Many Requests", "", "");
+    if (request.path == "/9/0/0.png")
+      return reply("200 OK", "Content-Type: text/html\r\n", "<html>error</html>");
+    if (request.path == "/10/0/0.png")
+      return reply("429 Too Many Requests", "", "");
     const auto match = request.headers.find("if-none-match");
     if (match != request.headers.end() && match->second == "\"v1\"") {
       return reply("304 Not Modified", "Cache-Control: max-age=7200\r\nETag: \"v1\"\r\n", "");
     }
-    return reply("200 OK", "Content-Type: image/png\r\nCache-Control: max-age=3600\r\nETag: \"v1\"\r\n", kPng);
+    return reply("200 OK",
+                 "Content-Type: image/png\r\nCache-Control: max-age=3600\r\nETag: \"v1\"\r\n",
+                 kPng);
   }
 
   QTcpServer server_;
@@ -102,11 +112,14 @@ struct Answers {
 };
 
 void attach(gb::tiles::TileFetcher &fetcher, Answers &answers) {
-  QObject::connect(&fetcher, &gb::tiles::TileFetcher::tileReady, [&answers](int z, int x, int y, const QByteArray &) {
-    answers.ready.push_back({z, x, y});
-  });
+  QObject::connect(&fetcher, &gb::tiles::TileFetcher::tileReady,
+                   [&answers](int z, int x, int y, const QByteArray &) {
+                     answers.ready.push_back({z, x, y});
+                   });
   QObject::connect(&fetcher, &gb::tiles::TileFetcher::tileUnavailable,
-                   [&answers](int z, int x, int y, const QString &reason) { answers.unavailable.push_back({{z, x, y}, reason}); });
+                   [&answers](int z, int x, int y, const QString &reason) {
+                     answers.unavailable.push_back({{z, x, y}, reason});
+                   });
 }
 
 // Runs the event loop until the condition holds or the timeout expires.
@@ -125,7 +138,8 @@ void settle(const int ms) {
 
 std::vector<gb::geo::TileKey> row(const int zoom, const int y, const int count) {
   std::vector<gb::geo::TileKey> keys;
-  for (int x = 0; x < count; ++x) keys.push_back({zoom, x, y});
+  for (int x = 0; x < count; ++x)
+    keys.push_back({zoom, x, y});
   return keys;
 }
 
@@ -134,12 +148,14 @@ std::vector<gb::geo::TileKey> row(const int zoom, const int y, const int count) 
 int main(int argc, char **argv) {
   QCoreApplication application(argc, argv);
   const auto root = std::filesystem::temp_directory_path() /
-                    ("gb-tiles-test-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+                    ("gb-tiles-test-" +
+                     std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
   try {
     // 0. Applications share one way to name themselves and find the cache.
     {
       const auto agent = gb::tiles::application_user_agent("gb-tool", "1.2.3").toStdString();
-      check(agent.starts_with("gb-tool/1.2.3 (gb-cplusplus") && agent.ends_with(")"), "application User-Agent");
+      check(agent.starts_with("gb-tool/1.2.3 (gb-cplusplus") && agent.ends_with(")"),
+            "application User-Agent");
       for (const auto *bad : {"", "gb tool", "gb/tool", "gb(tool)"}) {
         bool threw = false;
         try {
@@ -151,15 +167,18 @@ int main(int argc, char **argv) {
       }
       const auto explicit_root = gb::tiles::application_fetcher_options("gb-tool", "1", root);
       check(explicit_root.network && explicit_root.cache_root == root, "explicit cache root kept");
-      check(explicit_root.user_agent == gb::tiles::application_user_agent("gb-tool", "1"), "options carry the agent");
+      check(explicit_root.user_agent == gb::tiles::application_user_agent("gb-tool", "1"),
+            "options carry the agent");
       const auto default_root = gb::tiles::application_fetcher_options("gb-tool", "1");
-      check(default_root.cache_root == gb::geo::default_tile_cache_root(), "default cache root shared");
+      check(default_root.cache_root == gb::geo::default_tile_cache_root(),
+            "default cache root shared");
     }
 
     TileServer server;
     auto provider = gb::geo::openstreetmap_provider();
     provider.id = "local";
-    provider.url_template = "http://127.0.0.1:" + std::to_string(server.port()) + "/{z}/{x}/{y}.png";
+    provider.url_template =
+        "http://127.0.0.1:" + std::to_string(server.port()) + "/{z}/{x}/{y}.png";
     gb::tiles::FetcherOptions options{true, root, QStringLiteral("gb-test/1 (unit test)"), 5000};
     const gb::geo::TileCache cache(root);
 
@@ -170,7 +189,7 @@ int main(int argc, char **argv) {
       attach(fetcher, answers);
       const auto keys = row(3, 1, 6);
       fetcher.request(keys);
-      fetcher.request(keys);  // duplicates are ignored while pending
+      fetcher.request(keys); // duplicates are ignored while pending
       check(wait_for([&] { return answers.count() >= 6U; }), "six tiles downloaded");
       settle(100);
       check(answers.ready.size() == 6U && answers.unavailable.empty(), "every tile answered once");
@@ -178,7 +197,8 @@ int main(int argc, char **argv) {
       check(server.max_concurrent >= 1 && server.max_concurrent <= provider.max_concurrent_requests,
             "concurrency limit respected");
       for (const auto &request : server.requests) {
-        check(request.headers.count("user-agent") == 1U && request.headers.at("user-agent") == "gb-test/1 (unit test)",
+        check(request.headers.count("user-agent") == 1U &&
+                  request.headers.at("user-agent") == "gb-test/1 (unit test)",
               "application User-Agent sent");
         check(request.headers.count("cache-control") == 0U && request.headers.count("pragma") == 0U,
               "no cache-busting headers");
@@ -187,9 +207,11 @@ int main(int argc, char **argv) {
       const auto stored = cache.load(provider, {3, 0, 1});
       check(stored.has_value() && stored->metadata.etag == "\"v1\"", "tile and ETag cached");
       const auto now = QDateTime::currentSecsSinceEpoch();
-      check(stored.has_value() && stored->metadata.expires_unix > now + 3500 && stored->metadata.expires_unix <= now + 3600,
+      check(stored.has_value() && stored->metadata.expires_unix > now + 3500 &&
+                stored->metadata.expires_unix <= now + 3600,
             "server max-age honoured");
-      check(fetcher.statistics().downloaded == 6U && fetcher.statistics().network_requests == 6U, "download statistics");
+      check(fetcher.statistics().downloaded == 6U && fetcher.statistics().network_requests == 6U,
+            "download statistics");
     }
 
     // 2. A new session serves fresh tiles from disk without any request.
@@ -200,7 +222,8 @@ int main(int argc, char **argv) {
       fetcher.request(row(3, 1, 6));
       check(wait_for([&] { return answers.ready.size() >= 6U; }), "fresh tiles served from disk");
       settle(100);
-      check(server.requests.size() == 6U && fetcher.statistics().cache_fresh == 6U, "no request for fresh tiles");
+      check(server.requests.size() == 6U && fetcher.statistics().cache_fresh == 6U,
+            "no request for fresh tiles");
     }
 
     // 3. An expired tile is shown at once and revalidated with a conditional request.
@@ -212,14 +235,17 @@ int main(int argc, char **argv) {
       Answers answers;
       attach(fetcher, answers);
       fetcher.request({{3, 2, 1}});
-      check(wait_for([&] { return fetcher.statistics().not_modified == 1U; }), "conditional revalidation");
+      check(wait_for([&] { return fetcher.statistics().not_modified == 1U; }),
+            "conditional revalidation");
       settle(100);
       check(answers.ready.size() == 1U, "stale tile shown once; 304 does not resend it");
-      check(server.requests.size() == 7U && server.requests.back().headers.count("if-none-match") == 1U &&
+      check(server.requests.size() == 7U &&
+                server.requests.back().headers.count("if-none-match") == 1U &&
                 server.requests.back().headers.at("if-none-match") == "\"v1\"",
             "If-None-Match sent");
       const auto revalidated = cache.load(provider, {3, 2, 1});
-      check(revalidated.has_value() && revalidated->fresh(QDateTime::currentSecsSinceEpoch() + 7000),
+      check(revalidated.has_value() &&
+                revalidated->fresh(QDateTime::currentSecsSinceEpoch() + 7000),
             "304 refreshes the expiry from its headers");
     }
 
@@ -245,7 +271,8 @@ int main(int argc, char **argv) {
       attach(fetcher, answers);
       fetcher.request({{9, 0, 0}});
       check(wait_for([&] { return answers.count() >= 1U; }), "HTML response answered");
-      check(answers.unavailable.size() == 1U && answers.unavailable.front().second.contains(QStringLiteral("not a tile")),
+      check(answers.unavailable.size() == 1U &&
+                answers.unavailable.front().second.contains(QStringLiteral("not a tile")),
             "HTML response rejected");
       check(!cache.load(provider, {9, 0, 0}).has_value(), "HTML response not cached");
 
@@ -270,7 +297,8 @@ int main(int argc, char **argv) {
       check(dropped.size() == 6U, "queued tiles outside the view are dropped");
       check(wait_for([&] { return answers.count() >= 2U; }), "in-flight tiles still answered");
       settle(200);
-      check(answers.count() == 2U && fetcher.statistics().queued == 0, "dropped tiles are not answered");
+      check(answers.count() == 2U && fetcher.statistics().queued == 0,
+            "dropped tiles are not answered");
     }
   } catch (const std::exception &error) {
     std::cerr << "FAIL: unexpected exception: " << error.what() << '\n';
@@ -278,7 +306,8 @@ int main(int argc, char **argv) {
   }
   std::error_code ignored;
   std::filesystem::remove_all(root, ignored);
-  if (failures > 0) return 1;
+  if (failures > 0)
+    return 1;
   std::cout << "gb_tiles_tests: all checks passed\n";
   return 0;
 }

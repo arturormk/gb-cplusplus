@@ -38,9 +38,21 @@ Bytes make_jpeg(const std::uint16_t width, const std::uint16_t height,
     append_segment(bytes, 0xe6U, {1U, 2U, 3U});
   }
 
-  Bytes sof{8U, static_cast<std::uint8_t>(height >> 8U), static_cast<std::uint8_t>(height),
-            static_cast<std::uint8_t>(width >> 8U), static_cast<std::uint8_t>(width), 3U,
-            1U, 0x22U, 0U, 2U, 0x11U, 1U, 3U, 0x11U, 1U};
+  Bytes sof{8U,
+            static_cast<std::uint8_t>(height >> 8U),
+            static_cast<std::uint8_t>(height),
+            static_cast<std::uint8_t>(width >> 8U),
+            static_cast<std::uint8_t>(width),
+            3U,
+            1U,
+            0x22U,
+            0U,
+            2U,
+            0x11U,
+            1U,
+            3U,
+            0x11U,
+            1U};
   append_segment(bytes, 0xc0U, sof);
   append_segment(bytes, 0xdaU, {3U, 1U, 0U, 2U, 0x11U, 3U, 0x11U, 0U, 63U, 0U});
   bytes.insert(bytes.end(), {0x11U, 0xffU, 0x00U, 0x22U, 0xffU, 0xd0U, 0x33U});
@@ -100,8 +112,7 @@ void test_multiple_images_and_metadata(const FixtureDirectory &fixtures) {
   require(result.images[1].offset == primary_size, "preview offset mismatch");
   require(result.images[1].width == 1440U && result.images[1].height == 720U,
           "preview geometry mismatch");
-  require(result.has_jfif && result.has_exif && result.has_xmp && result.has_mpf &&
-              result.has_app6,
+  require(result.has_jfif && result.has_exif && result.has_xmp && result.has_mpf && result.has_app6,
           "metadata signatures were not preserved");
   require(result.trailing_bytes == 0U, "valid JPEG reported trailing bytes");
 }

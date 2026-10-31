@@ -5,14 +5,18 @@
 
 namespace gb::geo {
 
-std::vector<std::pair<std::size_t, std::size_t>> usable_runs(const std::vector<RoutePoint> &points) {
+std::vector<std::pair<std::size_t, std::size_t>>
+usable_runs(const std::vector<RoutePoint> &points) {
   std::vector<std::pair<std::size_t, std::size_t>> runs;
   std::size_t index = 0;
   while (index < points.size()) {
-    while (index < points.size() && !points[index].usable) ++index;
+    while (index < points.size() && !points[index].usable)
+      ++index;
     const auto first = index;
-    while (index < points.size() && points[index].usable) ++index;
-    if (index > first) runs.emplace_back(first, index);
+    while (index < points.size() && points[index].usable)
+      ++index;
+    if (index > first)
+      runs.emplace_back(first, index);
   }
   return runs;
 }
@@ -20,7 +24,8 @@ std::vector<std::pair<std::size_t, std::size_t>> usable_runs(const std::vector<R
 std::optional<WorldBounds> route_bounds(const std::vector<RoutePoint> &points) {
   std::optional<WorldBounds> bounds;
   for (const auto &point : points) {
-    if (!point.usable) continue;
+    if (!point.usable)
+      continue;
     const auto world = project(point.position);
     if (!bounds.has_value()) {
       bounds = WorldBounds{world, world};
@@ -32,10 +37,11 @@ std::optional<WorldBounds> route_bounds(const std::vector<RoutePoint> &points) {
   return bounds;
 }
 
-std::vector<RouteCandidate> route_candidates(const std::vector<RoutePoint> &points, const LatLon click,
-                                             const double tolerance_metres) {
+std::vector<RouteCandidate> route_candidates(const std::vector<RoutePoint> &points,
+                                             const LatLon click, const double tolerance_metres) {
   std::vector<RouteCandidate> candidates;
-  if (!(tolerance_metres > 0.0) || !std::isfinite(tolerance_metres)) return candidates;
+  if (!(tolerance_metres > 0.0) || !std::isfinite(tolerance_metres))
+    return candidates;
   bool in_pass = false;
   for (std::size_t index = 0; index < points.size(); ++index) {
     const auto &point = points[index];

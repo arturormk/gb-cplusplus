@@ -23,8 +23,8 @@ std::int64_t ticksAt(const double seconds, const gb::media::Rational time_base) 
       time_base.denominator <= 0) {
     throw std::runtime_error("invalid media time or stream time base");
   }
-  const auto ticks = static_cast<long double>(seconds) * time_base.denominator /
-                     time_base.numerator;
+  const auto ticks =
+      static_cast<long double>(seconds) * time_base.denominator / time_base.numerator;
   if (ticks > static_cast<long double>(std::numeric_limits<std::int64_t>::max())) {
     throw std::runtime_error("media time is out of range");
   }
@@ -33,11 +33,16 @@ std::int64_t ticksAt(const double seconds, const gb::media::Rational time_base) 
 
 gb::media::ProjectionMode projectionMode(const int value) {
   switch (value) {
-  case 0: return gb::media::ProjectionMode::rectilinear;
-  case 1: return gb::media::ProjectionMode::fisheye;
-  case 2: return gb::media::ProjectionMode::stereographic;
-  case 3: return gb::media::ProjectionMode::little_planet;
-  default: throw std::runtime_error("unknown projection mode");
+  case 0:
+    return gb::media::ProjectionMode::rectilinear;
+  case 1:
+    return gb::media::ProjectionMode::fisheye;
+  case 2:
+    return gb::media::ProjectionMode::stereographic;
+  case 3:
+    return gb::media::ProjectionMode::little_planet;
+  default:
+    throw std::runtime_error("unknown projection mode");
   }
 }
 
@@ -68,7 +73,8 @@ QImage FrameImageProvider::requestImage(const QString &id, QSize *size,
   const QMutexLocker lock(&mutex_);
   const auto key = id.section('/', 0, 0);
   auto result = images_.value(key);
-  if (size != nullptr) *size = result.size();
+  if (size != nullptr)
+    *size = result.size();
   if (requested_size.isValid()) {
     result = result.scaled(requested_size, Qt::KeepAspectRatio, Qt::SmoothTransformation);
   }
@@ -98,7 +104,8 @@ void ProjectController::openFile(const double seconds, const int panorama_width)
   const auto selected = QFileDialog::getOpenFileName(
       nullptr, QStringLiteral("Open GoPro media"), QString(),
       QStringLiteral("GoPro media (*.360 *.MP4 *.mp4 *.mov);;All files (*)"));
-  if (!selected.isEmpty()) loadFile(selected, seconds, panorama_width);
+  if (!selected.isEmpty())
+    loadFile(selected, seconds, panorama_width);
 }
 
 void ProjectController::loadFile(const QString &path, const double seconds,
@@ -125,8 +132,8 @@ void ProjectController::loadFile(const QString &path, const double seconds,
       throw std::runtime_error("selected source frames are not presentation-time synchronized");
     }
     const auto overlap = first.width - first.height * 3;
-    auto panorama = gb::media::reconstruct_equirectangular(
-        first, second, panorama_width, panorama_width / 2, overlap);
+    auto panorama = gb::media::reconstruct_equirectangular(first, second, panorama_width,
+                                                           panorama_width / 2, overlap);
     const auto output = gb::media::project_equirectangular(
         panorama, gb::media::ProjectionMode::rectilinear, 960, 540);
     const auto rear_luma = centerLuma(second);
@@ -152,11 +159,13 @@ void ProjectController::loadFile(const QString &path, const double seconds,
 
 void ProjectController::saveProjection(const int mode, const double yaw, const double pitch,
                                        const double roll, const double field_of_view) {
-  if (panorama_ == nullptr) return;
+  if (panorama_ == nullptr)
+    return;
   auto destination = QFileDialog::getSaveFileName(
       nullptr, QStringLiteral("Save projected view"), QStringLiteral("projection.png"),
       QStringLiteral("PNG image (*.png);;PPM image (*.ppm);;RGB24 buffer (*.rgb24)"));
-  if (destination.isEmpty()) return;
+  if (destination.isEmpty())
+    return;
   try {
     const auto projected = gb::media::project_equirectangular(
         *panorama_, projectionMode(mode), 1920, 1080, yaw, pitch, roll, field_of_view);
@@ -166,7 +175,8 @@ void ProjectController::saveProjection(const int mode, const double yaw, const d
     } else if (extension == QStringLiteral("rgb24") || extension == QStringLiteral("rgb")) {
       gb::media::write_rgb24(destination.toStdString(), projected);
     } else {
-      if (extension.isEmpty()) destination += QStringLiteral(".png");
+      if (extension.isEmpty())
+        destination += QStringLiteral(".png");
       gb::media::write_png(destination.toStdString(), projected);
     }
     setStatus(QStringLiteral("Saved deterministic CPU reference: ") + destination);
@@ -177,10 +187,11 @@ void ProjectController::saveProjection(const int mode, const double yaw, const d
 
 void ProjectController::updateProjection(const int mode, const double yaw, const double pitch,
                                          const double roll, const double field_of_view) {
-  if (panorama_ == nullptr) return;
+  if (panorama_ == nullptr)
+    return;
   try {
-    publishOutput(gb::media::project_equirectangular(
-        *panorama_, projectionMode(mode), 960, 540, yaw, pitch, roll, field_of_view));
+    publishOutput(gb::media::project_equirectangular(*panorama_, projectionMode(mode), 960, 540,
+                                                     yaw, pitch, roll, field_of_view));
   } catch (const std::exception &error) {
     setStatus(QStringLiteral("Projection failed: ") + QString::fromUtf8(error.what()));
   }
@@ -197,8 +208,7 @@ void ProjectController::setStatus(QString value) {
   emit statusChanged();
 }
 
-void ProjectController::publish(const gb::media::RgbFrame &front,
-                                const gb::media::RgbFrame &rear,
+void ProjectController::publish(const gb::media::RgbFrame &front, const gb::media::RgbFrame &rear,
                                 const gb::media::RgbFrame &panorama,
                                 const gb::media::RgbFrame &output) {
   provider_->setImage(QStringLiteral("front"), image(front));

@@ -48,8 +48,11 @@ namespace {
 constexpr std::size_t kMaximumGpmfRows = 600;
 constexpr std::size_t kMaximumValuesShown = 6;
 
-QVariantMap row(const QString &label, const QString &value, const QString &state = QStringLiteral("ok")) {
-  return {{QStringLiteral("label"), label}, {QStringLiteral("value"), value}, {QStringLiteral("state"), state}};
+QVariantMap row(const QString &label, const QString &value,
+                const QString &state = QStringLiteral("ok")) {
+  return {{QStringLiteral("label"), label},
+          {QStringLiteral("value"), value},
+          {QStringLiteral("state"), state}};
 }
 
 QString unavailable() { return QStringLiteral("unavailable"); }
@@ -77,7 +80,8 @@ long double seconds(const std::int64_t ticks, const gb::media::Rational base) {
 }
 
 QString clockText(const long double total_seconds) {
-  if (!std::isfinite(total_seconds) || total_seconds < 0.0L) return QStringLiteral("--:--:--.---");
+  if (!std::isfinite(total_seconds) || total_seconds < 0.0L)
+    return QStringLiteral("--:--:--.---");
   const auto milliseconds = static_cast<std::int64_t>(std::floor(total_seconds * 1000.0L));
   const auto hours = milliseconds / 3600000;
   const auto minutes = (milliseconds / 60000) % 60;
@@ -91,12 +95,17 @@ QString clockText(const long double total_seconds) {
 }
 
 QString fixName(const std::optional<std::uint32_t> fix) {
-  if (!fix.has_value()) return unavailable();
+  if (!fix.has_value())
+    return unavailable();
   switch (*fix) {
-  case 0U: return QStringLiteral("no fix");
-  case 2U: return QStringLiteral("2D");
-  case 3U: return QStringLiteral("3D");
-  default: return QStringLiteral("recorded value %1").arg(*fix);
+  case 0U:
+    return QStringLiteral("no fix");
+  case 2U:
+    return QStringLiteral("2D");
+  case 3U:
+    return QStringLiteral("3D");
+  default:
+    return QStringLiteral("recorded value %1").arg(*fix);
   }
 }
 
@@ -106,19 +115,25 @@ QString speedText(const long double metres_per_second) {
 }
 
 QString azimuthText(const long double degrees) {
-  static constexpr const char *kCompassPoints[] = {"N",  "NNE", "NE", "ENE", "E",  "ESE", "SE", "SSE",
-                                                   "S",  "SSW", "SW", "WSW", "W",  "WNW", "NW", "NNW"};
-  // Round once so the shown angle and compass point agree, and 359.96° reads 0.0° N rather than 360.0°.
+  static constexpr const char *kCompassPoints[] = {"N",  "NNE", "NE", "ENE", "E",  "ESE",
+                                                   "SE", "SSE", "S",  "SSW", "SW", "WSW",
+                                                   "W",  "WNW", "NW", "NNW"};
+  // Round once so the shown angle and compass point agree, and 359.96° reads 0.0° N rather than
+  // 360.0°.
   auto shown = std::round(degrees * 10.0L) / 10.0L;
-  if (shown >= 360.0L) shown -= 360.0L;
+  if (shown >= 360.0L)
+    shown -= 360.0L;
   const auto point = static_cast<std::size_t>(std::floor((shown + 11.25L) / 22.5L)) % 16U;
   return QStringLiteral("%1°  %2").arg(number(shown, 1), QLatin1String(kCompassPoints[point]));
 }
 
 QString elementDetail(const gb::metadata::GpmfElement &element) {
-  if (!element.children.empty()) return QStringLiteral("%1 children").arg(element.children.size());
-  const auto &values = element.normalized_values.empty() ? element.values : element.normalized_values;
-  if (values.empty()) return QStringLiteral("%1 raw bytes").arg(element.raw.size());
+  if (!element.children.empty())
+    return QStringLiteral("%1 children").arg(element.children.size());
+  const auto &values =
+      element.normalized_values.empty() ? element.values : element.normalized_values;
+  if (values.empty())
+    return QStringLiteral("%1 raw bytes").arg(element.raw.size());
   QStringList shown;
   for (std::size_t index = 0; index < values.size() && index < kMaximumValuesShown; ++index) {
     shown << QString::fromStdString(values[index]);
@@ -130,9 +145,11 @@ QString elementDetail(const gb::metadata::GpmfElement &element) {
   return text;
 }
 
-void flatten(const std::vector<gb::metadata::GpmfElement> &elements, const int depth, QVariantList &rows) {
+void flatten(const std::vector<gb::metadata::GpmfElement> &elements, const int depth,
+             QVariantList &rows) {
   for (const auto &element : elements) {
-    if (static_cast<std::size_t>(rows.size()) >= kMaximumGpmfRows) return;
+    if (static_cast<std::size_t>(rows.size()) >= kMaximumGpmfRows)
+      return;
     rows.push_back(QVariantMap{
         {QStringLiteral("depth"), depth},
         {QStringLiteral("key"), QString::fromStdString(element.key)},
@@ -165,34 +182,43 @@ QString trackExtension(const gb::telemetry::ExportFormat format) {
 const gb::metadata::GpmfElement *findGpmf(const std::vector<gb::metadata::GpmfElement> &elements,
                                           const std::string &key) {
   for (const auto &element : elements) {
-    if (element.key == key) return &element;
-    if (const auto *found = findGpmf(element.children, key); found != nullptr) return found;
+    if (element.key == key)
+      return &element;
+    if (const auto *found = findGpmf(element.children, key); found != nullptr)
+      return found;
   }
   return nullptr;
 }
 
-std::optional<QString> gpmfValue(const std::vector<gb::metadata::GpmfElement> &elements, const std::string &key) {
+std::optional<QString> gpmfValue(const std::vector<gb::metadata::GpmfElement> &elements,
+                                 const std::string &key) {
   const auto *element = findGpmf(elements, key);
-  if (element == nullptr || element->values.empty()) return std::nullopt;
+  if (element == nullptr || element->values.empty())
+    return std::nullopt;
   return QString::fromStdString(element->values.front());
 }
 
 QString exposureTimeText(const gb::image::ExifRational value) {
   const auto secs = static_cast<double>(value.numerator) / value.denominator;
-  if (secs > 0.0 && secs < 1.0) return QStringLiteral("1/%1 s").arg(std::llround(1.0 / secs));
+  if (secs > 0.0 && secs < 1.0)
+    return QStringLiteral("1/%1 s").arg(std::llround(1.0 / secs));
   return QStringLiteral("%1 s").arg(secs, 0, 'g', 4);
 }
 
 QString exposureProgramName(const std::uint16_t value) {
-  static constexpr std::array kNames{"not defined", "manual", "program AE", "aperture priority",
-                                     "shutter priority", "creative", "action", "portrait", "landscape"};
-  return value < kNames.size() ? QLatin1String(kNames[value]) : QStringLiteral("recorded value %1").arg(value);
+  static constexpr std::array kNames{
+      "not defined", "manual", "program AE", "aperture priority", "shutter priority",
+      "creative",    "action", "portrait",   "landscape"};
+  return value < kNames.size() ? QLatin1String(kNames[value])
+                               : QStringLiteral("recorded value %1").arg(value);
 }
 
 QString meteringModeName(const std::uint16_t value) {
-  static constexpr std::array kNames{"unknown", "average", "centre-weighted average", "spot", "multi-spot",
-                                     "multi-segment", "partial"};
-  return value < kNames.size() ? QLatin1String(kNames[value]) : QStringLiteral("recorded value %1").arg(value);
+  static constexpr std::array kNames{"unknown", "average",    "centre-weighted average",
+                                     "spot",    "multi-spot", "multi-segment",
+                                     "partial"};
+  return value < kNames.size() ? QLatin1String(kNames[value])
+                               : QStringLiteral("recorded value %1").arg(value);
 }
 
 QString cameraTimeText(QString text) {
@@ -205,9 +231,11 @@ QString cameraTimeText(QString text) {
 }
 
 double percentile(std::vector<double> values, const double fraction) {
-  if (values.empty()) return 0.0;
+  if (values.empty())
+    return 0.0;
   std::sort(values.begin(), values.end());
-  const auto index = static_cast<std::size_t>(std::llround(fraction * static_cast<double>(values.size() - 1U)));
+  const auto index =
+      static_cast<std::size_t>(std::llround(fraction * static_cast<double>(values.size() - 1U)));
   return values[index];
 }
 
@@ -219,49 +247,65 @@ PlayerController::PlayerController(PlayerOptions options, QObject *parent)
   connect(&engine_, &PlaybackEngine::frameChanged, this, &PlayerController::onFrameChanged);
   connect(&engine_, &PlaybackEngine::playingChanged, this, &PlayerController::playingChanged);
   connect(&engine_, &PlaybackEngine::audioChanged, this, &PlayerController::audioChanged);
-  connect(&engine_, &PlaybackEngine::errorOccurred, this,
-          [this](const QString &message) { setStatus(QStringLiteral("Decode error: ") + message, true); });
+  connect(&engine_, &PlaybackEngine::errorOccurred, this, [this](const QString &message) {
+    setStatus(QStringLiteral("Decode error: ") + message, true);
+  });
   // Queued: opening the next chapter closes the engine, which is still emitting.
-  connect(&engine_, &PlaybackEngine::endReached, this, &PlayerController::onEndReached, Qt::QueuedConnection);
+  connect(&engine_, &PlaybackEngine::endReached, this, &PlayerController::onEndReached,
+          Qt::QueuedConnection);
   diagnostics_timer_.setInterval(1000);
   connect(&diagnostics_timer_, &QTimer::timeout, this, &PlayerController::updateDiagnostics);
   if (options_.map_tiles.user_agent.isEmpty()) {
-    options_.map_tiles.user_agent = gb::tiles::application_user_agent("gb-player", GB_PLAYER_VERSION);
+    options_.map_tiles.user_agent =
+        gb::tiles::application_user_agent("gb-player", GB_PLAYER_VERSION);
   }
   tiles_ = new gb::tiles::TileFetcher(options_.map_provider, options_.map_tiles, this);
 }
 
 PlayerController::~PlayerController() {
   engine_.close();
-  if (loader_.joinable()) loader_.join();
-  if (exporter_.joinable()) exporter_.join();
+  if (loader_.joinable())
+    loader_.join();
+  if (exporter_.joinable())
+    exporter_.join();
 }
 
 QString PlayerController::displayName() const { return QStringLiteral(GB_PLAYER_DISPLAY_NAME); }
 const gb::telemetry::Extraction *PlayerController::telemetry() const {
   return metadata_ && metadata_->telemetry ? &*metadata_->telemetry : nullptr;
 }
-QString PlayerController::mapAttribution() const { return QString::fromStdString(tiles_->provider().attribution); }
-QString PlayerController::mapAttributionUrl() const { return QString::fromStdString(tiles_->provider().attribution_url); }
-QString PlayerController::mapProviderName() const { return QString::fromStdString(tiles_->provider().name); }
+QString PlayerController::mapAttribution() const {
+  return QString::fromStdString(tiles_->provider().attribution);
+}
+QString PlayerController::mapAttributionUrl() const {
+  return QString::fromStdString(tiles_->provider().attribution_url);
+}
+QString PlayerController::mapProviderName() const {
+  return QString::fromStdString(tiles_->provider().name);
+}
 QObject *PlayerController::engine() { return &engine_; }
 PlaybackEngine &PlayerController::playbackEngine() { return engine_; }
 QString PlayerController::inputName() const { return QFileInfo(input_path_).fileName(); }
 
 QStringList PlayerController::sequenceNames() const {
   QStringList names;
-  for (const auto &path : sequence_paths_) names.push_back(QFileInfo(path).fileName());
+  for (const auto &path : sequence_paths_)
+    names.push_back(QFileInfo(path).fileName());
   return names;
 }
 
 int PlayerController::overlap() const { return source_->layout.overlap; }
 
 int PlayerController::sourceLayout() const {
-  if (!engine_.isOpen()) return 0;
+  if (!engine_.isOpen())
+    return 0;
   switch (source_->layout.layout) {
-  case gb::media::SourceLayout::max_dual_eac: return 1;
-  case gb::media::SourceLayout::equirectangular: return 2;
-  case gb::media::SourceLayout::flat: return 0;
+  case gb::media::SourceLayout::max_dual_eac:
+    return 1;
+  case gb::media::SourceLayout::equirectangular:
+    return 2;
+  case gb::media::SourceLayout::flat:
+    return 0;
   }
   return 0;
 }
@@ -271,21 +315,29 @@ QString PlayerController::layoutDescription() const {
 }
 
 double PlayerController::duration() const {
-  return engine_.isOpen() ? static_cast<double>(seconds(engine_.durationTicks(), engine_.timeBase())) : 0.0;
+  return engine_.isOpen()
+             ? static_cast<double>(seconds(engine_.durationTicks(), engine_.timeBase()))
+             : 0.0;
 }
 
 QString PlayerController::durationText() const { return clockText(duration()); }
 
 double PlayerController::position() const {
-  return engine_.isOpen() ? static_cast<double>(seconds(engine_.positionTicks(), engine_.timeBase())) : 0.0;
+  return engine_.isOpen()
+             ? static_cast<double>(seconds(engine_.positionTicks(), engine_.timeBase()))
+             : 0.0;
 }
 
 QString PlayerController::positionText() const { return clockText(position()); }
 
 QString PlayerController::ptsText() const {
-  if (!engine_.isOpen() || engine_.isStill()) return {};
+  if (!engine_.isOpen() || engine_.isStill())
+    return {};
   const auto base = engine_.timeBase();
-  return QStringLiteral("PTS %1 @ %2/%3").arg(engine_.positionTicks()).arg(base.numerator).arg(base.denominator);
+  return QStringLiteral("PTS %1 @ %2/%3")
+      .arg(engine_.positionTicks())
+      .arg(base.numerator)
+      .arg(base.denominator);
 }
 
 QString PlayerController::formatTicks(const std::int64_t ticks) const {
@@ -301,21 +353,25 @@ void PlayerController::setStatus(const QString &message, const bool error) {
 void PlayerController::openDialog() {
   const auto selected = QFileDialog::getOpenFileName(
       nullptr, QStringLiteral("Open GoPro media"), QFileInfo(input_path_).absolutePath(),
-      QStringLiteral("GoPro media (*.360 *.MP4 *.mp4 *.MOV *.mov *.JPG *.jpg *.JPEG *.jpeg);;"
-                     "GoPro video (*.360 *.MP4 *.mp4 *.MOV *.mov);;GoPro photo (*.JPG *.jpg *.JPEG *.jpeg);;"
-                     "All files (*)"));
-  if (!selected.isEmpty()) open(selected);
+      QStringLiteral(
+          "GoPro media (*.360 *.MP4 *.mp4 *.MOV *.mov *.JPG *.jpg *.JPEG *.jpeg);;"
+          "GoPro video (*.360 *.MP4 *.mp4 *.MOV *.mov);;GoPro photo (*.JPG *.jpg *.JPEG *.jpeg);;"
+          "All files (*)"));
+  if (!selected.isEmpty())
+    open(selected);
 }
 
 bool PlayerController::open(const QString &path, const double start_seconds) {
   const auto source = path.toStdString();
   // Photos are recognised by their content, not their extension (ADR-0002).
-  if (gb::image::is_jpeg_file(source)) return openPhoto(path);
+  if (gb::image::is_jpeg_file(source))
+    return openPhoto(path);
   try {
     const auto streams = gb::media::video_streams(source);
     const auto layout = gb::media::select_playback_layout(streams);
     ++load_generation_;
-    if (loader_.joinable()) loader_.join();
+    if (loader_.joinable())
+      loader_.join();
     metadata_.reset();
     metadata_loaded_ = false;
     source_->layout = layout;
@@ -325,13 +381,15 @@ bool PlayerController::open(const QString &path, const double start_seconds) {
     sequence_index_ = 0;
     for (const auto &chapter : gb::media::chapter_sequence(input_path_.toStdString())) {
       const auto chapter_path = QString::fromStdString(chapter.string());
-      if (chapter_path == input_path_) sequence_index_ = static_cast<int>(sequence_paths_.size());
+      if (chapter_path == input_path_)
+        sequence_index_ = static_cast<int>(sequence_paths_.size());
       sequence_paths_.push_back(chapter_path);
     }
     const auto base = streams.front().time_base;
-    const auto start = std::isfinite(start_seconds) && start_seconds > 0.0
-                           ? gb::media::rescale_ticks(std::llround(start_seconds * 1000.0), {1, 1000}, base)
-                           : 0;
+    const auto start =
+        std::isfinite(start_seconds) && start_seconds > 0.0
+            ? gb::media::rescale_ticks(std::llround(start_seconds * 1000.0), {1, 1000}, base)
+            : 0;
     gb::media::AudioSelection audio;
     try {
       audio = gb::media::select_playback_audio(gb::media::audio_streams(source));
@@ -345,10 +403,12 @@ bool PlayerController::open(const QString &path, const double start_seconds) {
     audio_description_ = QString::fromStdString(audio.description);
     photo_rows_ = {};
     panorama_crop_ = QRectF(0.0, 0.0, 1.0, 1.0);
-    engine_.open(source, layout, options_.decoder_threads, options_.queue_capacity, start, audio.stream,
-                 displayName().toStdString());
+    engine_.open(source, layout, options_.decoder_threads, options_.queue_capacity, start,
+                 audio.stream, displayName().toStdString());
   } catch (const std::exception &error) {
-    setStatus(QStringLiteral("Cannot open %1: %2").arg(QFileInfo(path).fileName(), QString::fromUtf8(error.what())), true);
+    setStatus(QStringLiteral("Cannot open %1: %2")
+                  .arg(QFileInfo(path).fileName(), QString::fromUtf8(error.what())),
+              true);
     return false;
   }
   telemetry_state_ = QStringLiteral("loading");
@@ -361,7 +421,8 @@ bool PlayerController::open(const QString &path, const double start_seconds) {
   gpmf_title_ = QStringLiteral("Loading metadata…");
   gpmf_sample_.reset();
   map_route_.clear();
-  setMapPosition(QStringLiteral("loading"), QStringLiteral("Loading GPS telemetry…"), std::nullopt, std::nullopt);
+  setMapPosition(QStringLiteral("loading"), QStringLiteral("Loading GPS telemetry…"), std::nullopt,
+                 std::nullopt);
   buildFileRows();
   emit fileChanged();
   emit audioChanged();
@@ -388,11 +449,14 @@ bool PlayerController::openPhoto(const QString &path) {
     photo = gb::image::inspect_photo(source);
     frames = std::make_shared<const gb::media::FrameSet>(gb::media::decode_still(source));
   } catch (const std::exception &error) {
-    setStatus(QStringLiteral("Cannot open %1: %2").arg(QFileInfo(path).fileName(), QString::fromUtf8(error.what())), true);
+    setStatus(QStringLiteral("Cannot open %1: %2")
+                  .arg(QFileInfo(path).fileName(), QString::fromUtf8(error.what())),
+              true);
     return false;
   }
   ++load_generation_;
-  if (loader_.joinable()) loader_.join();
+  if (loader_.joinable())
+    loader_.join();
   metadata_.reset();
   metadata_loaded_ = true;
   input_path_ = QFileInfo(path).absoluteFilePath();
@@ -403,112 +467,157 @@ bool PlayerController::openPhoto(const QString &path) {
   engine_.openStill(std::move(frames));
 
   const auto &classification = photo.classification;
-  const auto kind = QString::fromStdString(gb::image::field_of_view_name(classification.field_of_view));
-  const auto equirectangular = photo.panorama.has_value() && photo.panorama->projection == "equirectangular";
+  const auto kind =
+      QString::fromStdString(gb::image::field_of_view_name(classification.field_of_view));
+  const auto equirectangular =
+      photo.panorama.has_value() && photo.panorama->projection == "equirectangular";
   source_->streams.clear();
   source_->layout = {};
-  source_->layout.layout = equirectangular ? gb::media::SourceLayout::equirectangular : gb::media::SourceLayout::flat;
+  source_->layout.layout =
+      equirectangular ? gb::media::SourceLayout::equirectangular : gb::media::SourceLayout::flat;
   source_->layout.streams = {0};
-  source_->layout.description = QStringLiteral("%1 photo, %2×%3%4")
-                                    .arg(kind)
-                                    .arg(photo.width)
-                                    .arg(photo.height)
-                                    .arg(equirectangular ? QStringLiteral(", equirectangular") : QString())
-                                    .toStdString();
+  source_->layout.description =
+      QStringLiteral("%1 photo, %2×%3%4")
+          .arg(kind)
+          .arg(photo.width)
+          .arg(photo.height)
+          .arg(equirectangular ? QStringLiteral(", equirectangular") : QString())
+          .toStdString();
   panorama_crop_ = QRectF(0.0, 0.0, 1.0, 1.0);
   if (equirectangular) {
     const auto &panorama = *photo.panorama;
     const auto width = static_cast<double>(panorama.full_width);
     const auto height = static_cast<double>(panorama.full_height);
-    panorama_crop_ = QRectF(panorama.crop_left / width, panorama.crop_top / height, panorama.crop_width / width,
-                            panorama.crop_height / height);
+    panorama_crop_ = QRectF(panorama.crop_left / width, panorama.crop_top / height,
+                            panorama.crop_width / width, panorama.crop_height / height);
   }
 
   // Capture: what kind of photo, and how it was exposed.
   photo_rows_ = {};
   const auto missing = [this](const QString &label) {
-    photo_rows_.push_back(row(label, QStringLiteral("not recorded"), QStringLiteral("unavailable")));
+    photo_rows_.push_back(
+        row(label, QStringLiteral("not recorded"), QStringLiteral("unavailable")));
   };
   photo_rows_.push_back(row(QStringLiteral("Field of view"),
                             kind + (classification.horizontal_degrees.has_value()
-                                        ? QStringLiteral(" (%1° horizontal)").arg(*classification.horizontal_degrees, 0, 'f', 0)
+                                        ? QStringLiteral(" (%1° horizontal)")
+                                              .arg(*classification.horizontal_degrees, 0, 'f', 0)
                                         : QString()),
-                            classification.field_of_view == gb::image::PhotoFieldOfView::unknown ? QStringLiteral("unavailable")
-                                                                                                 : QStringLiteral("ok")));
-  photo_rows_.push_back(row(QStringLiteral("Evidence"), QString::fromStdString(classification.evidence)));
-  photo_rows_.push_back(row(QStringLiteral("Image size"), QStringLiteral("%1×%2 (%3 MP)")
-                                                              .arg(photo.width)
-                                                              .arg(photo.height)
-                                                              .arg(photo.width * static_cast<double>(photo.height) / 1.0e6, 0, 'f', 1)));
+                            classification.field_of_view == gb::image::PhotoFieldOfView::unknown
+                                ? QStringLiteral("unavailable")
+                                : QStringLiteral("ok")));
+  photo_rows_.push_back(
+      row(QStringLiteral("Evidence"), QString::fromStdString(classification.evidence)));
+  photo_rows_.push_back(
+      row(QStringLiteral("Image size"),
+          QStringLiteral("%1×%2 (%3 MP)")
+              .arg(photo.width)
+              .arg(photo.height)
+              .arg(photo.width * static_cast<double>(photo.height) / 1.0e6, 0, 'f', 1)));
   if (photo.exif.has_value()) {
     const auto &exif = *photo.exif;
-    if (exif.date_time_original) photo_rows_.push_back(row(QStringLiteral("Taken"), cameraTimeText(QString::fromStdString(*exif.date_time_original))));
-    else missing(QStringLiteral("Taken"));
+    if (exif.date_time_original)
+      photo_rows_.push_back(row(QStringLiteral("Taken"),
+                                cameraTimeText(QString::fromStdString(*exif.date_time_original))));
+    else
+      missing(QStringLiteral("Taken"));
     QStringList camera;
-    if (exif.make) camera << QString::fromStdString(*exif.make);
-    if (exif.model) camera << QString::fromStdString(*exif.model);
-    if (exif.software) camera << QStringLiteral("firmware ") + QString::fromStdString(*exif.software);
-    if (!camera.isEmpty()) photo_rows_.push_back(row(QStringLiteral("Camera"), camera.join(QStringLiteral(", "))));
-    if (exif.exposure_time) photo_rows_.push_back(row(QStringLiteral("Shutter speed"), exposureTimeText(*exif.exposure_time)));
-    else missing(QStringLiteral("Shutter speed"));
+    if (exif.make)
+      camera << QString::fromStdString(*exif.make);
+    if (exif.model)
+      camera << QString::fromStdString(*exif.model);
+    if (exif.software)
+      camera << QStringLiteral("firmware ") + QString::fromStdString(*exif.software);
+    if (!camera.isEmpty())
+      photo_rows_.push_back(row(QStringLiteral("Camera"), camera.join(QStringLiteral(", "))));
+    if (exif.exposure_time)
+      photo_rows_.push_back(
+          row(QStringLiteral("Shutter speed"), exposureTimeText(*exif.exposure_time)));
+    else
+      missing(QStringLiteral("Shutter speed"));
     if (exif.f_number) {
-      photo_rows_.push_back(row(QStringLiteral("Aperture"),
-                                QStringLiteral("f/%1").arg(static_cast<double>(exif.f_number->numerator) / exif.f_number->denominator, 0, 'f', 1)));
+      photo_rows_.push_back(
+          row(QStringLiteral("Aperture"),
+              QStringLiteral("f/%1").arg(static_cast<double>(exif.f_number->numerator) /
+                                             exif.f_number->denominator,
+                                         0, 'f', 1)));
     } else {
       missing(QStringLiteral("Aperture"));
     }
-    if (exif.iso) photo_rows_.push_back(row(QStringLiteral("ISO"), QString::number(*exif.iso)));
-    else missing(QStringLiteral("ISO"));
+    if (exif.iso)
+      photo_rows_.push_back(row(QStringLiteral("ISO"), QString::number(*exif.iso)));
+    else
+      missing(QStringLiteral("ISO"));
     if (exif.exposure_bias_ev) {
-      photo_rows_.push_back(row(QStringLiteral("Exposure bias"), QStringLiteral("%1%2 EV")
-                                                                     .arg(*exif.exposure_bias_ev > 0.0 ? QStringLiteral("+") : QString())
-                                                                     .arg(*exif.exposure_bias_ev, 0, 'f', 1)));
+      photo_rows_.push_back(
+          row(QStringLiteral("Exposure bias"),
+              QStringLiteral("%1%2 EV")
+                  .arg(*exif.exposure_bias_ev > 0.0 ? QStringLiteral("+") : QString())
+                  .arg(*exif.exposure_bias_ev, 0, 'f', 1)));
     }
-    if (exif.exposure_program) photo_rows_.push_back(row(QStringLiteral("Exposure program"), exposureProgramName(*exif.exposure_program)));
-    if (exif.metering_mode) photo_rows_.push_back(row(QStringLiteral("Metering"), meteringModeName(*exif.metering_mode)));
+    if (exif.exposure_program)
+      photo_rows_.push_back(
+          row(QStringLiteral("Exposure program"), exposureProgramName(*exif.exposure_program)));
+    if (exif.metering_mode)
+      photo_rows_.push_back(row(QStringLiteral("Metering"), meteringModeName(*exif.metering_mode)));
     if (exif.white_balance) {
-      photo_rows_.push_back(row(QStringLiteral("White balance"),
-                                *exif.white_balance == 0U ? QStringLiteral("auto") : QStringLiteral("manual")));
+      photo_rows_.push_back(row(QStringLiteral("White balance"), *exif.white_balance == 0U
+                                                                     ? QStringLiteral("auto")
+                                                                     : QStringLiteral("manual")));
     }
     if (exif.focal_length_mm) {
-      photo_rows_.push_back(row(QStringLiteral("Focal length"),
-                                QStringLiteral("%1 mm%2")
-                                    .arg(*exif.focal_length_mm, 0, 'f', 1)
-                                    .arg(exif.focal_length_35mm ? QStringLiteral("  (%1 mm in 35 mm terms)").arg(*exif.focal_length_35mm)
-                                                                : QString())));
+      photo_rows_.push_back(
+          row(QStringLiteral("Focal length"),
+              QStringLiteral("%1 mm%2")
+                  .arg(*exif.focal_length_mm, 0, 'f', 1)
+                  .arg(exif.focal_length_35mm
+                           ? QStringLiteral("  (%1 mm in 35 mm terms)").arg(*exif.focal_length_35mm)
+                           : QString())));
     }
   } else {
-    photo_rows_.push_back(row(QStringLiteral("EXIF"), photo.exif_error.empty() ? QStringLiteral("not present")
-                                                                               : QString::fromStdString(photo.exif_error),
+    photo_rows_.push_back(row(QStringLiteral("EXIF"),
+                              photo.exif_error.empty() ? QStringLiteral("not present")
+                                                       : QString::fromStdString(photo.exif_error),
                               QStringLiteral("unavailable")));
   }
   if (photo.gopro.has_value()) {
     const auto &gopro = *photo.gopro;
     const auto &elements = gopro.elements;
-    if (gopro.resolution) photo_rows_.push_back(row(QStringLiteral("GoPro resolution"), QString::fromStdString(*gopro.resolution)));
-    if (gopro.projection) photo_rows_.push_back(row(QStringLiteral("GoPro projection"), QString::fromStdString(*gopro.projection)));
+    if (gopro.resolution)
+      photo_rows_.push_back(
+          row(QStringLiteral("GoPro resolution"), QString::fromStdString(*gopro.resolution)));
+    if (gopro.projection)
+      photo_rows_.push_back(
+          row(QStringLiteral("GoPro projection"), QString::fromStdString(*gopro.projection)));
     if (gopro.field_of_view) {
-      photo_rows_.push_back(row(QStringLiteral("GoPro field of view"), QStringLiteral("%1°").arg(*gopro.field_of_view, 0, 'f', 1)));
+      photo_rows_.push_back(row(QStringLiteral("GoPro field of view"),
+                                QStringLiteral("%1°").arg(*gopro.field_of_view, 0, 'f', 1)));
     }
-    if (gopro.stabilization) photo_rows_.push_back(row(QStringLiteral("Stabilization"), QString::fromStdString(*gopro.stabilization)));
+    if (gopro.stabilization)
+      photo_rows_.push_back(
+          row(QStringLiteral("Stabilization"), QString::fromStdString(*gopro.stabilization)));
     const auto iso_min = gpmfValue(elements, "PIMN");
     const auto iso_max = gpmfValue(elements, "PIMX");
-    if (iso_min && iso_max) photo_rows_.push_back(row(QStringLiteral("Auto ISO range"), *iso_min + QStringLiteral("–") + *iso_max));
-    static constexpr std::array<std::pair<const char *, const char *>, 7> kSettings{{
-        {"PRTN", "Protune"},
-        {"PTWB", "Protune white balance"},
-        {"PTCL", "Protune colour"},
-        {"PTSH", "Protune sharpness"},
-        {"PTEV", "Protune EV"},
-        {"EXPT", "Shutter limit"},
-        {"PHDR", "HDR"}}};
+    if (iso_min && iso_max)
+      photo_rows_.push_back(
+          row(QStringLiteral("Auto ISO range"), *iso_min + QStringLiteral("–") + *iso_max));
+    static constexpr std::array<std::pair<const char *, const char *>, 7> kSettings{
+        {{"PRTN", "Protune"},
+         {"PTWB", "Protune white balance"},
+         {"PTCL", "Protune colour"},
+         {"PTSH", "Protune sharpness"},
+         {"PTEV", "Protune EV"},
+         {"EXPT", "Shutter limit"},
+         {"PHDR", "HDR"}}};
     for (const auto &[key, label] : kSettings) {
       if (const auto value = gpmfValue(elements, key); value.has_value()) {
         photo_rows_.push_back(row(QLatin1String(label), *value));
       }
     }
     if (!gopro.parse_error.empty()) {
-      photo_rows_.push_back(row(QStringLiteral("GoPro metadata"), QString::fromStdString(gopro.parse_error), QStringLiteral("invalid")));
+      photo_rows_.push_back(row(QStringLiteral("GoPro metadata"),
+                                QString::fromStdString(gopro.parse_error),
+                                QStringLiteral("invalid")));
     }
   }
 
@@ -518,18 +627,26 @@ bool PlayerController::openPhoto(const QString &path) {
   map_route_.clear();
   if (photo.gps.has_value()) {
     const auto &gps = *photo.gps;
-    telemetry_rows_.push_back(gps.utc ? row(QStringLiteral("GPS UTC"), QString::fromStdString(*gps.utc))
-                                      : row(QStringLiteral("GPS UTC"), unavailable(), QStringLiteral("unavailable")));
-    telemetry_rows_.push_back(row(QStringLiteral("Latitude"), number(gps.latitude, 7) + QStringLiteral("°")));
-    telemetry_rows_.push_back(row(QStringLiteral("Longitude"), number(gps.longitude, 7) + QStringLiteral("°")));
-    telemetry_rows_.push_back(gps.altitude ? row(QStringLiteral("Altitude"), number(*gps.altitude, 3) + QStringLiteral(" m"))
-                                           : row(QStringLiteral("Altitude"), unavailable(), QStringLiteral("unavailable")));
-    if (gps.dop) telemetry_rows_.push_back(row(QStringLiteral("DOP"), number(*gps.dop, 2)));
-    if (gps.speed_mps) telemetry_rows_.push_back(row(QStringLiteral("Speed"), speedText(*gps.speed_mps)));
+    telemetry_rows_.push_back(
+        gps.utc ? row(QStringLiteral("GPS UTC"), QString::fromStdString(*gps.utc))
+                : row(QStringLiteral("GPS UTC"), unavailable(), QStringLiteral("unavailable")));
+    telemetry_rows_.push_back(
+        row(QStringLiteral("Latitude"), number(gps.latitude, 7) + QStringLiteral("°")));
+    telemetry_rows_.push_back(
+        row(QStringLiteral("Longitude"), number(gps.longitude, 7) + QStringLiteral("°")));
+    telemetry_rows_.push_back(
+        gps.altitude
+            ? row(QStringLiteral("Altitude"), number(*gps.altitude, 3) + QStringLiteral(" m"))
+            : row(QStringLiteral("Altitude"), unavailable(), QStringLiteral("unavailable")));
+    if (gps.dop)
+      telemetry_rows_.push_back(row(QStringLiteral("DOP"), number(*gps.dop, 2)));
+    if (gps.speed_mps)
+      telemetry_rows_.push_back(row(QStringLiteral("Speed"), speedText(*gps.speed_mps)));
     map_route_.push_back({{gps.latitude, gps.longitude}, 0, true});
   } else {
-    telemetry_rows_.push_back(row(QStringLiteral("GPS"), unavailable() + QStringLiteral(" — the photo records no position"),
-                                  QStringLiteral("unavailable")));
+    telemetry_rows_.push_back(row(
+        QStringLiteral("GPS"), unavailable() + QStringLiteral(" — the photo records no position"),
+        QStringLiteral("unavailable")));
   }
   timeline_samples_ = {};
   timeline_gaps_ = {};
@@ -546,21 +663,26 @@ bool PlayerController::openPhoto(const QString &path) {
 
   buildFileRows();
   file_rows_.push_back(row(QStringLiteral("JPEG codestreams"),
-                           QStringLiteral("%1 (the first is shown; later ones are previews)").arg(photo.jpeg.images.size())));
-  if (photo.exif) file_rows_.push_back(row(QStringLiteral("EXIF byte order"), QString::fromStdString(photo.exif->byte_order)));
+                           QStringLiteral("%1 (the first is shown; later ones are previews)")
+                               .arg(photo.jpeg.images.size())));
+  if (photo.exif)
+    file_rows_.push_back(
+        row(QStringLiteral("EXIF byte order"), QString::fromStdString(photo.exif->byte_order)));
   if (photo.panorama) {
     const auto &panorama = *photo.panorama;
-    file_rows_.push_back(row(QStringLiteral("GPano"), QStringLiteral("%1, crop %2×%3 at (%4, %5) of %6×%7%8")
-                                                          .arg(QString::fromStdString(panorama.projection))
-                                                          .arg(panorama.crop_width)
-                                                          .arg(panorama.crop_height)
-                                                          .arg(panorama.crop_left)
-                                                          .arg(panorama.crop_top)
-                                                          .arg(panorama.full_width)
-                                                          .arg(panorama.full_height)
-                                                          .arg(panorama.source_photos
-                                                                   ? QStringLiteral(", %1 source photos").arg(*panorama.source_photos)
-                                                                   : QString())));
+    file_rows_.push_back(
+        row(QStringLiteral("GPano"),
+            QStringLiteral("%1, crop %2×%3 at (%4, %5) of %6×%7%8")
+                .arg(QString::fromStdString(panorama.projection))
+                .arg(panorama.crop_width)
+                .arg(panorama.crop_height)
+                .arg(panorama.crop_left)
+                .arg(panorama.crop_top)
+                .arg(panorama.full_width)
+                .arg(panorama.full_height)
+                .arg(panorama.source_photos
+                         ? QStringLiteral(", %1 source photos").arg(*panorama.source_photos)
+                         : QString())));
   }
   diagnostics_timer_.start();
   emit fileChanged();
@@ -571,8 +693,11 @@ bool PlayerController::openPhoto(const QString &path) {
   emit gpmfChanged();
   emit positionChanged();
   emit mapRouteChanged();
-  if (photo.gps.has_value()) setMapPosition(QStringLiteral("valid"), QString(), std::size_t{0}, std::nullopt);
-  else setMapPosition(QStringLiteral("none"), QStringLiteral("No GPS position in this photo"), std::nullopt, std::nullopt);
+  if (photo.gps.has_value())
+    setMapPosition(QStringLiteral("valid"), QString(), std::size_t{0}, std::nullopt);
+  else
+    setMapPosition(QStringLiteral("none"), QStringLiteral("No GPS position in this photo"),
+                   std::nullopt, std::nullopt);
   setStatus(QString::fromStdString(source_->layout.description));
   return true;
 }
@@ -583,35 +708,39 @@ void PlayerController::buildFileRows() {
   file_rows_.push_back(row(QStringLiteral("File"), info.fileName()));
   file_rows_.push_back(row(QStringLiteral("Size"), QStringLiteral("%L1 bytes").arg(info.size())));
   file_rows_.push_back(row(QStringLiteral("Access"), QStringLiteral("read-only")));
-  file_rows_.push_back(row(engine_.isStill() ? QStringLiteral("Photo") : QStringLiteral("Playback layout"),
-                           QString::fromStdString(source_->layout.description)));
+  file_rows_.push_back(
+      row(engine_.isStill() ? QStringLiteral("Photo") : QStringLiteral("Playback layout"),
+          QString::fromStdString(source_->layout.description)));
   if (engine_.isStill()) {
     // A photo has no audio.
   } else if (engine_.hasAudio()) {
     file_rows_.push_back(row(QStringLiteral("Audio"), audio_description_));
   } else {
     auto reason = audio_description_;
-    if (!engine_.audioError().isEmpty()) reason += QStringLiteral(" — ") + engine_.audioError();
+    if (!engine_.audioError().isEmpty())
+      reason += QStringLiteral(" — ") + engine_.audioError();
     file_rows_.push_back(row(QStringLiteral("Audio"), reason, QStringLiteral("unavailable")));
   }
   for (const auto &stream : source_->streams) {
-    const auto selected = std::find(source_->layout.streams.begin(), source_->layout.streams.end(), stream.index) !=
-                          source_->layout.streams.end();
+    const auto selected = std::find(source_->layout.streams.begin(), source_->layout.streams.end(),
+                                    stream.index) != source_->layout.streams.end();
     const auto rate = stream.average_frame_rate.denominator > 0
                           ? static_cast<double>(stream.average_frame_rate.numerator) /
                                 stream.average_frame_rate.denominator
                           : 0.0;
-    file_rows_.push_back(row(
-        QStringLiteral("Video stream %1%2").arg(stream.index).arg(selected ? QStringLiteral(" (decoded)") : QString()),
-        QStringLiteral("%1 %2×%3, %4 fps, time base %5/%6, %7 %8 range %9")
-            .arg(QString::fromStdString(stream.codec))
-            .arg(stream.width)
-            .arg(stream.height)
-            .arg(rate, 0, 'f', 3)
-            .arg(stream.time_base.numerator)
-            .arg(stream.time_base.denominator)
-            .arg(QString::fromStdString(stream.color.pixel_format), QString::fromStdString(stream.color.space),
-                 QString::fromStdString(stream.color.range))));
+    file_rows_.push_back(row(QStringLiteral("Video stream %1%2")
+                                 .arg(stream.index)
+                                 .arg(selected ? QStringLiteral(" (decoded)") : QString()),
+                             QStringLiteral("%1 %2×%3, %4 fps, time base %5/%6, %7 %8 range %9")
+                                 .arg(QString::fromStdString(stream.codec))
+                                 .arg(stream.width)
+                                 .arg(stream.height)
+                                 .arg(rate, 0, 'f', 3)
+                                 .arg(stream.time_base.numerator)
+                                 .arg(stream.time_base.denominator)
+                                 .arg(QString::fromStdString(stream.color.pixel_format),
+                                      QString::fromStdString(stream.color.space),
+                                      QString::fromStdString(stream.color.range))));
   }
 }
 
@@ -636,13 +765,16 @@ void PlayerController::startMetadataLoad(const std::string &path) {
     } catch (const std::exception &error) {
       loaded->telemetry_error = QString::fromUtf8(error.what());
     }
-    QMetaObject::invokeMethod(this, [this, generation, loaded] { applyMetadata(generation, loaded); },
-                              Qt::QueuedConnection);
+    QMetaObject::invokeMethod(
+        this, [this, generation, loaded] { applyMetadata(generation, loaded); },
+        Qt::QueuedConnection);
   });
 }
 
-void PlayerController::applyMetadata(const std::uint64_t generation, std::shared_ptr<LoadedMetadata> loaded) {
-  if (generation != load_generation_) return;
+void PlayerController::applyMetadata(const std::uint64_t generation,
+                                     std::shared_ptr<LoadedMetadata> loaded) {
+  if (generation != load_generation_)
+    return;
   metadata_ = std::move(loaded);
   metadata_loaded_ = true;
 
@@ -650,26 +782,33 @@ void PlayerController::applyMetadata(const std::uint64_t generation, std::shared
   if (metadata_->inspection.has_value()) {
     const auto &inspection = *metadata_->inspection;
     if (inspection.identity.major_brand.has_value()) {
-      file_rows_.push_back(row(QStringLiteral("Major brand"), QString::fromStdString(*inspection.identity.major_brand)));
+      file_rows_.push_back(row(QStringLiteral("Major brand"),
+                               QString::fromStdString(*inspection.identity.major_brand)));
     }
     for (const auto &track : inspection.tracks) {
       QString geometry;
-      if (track.width > 0U) geometry = QStringLiteral("%1×%2").arg(track.width).arg(track.height);
+      if (track.width > 0U)
+        geometry = QStringLiteral("%1×%2").arg(track.width).arg(track.height);
       else if (track.sample_rate > 0U) {
-        geometry = QStringLiteral("%1 Hz, %2 ch, %3 bit").arg(track.sample_rate).arg(track.channel_count).arg(track.bits_per_sample);
+        geometry = QStringLiteral("%1 Hz, %2 ch, %3 bit")
+                       .arg(track.sample_rate)
+                       .arg(track.channel_count)
+                       .arg(track.bits_per_sample);
       }
-      track_rows_.push_back(QVariantMap{
-          {QStringLiteral("id"), track.id},
-          {QStringLiteral("handler"), QString::fromStdString(track.handler_type)},
-          {QStringLiteral("name"), QString::fromStdString(track.handler_name)},
-          {QStringLiteral("codec"), QString::fromStdString(track.codec)},
-          {QStringLiteral("timeBase"), rational(track.time_base.numerator, track.time_base.denominator)},
-          {QStringLiteral("duration"), QString::number(track.duration_ticks)},
-          {QStringLiteral("samples"), track.sample_count},
-          {QStringLiteral("geometry"), geometry}});
+      track_rows_.push_back(
+          QVariantMap{{QStringLiteral("id"), track.id},
+                      {QStringLiteral("handler"), QString::fromStdString(track.handler_type)},
+                      {QStringLiteral("name"), QString::fromStdString(track.handler_name)},
+                      {QStringLiteral("codec"), QString::fromStdString(track.codec)},
+                      {QStringLiteral("timeBase"),
+                       rational(track.time_base.numerator, track.time_base.denominator)},
+                      {QStringLiteral("duration"), QString::number(track.duration_ticks)},
+                      {QStringLiteral("samples"), track.sample_count},
+                      {QStringLiteral("geometry"), geometry}});
     }
   } else {
-    file_rows_.push_back(row(QStringLiteral("Container"), metadata_->inspection_error, QStringLiteral("unavailable")));
+    file_rows_.push_back(row(QStringLiteral("Container"), metadata_->inspection_error,
+                             QStringLiteral("unavailable")));
   }
 
   timeline_samples_ = {};
@@ -679,9 +818,10 @@ void PlayerController::applyMetadata(const std::uint64_t generation, std::shared
   if (metadata_->telemetry.has_value() && total > 0.0L) {
     const auto &telemetry = *metadata_->telemetry;
     const auto fraction = [&](const std::int64_t ticks) {
-      return static_cast<double>(std::clamp(static_cast<long double>(ticks) * telemetry.time_base.numerator /
-                                                telemetry.time_base.denominator / total,
-                                            0.0L, 1.0L));
+      return static_cast<double>(
+          std::clamp(static_cast<long double>(ticks) * telemetry.time_base.numerator /
+                         telemetry.time_base.denominator / total,
+                     0.0L, 1.0L));
     };
     if (metadata_->inspection.has_value() && metadata_->gpmd_track.has_value()) {
       for (const auto &sample : metadata_->inspection->tracks[*metadata_->gpmd_track].samples) {
@@ -689,9 +829,10 @@ void PlayerController::applyMetadata(const std::uint64_t generation, std::shared
       }
     }
     for (const auto &gap : telemetry.gaps) {
-      timeline_gaps_.push_back(QVariantMap{{QStringLiteral("start"), fraction(gap.start_ticks)},
-                                           {QStringLiteral("end"), fraction(gap.end_ticks)},
-                                           {QStringLiteral("reason"), QString::fromStdString(gap.reason)}});
+      timeline_gaps_.push_back(
+          QVariantMap{{QStringLiteral("start"), fraction(gap.start_ticks)},
+                      {QStringLiteral("end"), fraction(gap.end_ticks)},
+                      {QStringLiteral("reason"), QString::fromStdString(gap.reason)}});
     }
     if (!telemetry.gps.empty()) {
       gps_coverage_ = {{QStringLiteral("start"), fraction(telemetry.gps.front().media_time_ticks)},
@@ -704,9 +845,10 @@ void PlayerController::applyMetadata(const std::uint64_t generation, std::shared
   map_route_.clear();
   if (metadata_->telemetry.has_value()) {
     for (const auto &point : metadata_->telemetry->gps) {
-      map_route_.push_back({{static_cast<double>(point.latitude), static_cast<double>(point.longitude)},
-                            point.media_time_ticks,
-                            point.validity == gb::telemetry::Validity::valid});
+      map_route_.push_back(
+          {{static_cast<double>(point.latitude), static_cast<double>(point.longitude)},
+           point.media_time_ticks,
+           point.validity == gb::telemetry::Validity::valid});
     }
   }
   emit metadataChanged();
@@ -720,7 +862,8 @@ void PlayerController::applyMetadata(const std::uint64_t generation, std::shared
 void PlayerController::onFrameChanged() {
   emit positionChanged();
   // A photo's rows are built once when it opens.
-  if (engine_.isStill()) return;
+  if (engine_.isStill())
+    return;
   updateTelemetry();
   updateGpmfSample();
 }
@@ -730,26 +873,34 @@ void PlayerController::updateTelemetry() {
   const auto video_base = engine_.timeBase();
   const auto position_ticks = engine_.positionTicks();
   rows.push_back(row(QStringLiteral("Media time"), formatTicks(position_ticks)));
-  rows.push_back(row(QStringLiteral("Frame PTS"),
-                     QStringLiteral("%1 @ %2/%3").arg(position_ticks).arg(video_base.numerator).arg(video_base.denominator)));
+  rows.push_back(row(QStringLiteral("Frame PTS"), QStringLiteral("%1 @ %2/%3")
+                                                      .arg(position_ticks)
+                                                      .arg(video_base.numerator)
+                                                      .arg(video_base.denominator)));
   if (!metadata_loaded_) {
-    rows.push_back(row(QStringLiteral("GPS"), QStringLiteral("loading…"), QStringLiteral("unavailable")));
+    rows.push_back(
+        row(QStringLiteral("GPS"), QStringLiteral("loading…"), QStringLiteral("unavailable")));
     telemetry_rows_ = rows;
     emit telemetryChanged();
     if (engine_.isOpen()) {
-      setMapPosition(QStringLiteral("loading"), QStringLiteral("Loading GPS telemetry…"), std::nullopt, std::nullopt);
+      setMapPosition(QStringLiteral("loading"), QStringLiteral("Loading GPS telemetry…"),
+                     std::nullopt, std::nullopt);
     }
     return;
   }
   const auto *telemetry = metadata_ && metadata_->telemetry ? &*metadata_->telemetry : nullptr;
-  const auto telemetry_base = telemetry != nullptr ? mediaRational(telemetry->time_base) : std::nullopt;
+  const auto telemetry_base =
+      telemetry != nullptr ? mediaRational(telemetry->time_base) : std::nullopt;
   if (telemetry == nullptr || telemetry->gps.empty() || !telemetry_base.has_value()) {
     QString reason = QStringLiteral("no GPS records");
-    if (telemetry == nullptr && metadata_) reason = metadata_->telemetry_error;
-    rows.push_back(row(QStringLiteral("GPS"), unavailable() + QStringLiteral(" — ") + reason, QStringLiteral("unavailable")));
+    if (telemetry == nullptr && metadata_)
+      reason = metadata_->telemetry_error;
+    rows.push_back(row(QStringLiteral("GPS"), unavailable() + QStringLiteral(" — ") + reason,
+                       QStringLiteral("unavailable")));
     telemetry_rows_ = rows;
     emit telemetryChanged();
-    setMapPosition(QStringLiteral("none"), QStringLiteral("No GPS in this recording (%1)").arg(reason), std::nullopt,
+    setMapPosition(QStringLiteral("none"),
+                   QStringLiteral("No GPS in this recording (%1)").arg(reason), std::nullopt,
                    std::nullopt);
     return;
   }
@@ -762,37 +913,50 @@ void PlayerController::updateTelemetry() {
       break;
     }
   }
-  const auto offset_ms = static_cast<double>(seconds(point->media_time_ticks - metadata_ticks, *telemetry_base) * 1000.0L);
+  const auto offset_ms = static_cast<double>(
+      seconds(point->media_time_ticks - metadata_ticks, *telemetry_base) * 1000.0L);
   if (gap != nullptr) {
-    rows.push_back(row(QStringLiteral("GPS gap"), QString::fromStdString(gap->reason), QStringLiteral("unavailable")));
+    rows.push_back(row(QStringLiteral("GPS gap"), QString::fromStdString(gap->reason),
+                       QStringLiteral("unavailable")));
   }
   const auto state = point->validity == gb::telemetry::Validity::valid ? QStringLiteral("ok")
-                                                                        : QStringLiteral("invalid");
-  rows.push_back(point->utc.has_value()
-                     ? row(QStringLiteral("GPS UTC"), QString::fromStdString(*point->utc))
-                     : row(QStringLiteral("GPS UTC"), unavailable(), QStringLiteral("unavailable")));
-  rows.push_back(row(QStringLiteral("Fix"), fixName(point->fix), point->fix.has_value() ? state : QStringLiteral("unavailable")));
-  rows.push_back(point->dop.has_value() ? row(QStringLiteral("DOP"), number(*point->dop, 2), state)
-                                        : row(QStringLiteral("DOP"), unavailable(), QStringLiteral("unavailable")));
-  rows.push_back(row(QStringLiteral("Latitude"), number(point->latitude, 7) + QStringLiteral("°"), state));
-  rows.push_back(row(QStringLiteral("Longitude"), number(point->longitude, 7) + QStringLiteral("°"), state));
-  rows.push_back(row(QStringLiteral("Altitude (WGS 84)"), number(point->altitude, 3) + QStringLiteral(" m"), state));
+                                                                       : QStringLiteral("invalid");
+  rows.push_back(
+      point->utc.has_value()
+          ? row(QStringLiteral("GPS UTC"), QString::fromStdString(*point->utc))
+          : row(QStringLiteral("GPS UTC"), unavailable(), QStringLiteral("unavailable")));
+  rows.push_back(row(QStringLiteral("Fix"), fixName(point->fix),
+                     point->fix.has_value() ? state : QStringLiteral("unavailable")));
+  rows.push_back(point->dop.has_value()
+                     ? row(QStringLiteral("DOP"), number(*point->dop, 2), state)
+                     : row(QStringLiteral("DOP"), unavailable(), QStringLiteral("unavailable")));
+  rows.push_back(
+      row(QStringLiteral("Latitude"), number(point->latitude, 7) + QStringLiteral("°"), state));
+  rows.push_back(
+      row(QStringLiteral("Longitude"), number(point->longitude, 7) + QStringLiteral("°"), state));
+  rows.push_back(row(QStringLiteral("Altitude (WGS 84)"),
+                     number(point->altitude, 3) + QStringLiteral(" m"), state));
   rows.push_back(row(QStringLiteral("Speed 2D"), speedText(point->speed_2d), state));
   const auto azimuth = gb::telemetry::motion_azimuth_degrees(
       telemetry->gps, static_cast<std::size_t>(point - telemetry->gps.data()));
-  rows.push_back(azimuth.has_value()
-                     ? row(QStringLiteral("Speed 2D azimuth"), azimuthText(*azimuth), state)
-                     : row(QStringLiteral("Speed 2D azimuth"),
-                           unavailable() + QStringLiteral(" — no motion vector (stationary or no distinct neighbouring fix)"),
-                           QStringLiteral("unavailable")));
+  rows.push_back(
+      azimuth.has_value()
+          ? row(QStringLiteral("Speed 2D azimuth"), azimuthText(*azimuth), state)
+          : row(QStringLiteral("Speed 2D azimuth"),
+                unavailable() +
+                    QStringLiteral(
+                        " — no motion vector (stationary or no distinct neighbouring fix)"),
+                QStringLiteral("unavailable")));
   rows.push_back(row(QStringLiteral("Speed 3D"), speedText(point->speed_3d), state));
   telemetry_rows_ = rows;
   emit telemetryChanged();
 
   const auto record = static_cast<std::size_t>(point - telemetry->gps.data());
-  const auto any_valid = std::any_of(map_route_.begin(), map_route_.end(), [](const auto &item) { return item.usable; });
+  const auto any_valid = std::any_of(map_route_.begin(), map_route_.end(),
+                                     [](const auto &item) { return item.usable; });
   if (!any_valid) {
-    setMapPosition(QStringLiteral("none"), QStringLiteral("The recording has GPS records but no valid fix"), std::nullopt,
+    setMapPosition(QStringLiteral("none"),
+                   QStringLiteral("The recording has GPS records but no valid fix"), std::nullopt,
                    std::nullopt);
   } else if (point->validity != gb::telemetry::Validity::valid) {
     setMapPosition(QStringLiteral("invalid"),
@@ -800,20 +964,25 @@ void PlayerController::updateTelemetry() {
                        .arg(QString::fromStdString(gb::telemetry::validity_name(point->validity))),
                    record, std::nullopt);
   } else if (gap != nullptr) {
-    setMapPosition(QStringLiteral("gap"),
-                   QStringLiteral("GPS gap (%1). The ring marks the nearest recorded fix, %2 ms away.")
-                       .arg(QString::fromStdString(gap->reason))
-                       .arg(offset_ms, 0, 'f', 0),
-                   record, std::nullopt);
+    setMapPosition(
+        QStringLiteral("gap"),
+        QStringLiteral("GPS gap (%1). The ring marks the nearest recorded fix, %2 ms away.")
+            .arg(QString::fromStdString(gap->reason))
+            .arg(offset_ms, 0, 'f', 0),
+        record, std::nullopt);
   } else {
     setMapPosition(QStringLiteral("valid"), QString(), record,
-                   azimuth.has_value() ? std::optional<double>(static_cast<double>(*azimuth)) : std::nullopt);
+                   azimuth.has_value() ? std::optional<double>(static_cast<double>(*azimuth))
+                                       : std::nullopt);
   }
 }
 
 void PlayerController::setMapPosition(const QString &state, const QString &message,
-                                      const std::optional<std::size_t> record, const std::optional<double> course) {
-  if (state == map_state_ && message == map_message_ && record == map_record_ && course == map_course_) return;
+                                      const std::optional<std::size_t> record,
+                                      const std::optional<double> course) {
+  if (state == map_state_ && message == map_message_ && record == map_record_ &&
+      course == map_course_)
+    return;
   map_state_ = state;
   map_message_ = message;
   map_record_ = record;
@@ -825,9 +994,12 @@ QVariantList PlayerController::routeCandidates(const double latitude, const doub
                                                const double tolerance_metres) const {
   QVariantList result;
   const auto *telemetry = metadata_ && metadata_->telemetry ? &*metadata_->telemetry : nullptr;
-  const auto telemetry_base = telemetry != nullptr ? mediaRational(telemetry->time_base) : std::nullopt;
-  if (!engine_.isOpen() || engine_.isStill() || !telemetry_base.has_value()) return result;
-  const auto candidates = gb::geo::route_candidates(map_route_, {latitude, longitude}, tolerance_metres);
+  const auto telemetry_base =
+      telemetry != nullptr ? mediaRational(telemetry->time_base) : std::nullopt;
+  if (!engine_.isOpen() || engine_.isStill() || !telemetry_base.has_value())
+    return result;
+  const auto candidates =
+      gb::geo::route_candidates(map_route_, {latitude, longitude}, tolerance_metres);
   const auto now = engine_.positionTicks();
   const auto last = std::max<std::int64_t>(0, engine_.durationTicks() - 1);
   std::optional<std::size_t> nearest;
@@ -835,7 +1007,8 @@ QVariantList PlayerController::routeCandidates(const double latitude, const doub
   std::vector<std::int64_t> ticks;
   for (std::size_t index = 0; index < candidates.size(); ++index) {
     const auto video = std::clamp<std::int64_t>(
-        gb::media::rescale_ticks(candidates[index].ticks, *telemetry_base, engine_.timeBase()), 0, last);
+        gb::media::rescale_ticks(candidates[index].ticks, *telemetry_base, engine_.timeBase()), 0,
+        last);
     ticks.push_back(video);
     const auto distance = video >= now ? video - now : now - video;
     if (distance < nearest_distance) {
@@ -844,81 +1017,100 @@ QVariantList PlayerController::routeCandidates(const double latitude, const doub
     }
   }
   for (std::size_t index = 0; index < candidates.size(); ++index) {
-    result.push_back(QVariantMap{{QStringLiteral("ticks"), static_cast<double>(ticks[index])},
-                                 {QStringLiteral("timeText"), formatTicks(ticks[index])},
-                                 {QStringLiteral("distanceMetres"), candidates[index].distance_metres},
-                                 {QStringLiteral("record"), static_cast<qulonglong>(candidates[index].index)},
-                                 {QStringLiteral("nearestToNow"), nearest == index}});
+    result.push_back(
+        QVariantMap{{QStringLiteral("ticks"), static_cast<double>(ticks[index])},
+                    {QStringLiteral("timeText"), formatTicks(ticks[index])},
+                    {QStringLiteral("distanceMetres"), candidates[index].distance_metres},
+                    {QStringLiteral("record"), static_cast<qulonglong>(candidates[index].index)},
+                    {QStringLiteral("nearestToNow"), nearest == index}});
   }
   return result;
 }
 
 void PlayerController::seekTicks(const double ticks) {
-  if (!engine_.isOpen() || !std::isfinite(ticks)) return;
+  if (!engine_.isOpen() || !std::isfinite(ticks))
+    return;
   const auto last = std::max<std::int64_t>(0, engine_.durationTicks() - 1);
   engine_.seek(std::clamp<std::int64_t>(std::llround(ticks), 0, last));
 }
 
 void PlayerController::exportTrackDialog() {
-  if (exportingTrack() || input_path_.isEmpty() || engine_.isStill()) return;
+  if (exportingTrack() || input_path_.isEmpty() || engine_.isStill())
+    return;
   const auto chapters = sequence_paths_.isEmpty() ? QStringList{input_path_} : sequence_paths_;
   QStringList filters;
-  for (const auto &choice : kTrackFormats) filters.push_back(QString::fromLatin1(choice.filter));
+  for (const auto &choice : kTrackFormats)
+    filters.push_back(QString::fromLatin1(choice.filter));
   const auto chosenFormat = [&filters](const QString &filter) {
-    return kTrackFormats[static_cast<std::size_t>(std::max<qsizetype>(0, filters.indexOf(filter)))].format;
+    return kTrackFormats[static_cast<std::size_t>(std::max<qsizetype>(0, filters.indexOf(filter)))]
+        .format;
   };
-  if (!filters.contains(export_filter_)) export_filter_ = filters.front();
+  if (!filters.contains(export_filter_))
+    export_filter_ = filters.front();
 
   const QFileInfo first(chapters.front());
-  QFileDialog dialog(nullptr, chapters.size() > 1
-                                  ? QStringLiteral("Export GPS track of %1 chapters").arg(chapters.size())
-                                  : QStringLiteral("Export GPS track"));
+  QFileDialog dialog(nullptr,
+                     chapters.size() > 1
+                         ? QStringLiteral("Export GPS track of %1 chapters").arg(chapters.size())
+                         : QStringLiteral("Export GPS track"));
   dialog.setAcceptMode(QFileDialog::AcceptSave);
   dialog.setFileMode(QFileDialog::AnyFile);
   dialog.setNameFilters(filters);
   dialog.selectNameFilter(export_filter_);
   dialog.setDefaultSuffix(trackExtension(chosenFormat(export_filter_)));
   dialog.setDirectory(export_directory_.isEmpty() ? first.absolutePath() : export_directory_);
-  dialog.selectFile(first.completeBaseName() + QLatin1Char('.') + trackExtension(chosenFormat(export_filter_)));
+  dialog.selectFile(first.completeBaseName() + QLatin1Char('.') +
+                    trackExtension(chosenFormat(export_filter_)));
   connect(&dialog, &QFileDialog::filterSelected, &dialog,
           [&dialog, &chosenFormat](const QString &filter) {
             dialog.setDefaultSuffix(trackExtension(chosenFormat(filter)));
           });
-  if (dialog.exec() != QDialog::Accepted || dialog.selectedFiles().isEmpty()) return;
+  if (dialog.exec() != QDialog::Accepted || dialog.selectedFiles().isEmpty())
+    return;
 
   const auto target = QFileInfo(dialog.selectedFiles().front()).absoluteFilePath();
   export_filter_ = dialog.selectedNameFilter();
   export_directory_ = QFileInfo(target).absolutePath();
   // A typed known extension decides the format; otherwise the chosen file type does.
-  auto format = gb::telemetry::parse_export_format(QFileInfo(target).suffix().toLower().toStdString());
-  if (!format.has_value()) format = chosenFormat(export_filter_);
+  auto format =
+      gb::telemetry::parse_export_format(QFileInfo(target).suffix().toLower().toStdString());
+  if (!format.has_value())
+    format = chosenFormat(export_filter_);
   for (const auto &chapter : chapters) {
     if (QFileInfo(chapter).canonicalFilePath() == QFileInfo(target).canonicalFilePath()) {
-      setStatus(QStringLiteral("Refusing to overwrite the recording %1").arg(QFileInfo(chapter).fileName()), true);
+      setStatus(QStringLiteral("Refusing to overwrite the recording %1")
+                    .arg(QFileInfo(chapter).fileName()),
+                true);
       return;
     }
   }
 
   // The open chapter's GPS records are already extracted; the others are read in the background.
   std::optional<gb::telemetry::Extraction> loaded;
-  if (metadata_ && metadata_->telemetry.has_value()) loaded = metadata_->telemetry;
+  if (metadata_ && metadata_->telemetry.has_value())
+    loaded = metadata_->telemetry;
   std::vector<std::filesystem::path> paths;
-  for (const auto &chapter : chapters) paths.emplace_back(chapter.toStdString());
+  for (const auto &chapter : chapters)
+    paths.emplace_back(chapter.toStdString());
   const auto loaded_path = input_path_.toStdString();
   setStatus(QStringLiteral("Exporting GPS track to %1…").arg(QDir::toNativeSeparators(target)));
-  exporter_ = std::thread([this, paths, loaded = std::move(loaded), loaded_path, target, format = *format] {
+  exporter_ = std::thread([this, paths, loaded = std::move(loaded), loaded_path, target,
+                           format = *format] {
     QThread::currentThread()->setPriority(QThread::LowPriority);
     QString message;
     auto error = false;
     std::vector<gb::telemetry::ExportSource> sources;
     std::size_t records{};
-    const auto keeps_invalid = format == gb::telemetry::ExportFormat::json || format == gb::telemetry::ExportFormat::csv;
+    const auto keeps_invalid =
+        format == gb::telemetry::ExportFormat::json || format == gb::telemetry::ExportFormat::csv;
     try {
       for (const auto &path : paths) {
         try {
-          auto extraction = loaded.has_value() && path == loaded_path ? *loaded : gb::telemetry::extract(path);
+          auto extraction =
+              loaded.has_value() && path == loaded_path ? *loaded : gb::telemetry::extract(path);
           for (const auto &point : extraction.gps) {
-            if (keeps_invalid || point.validity == gb::telemetry::Validity::valid) ++records;
+            if (keeps_invalid || point.validity == gb::telemetry::Validity::valid)
+              ++records;
           }
           sources.push_back({path, std::move(extraction)});
         } catch (const std::exception &failure) {
@@ -930,26 +1122,30 @@ void PlayerController::exportTrackDialog() {
       const auto bytes = std::move(document).str();
       QSaveFile file(target);
       if (!file.open(QIODevice::WriteOnly) ||
-          file.write(bytes.data(), static_cast<qint64>(bytes.size())) != static_cast<qint64>(bytes.size()) ||
+          file.write(bytes.data(), static_cast<qint64>(bytes.size())) !=
+              static_cast<qint64>(bytes.size()) ||
           !file.commit()) {
         throw std::runtime_error(file.errorString().toStdString());
       }
       message = QStringLiteral("Exported %L1 GPS records%2 to %3")
                     .arg(records)
-                    .arg(paths.size() > 1U ? QStringLiteral(" from %1 chapters").arg(paths.size()) : QString())
+                    .arg(paths.size() > 1U ? QStringLiteral(" from %1 chapters").arg(paths.size())
+                                           : QString())
                     .arg(QDir::toNativeSeparators(target));
     } catch (const std::exception &failure) {
-      message = QStringLiteral("GPS track export failed: %1").arg(QString::fromUtf8(failure.what()));
+      message =
+          QStringLiteral("GPS track export failed: %1").arg(QString::fromUtf8(failure.what()));
       error = true;
     }
-    QMetaObject::invokeMethod(this, [this, message, error] { finishTrackExport(message, error); },
-                              Qt::QueuedConnection);
+    QMetaObject::invokeMethod(
+        this, [this, message, error] { finishTrackExport(message, error); }, Qt::QueuedConnection);
   });
   emit trackExportChanged();
 }
 
 void PlayerController::finishTrackExport(const QString &message, const bool error) {
-  if (exporter_.joinable()) exporter_.join();
+  if (exporter_.joinable())
+    exporter_.join();
   setStatus(message, error);
   emit trackExportChanged();
 }
@@ -965,36 +1161,42 @@ void PlayerController::updateGpmfSample() {
   }
   const auto &track = metadata_->inspection->tracks[*metadata_->gpmd_track];
   const auto base = mediaRational(track.time_base);
-  if (!base.has_value() || track.samples.empty()) return;
+  if (!base.has_value() || track.samples.empty())
+    return;
   const auto ticks = gb::media::rescale_ticks(engine_.positionTicks(), engine_.timeBase(), *base);
   const auto found = std::upper_bound(track.samples.begin(), track.samples.end(), ticks,
                                       [](const std::int64_t value, const auto &sample) {
                                         return value < sample.presentation_time;
                                       });
-  const auto index = found == track.samples.begin()
-                         ? std::size_t{0}
-                         : static_cast<std::size_t>(std::distance(track.samples.begin(), found) - 1);
-  if (gpmf_sample_ == index) return;
+  const auto index =
+      found == track.samples.begin()
+          ? std::size_t{0}
+          : static_cast<std::size_t>(std::distance(track.samples.begin(), found) - 1);
+  if (gpmf_sample_ == index)
+    return;
   gpmf_sample_ = index;
   const auto &sample = track.samples[index];
   gpmf_rows_ = {};
   try {
     const auto payload = gb::container::read_sample(metadata_->inspection->path, sample);
     flatten(gb::metadata::parse_gpmf(payload), 0, gpmf_rows_);
-    gpmf_title_ = QStringLiteral("Track %1 sample %2 of %3 — ticks %4..%5 @ %6, %7 bytes at offset %8%9")
-                      .arg(track.id)
-                      .arg(index)
-                      .arg(track.samples.size())
-                      .arg(sample.presentation_time)
-                      .arg(sample.presentation_time + sample.duration)
-                      .arg(rational(track.time_base.numerator, track.time_base.denominator))
-                      .arg(sample.size)
-                      .arg(sample.offset)
-                      .arg(static_cast<std::size_t>(gpmf_rows_.size()) >= kMaximumGpmfRows
-                               ? QStringLiteral(" (first %1 entries)").arg(kMaximumGpmfRows)
-                               : QString());
+    gpmf_title_ =
+        QStringLiteral("Track %1 sample %2 of %3 — ticks %4..%5 @ %6, %7 bytes at offset %8%9")
+            .arg(track.id)
+            .arg(index)
+            .arg(track.samples.size())
+            .arg(sample.presentation_time)
+            .arg(sample.presentation_time + sample.duration)
+            .arg(rational(track.time_base.numerator, track.time_base.denominator))
+            .arg(sample.size)
+            .arg(sample.offset)
+            .arg(static_cast<std::size_t>(gpmf_rows_.size()) >= kMaximumGpmfRows
+                     ? QStringLiteral(" (first %1 entries)").arg(kMaximumGpmfRows)
+                     : QString());
   } catch (const std::exception &error) {
-    gpmf_title_ = QStringLiteral("Sample %1 cannot be parsed: %2").arg(index).arg(QString::fromUtf8(error.what()));
+    gpmf_title_ = QStringLiteral("Sample %1 cannot be parsed: %2")
+                      .arg(index)
+                      .arg(QString::fromUtf8(error.what()));
   }
   emit gpmfChanged();
 }
@@ -1011,24 +1213,36 @@ void PlayerController::updateDiagnostics() {
   const auto mean = [](const double total, const std::uint64_t count) {
     return count == 0U ? 0.0 : total / static_cast<double>(count);
   };
-  const auto &seeks = statistics.seek_render_ms.empty() ? statistics.seek_present_ms : statistics.seek_render_ms;
+  const auto &seeks =
+      statistics.seek_render_ms.empty() ? statistics.seek_present_ms : statistics.seek_render_ms;
 
   QVariantList rows;
-  rows.push_back(row(QStringLiteral("Displayed fps"),
-                     QString::number(rate(statistics.rendered_frames, previous_statistics_.rendered_frames), 'f', 1)));
-  rows.push_back(row(QStringLiteral("Presented fps"),
-                     QString::number(rate(statistics.presented_frames, previous_statistics_.presented_frames), 'f', 1)));
-  rows.push_back(row(QStringLiteral("Decoded sets/s"),
-                     QString::number(rate(statistics.decoded_sets, previous_statistics_.decoded_sets), 'f', 1)));
+  rows.push_back(
+      row(QStringLiteral("Displayed fps"),
+          QString::number(rate(statistics.rendered_frames, previous_statistics_.rendered_frames),
+                          'f', 1)));
+  rows.push_back(
+      row(QStringLiteral("Presented fps"),
+          QString::number(rate(statistics.presented_frames, previous_statistics_.presented_frames),
+                          'f', 1)));
+  rows.push_back(row(
+      QStringLiteral("Decoded sets/s"),
+      QString::number(rate(statistics.decoded_sets, previous_statistics_.decoded_sets), 'f', 1)));
   const auto dropped = statistics.late_drops + statistics.render_skips;
   rows.push_back(row(QStringLiteral("Dropped frames"),
-                     QStringLiteral("%1  (late %2, not drawn %3)").arg(dropped).arg(statistics.late_drops).arg(statistics.render_skips),
+                     QStringLiteral("%1  (late %2, not drawn %3)")
+                         .arg(dropped)
+                         .arg(statistics.late_drops)
+                         .arg(statistics.render_skips),
                      dropped > 0U ? QStringLiteral("invalid") : QStringLiteral("ok")));
   rows.push_back(row(QStringLiteral("Decoder underruns"), QString::number(statistics.underruns),
                      statistics.underruns > 0U ? QStringLiteral("invalid") : QStringLiteral("ok")));
-  rows.push_back(row(QStringLiteral("Queue"), QStringLiteral("%1 / %2 frame sets").arg(statistics.queue_depth).arg(statistics.queue_capacity)));
-  rows.push_back(row(QStringLiteral("Unpaired frames"), QString::number(statistics.unpaired_frames),
-                     statistics.unpaired_frames > 0U ? QStringLiteral("invalid") : QStringLiteral("ok")));
+  rows.push_back(row(QStringLiteral("Queue"), QStringLiteral("%1 / %2 frame sets")
+                                                  .arg(statistics.queue_depth)
+                                                  .arg(statistics.queue_capacity)));
+  rows.push_back(
+      row(QStringLiteral("Unpaired frames"), QString::number(statistics.unpaired_frames),
+          statistics.unpaired_frames > 0U ? QStringLiteral("invalid") : QStringLiteral("ok")));
   rows.push_back(seeks.empty()
                      ? row(QStringLiteral("Seek latency"), QStringLiteral("no seeks yet"))
                      : row(QStringLiteral("Seek latency"),
@@ -1037,34 +1251,38 @@ void PlayerController::updateDiagnostics() {
                                .arg(percentile(seeks, 0.5), 0, 'f', 0)
                                .arg(*std::max_element(seeks.begin(), seeks.end()), 0, 'f', 0)
                                .arg(seeks.size())));
-  rows.push_back(row(QStringLiteral("Texture upload"),
-                     QStringLiteral("mean %1 ms, max %2 ms")
-                         .arg(mean(statistics.upload_ms_total, statistics.rendered_frames), 0, 'f', 2)
-                         .arg(statistics.upload_ms_max, 0, 'f', 2)));
-  rows.push_back(statistics.gpu_samples == 0U
-                     ? row(QStringLiteral("GPU time"), unavailable(), QStringLiteral("unavailable"))
-                     : row(QStringLiteral("GPU time"),
-                           QStringLiteral("mean %1 ms, max %2 ms (upload + draw)")
-                               .arg(mean(statistics.gpu_ms_total, statistics.gpu_samples), 0, 'f', 2)
-                               .arg(statistics.gpu_ms_max, 0, 'f', 2)));
-  rows.push_back(row(QStringLiteral("Process CPU"),
-                     QStringLiteral("%1% of one core (%2% of %3 threads)")
-                         .arg(cpu, 0, 'f', 0)
-                         .arg(cpu / cores, 0, 'f', 1)
-                         .arg(cores)));
-  rows.push_back(row(QStringLiteral("Memory"),
-                     QStringLiteral("RSS %1 MiB, peak %2 MiB")
-                         .arg(static_cast<double>(usage.resident_bytes) / 1048576.0, 0, 'f', 0)
-                         .arg(static_cast<double>(usage.peak_resident_bytes) / 1048576.0, 0, 'f', 0)));
+  rows.push_back(
+      row(QStringLiteral("Texture upload"),
+          QStringLiteral("mean %1 ms, max %2 ms")
+              .arg(mean(statistics.upload_ms_total, statistics.rendered_frames), 0, 'f', 2)
+              .arg(statistics.upload_ms_max, 0, 'f', 2)));
+  rows.push_back(
+      statistics.gpu_samples == 0U
+          ? row(QStringLiteral("GPU time"), unavailable(), QStringLiteral("unavailable"))
+          : row(QStringLiteral("GPU time"),
+                QStringLiteral("mean %1 ms, max %2 ms (upload + draw)")
+                    .arg(mean(statistics.gpu_ms_total, statistics.gpu_samples), 0, 'f', 2)
+                    .arg(statistics.gpu_ms_max, 0, 'f', 2)));
+  rows.push_back(
+      row(QStringLiteral("Process CPU"), QStringLiteral("%1% of one core (%2% of %3 threads)")
+                                             .arg(cpu, 0, 'f', 0)
+                                             .arg(cpu / cores, 0, 'f', 1)
+                                             .arg(cores)));
+  rows.push_back(
+      row(QStringLiteral("Memory"),
+          QStringLiteral("RSS %1 MiB, peak %2 MiB")
+              .arg(static_cast<double>(usage.resident_bytes) / 1048576.0, 0, 'f', 0)
+              .arg(static_cast<double>(usage.peak_resident_bytes) / 1048576.0, 0, 'f', 0)));
   if (engine_.hasAudio()) {
     const auto audio = engine_.audioStatistics();
     rows.push_back(row(QStringLiteral("Audio"), engine_.audioState()));
-    rows.push_back(row(QStringLiteral("Audio output"),
-                       QStringLiteral("%1, %2 Hz stereo float, %3-frame buffer, latency estimate %4 ms")
-                           .arg(QString::fromStdString(audio.driver))
-                           .arg(audio.sample_rate)
-                           .arg(audio.buffer_frames)
-                           .arg(audio.latency_ms, 0, 'f', 1)));
+    rows.push_back(
+        row(QStringLiteral("Audio output"),
+            QStringLiteral("%1, %2 Hz stereo float, %3-frame buffer, latency estimate %4 ms")
+                .arg(QString::fromStdString(audio.driver))
+                .arg(audio.sample_rate)
+                .arg(audio.buffer_frames)
+                .arg(audio.latency_ms, 0, 'f', 1)));
     rows.push_back(row(QStringLiteral("Audio underruns"), QString::number(audio.underruns),
                        audio.underruns > 0U ? QStringLiteral("invalid") : QStringLiteral("ok")));
     rows.push_back(row(QStringLiteral("Audio alignment"),
@@ -1073,7 +1291,8 @@ void PlayerController::updateDiagnostics() {
                            .arg(audio.aligned_skip_frames)
                            .arg(audio.aligned_silence_frames)));
     if (!audio.error.empty()) {
-      rows.push_back(row(QStringLiteral("Audio decode"), QString::fromStdString(audio.error), QStringLiteral("invalid")));
+      rows.push_back(row(QStringLiteral("Audio decode"), QString::fromStdString(audio.error),
+                         QStringLiteral("invalid")));
     }
   } else {
     rows.push_back(row(QStringLiteral("Audio"),
@@ -1081,29 +1300,34 @@ void PlayerController::updateDiagnostics() {
                        QStringLiteral("unavailable")));
   }
   const auto tiles = tiles_->statistics();
-  rows.push_back(row(QStringLiteral("Map tiles"),
-                     QStringLiteral("%1 from cache (%2 revalidated), %3 requests: %4 downloaded (%5 KiB), "
-                                    "%6 not modified, %7 failed; %8 in flight, %9 queued")
-                         .arg(tiles.cache_fresh + tiles.cache_stale)
-                         .arg(tiles.cache_stale)
-                         .arg(tiles.network_requests)
-                         .arg(tiles.downloaded)
-                         .arg(tiles.downloaded_bytes / 1024U)
-                         .arg(tiles.not_modified)
-                         .arg(tiles.failures)
-                         .arg(tiles.in_flight)
-                         .arg(tiles.queued),
-                     tiles.blocked || tiles.failures > 0U ? QStringLiteral("invalid") : QStringLiteral("ok")));
+  rows.push_back(
+      row(QStringLiteral("Map tiles"),
+          QStringLiteral("%1 from cache (%2 revalidated), %3 requests: %4 downloaded (%5 KiB), "
+                         "%6 not modified, %7 failed; %8 in flight, %9 queued")
+              .arg(tiles.cache_fresh + tiles.cache_stale)
+              .arg(tiles.cache_stale)
+              .arg(tiles.network_requests)
+              .arg(tiles.downloaded)
+              .arg(tiles.downloaded_bytes / 1024U)
+              .arg(tiles.not_modified)
+              .arg(tiles.failures)
+              .arg(tiles.in_flight)
+              .arg(tiles.queued),
+          tiles.blocked || tiles.failures > 0U ? QStringLiteral("invalid") : QStringLiteral("ok")));
   rows.push_back(row(QStringLiteral("Map source"),
                      QStringLiteral("%1; %2; cache %3")
                          .arg(mapProviderName())
-                         .arg(tiles_->networkEnabled() ? QStringLiteral("network on") : QStringLiteral("network off"))
-                         .arg(tiles_->diskCacheEnabled() ? tiles_->cacheDirectory() : QStringLiteral("memory only"))));
+                         .arg(tiles_->networkEnabled() ? QStringLiteral("network on")
+                                                       : QStringLiteral("network off"))
+                         .arg(tiles_->diskCacheEnabled() ? tiles_->cacheDirectory()
+                                                         : QStringLiteral("memory only"))));
   rows.push_back(row(QStringLiteral("Decoder threads"),
-                     options_.decoder_threads == 0 ? QStringLiteral("automatic, per stream")
-                                                   : QStringLiteral("%1 per stream").arg(options_.decoder_threads)));
+                     options_.decoder_threads == 0
+                         ? QStringLiteral("automatic, per stream")
+                         : QStringLiteral("%1 per stream").arg(options_.decoder_threads)));
   rows.push_back(row(QStringLiteral("Renderer"),
-                     statistics.renderer.empty() ? QStringLiteral("not initialized") : QString::fromStdString(statistics.renderer)));
+                     statistics.renderer.empty() ? QStringLiteral("not initialized")
+                                                 : QString::fromStdString(statistics.renderer)));
   diagnostics_rows_ = rows;
   previous_statistics_ = statistics;
   previous_usage_ = usage;
@@ -1111,7 +1335,8 @@ void PlayerController::updateDiagnostics() {
 }
 
 std::int64_t PlayerController::ticksForSeconds(const double value) const {
-  if (!engine_.isOpen() || !std::isfinite(value)) return 0;
+  if (!engine_.isOpen() || !std::isfinite(value))
+    return 0;
   const auto milliseconds = std::llround(std::max(0.0, value) * 1000.0);
   return gb::media::rescale_ticks(milliseconds, {1, 1000}, engine_.timeBase());
 }
@@ -1119,44 +1344,56 @@ std::int64_t PlayerController::ticksForSeconds(const double value) const {
 void PlayerController::onEndReached() {
   const auto next = sequence_index_ + 1;
   // Continue only if nothing moved playback off the last frame before this queued call ran.
-  if (options_.continue_sequence && next < sequence_paths_.size() && !engine_.playing() && !engine_.seeking() &&
+  if (options_.continue_sequence && next < sequence_paths_.size() && !engine_.playing() &&
+      !engine_.seeking() &&
       engine_.positionTicks() + engine_.frameDurationTicks() >= engine_.durationTicks()) {
     // A failed open keeps the previous chapter and reports why.
-    if (open(sequence_paths_[next])) play();
+    if (open(sequence_paths_[next]))
+      play();
     return;
   }
   setStatus(QStringLiteral("End of media"));
 }
 
 void PlayerController::openSequenceIndex(const int index) {
-  if (index < 0 || index >= sequence_paths_.size() || index == sequence_index_) return;
+  if (index < 0 || index >= sequence_paths_.size() || index == sequence_index_)
+    return;
   const auto was_playing = engine_.playing();
-  if (open(sequence_paths_[index]) && was_playing) play();
+  if (open(sequence_paths_[index]) && was_playing)
+    play();
 }
 
 void PlayerController::togglePlay() {
-  if (engine_.playing()) pause();
-  else play();
+  if (engine_.playing())
+    pause();
+  else
+    play();
 }
 
 void PlayerController::play() {
-  if (!engine_.isOpen() || engine_.isStill()) return;
+  if (!engine_.isOpen() || engine_.isStill())
+    return;
   engine_.play();
-  setStatus(QStringLiteral("Playing — %1").arg(QString::fromStdString(source_->layout.description)));
+  setStatus(
+      QStringLiteral("Playing — %1").arg(QString::fromStdString(source_->layout.description)));
 }
 
 void PlayerController::pause() {
-  if (engine_.isStill()) return;
+  if (engine_.isStill())
+    return;
   engine_.pause();
-  if (engine_.isOpen()) setStatus(QStringLiteral("Paused at %1").arg(positionText()));
+  if (engine_.isOpen())
+    setStatus(QStringLiteral("Paused at %1").arg(positionText()));
 }
 
 void PlayerController::seekSeconds(const double value) { engine_.seek(ticksForSeconds(value)); }
 
 void PlayerController::seekFraction(const double fraction) {
-  if (!engine_.isOpen() || !std::isfinite(fraction)) return;
+  if (!engine_.isOpen() || !std::isfinite(fraction))
+    return;
   const auto clamped = std::clamp(fraction, 0.0, 1.0);
-  engine_.seek(static_cast<std::int64_t>(std::floor(clamped * static_cast<double>(engine_.durationTicks()))));
+  engine_.seek(static_cast<std::int64_t>(
+      std::floor(clamped * static_cast<double>(engine_.durationTicks()))));
 }
 
 void PlayerController::beginScrub() { engine_.setScrubbing(true); }
@@ -1164,7 +1401,9 @@ void PlayerController::beginScrub() { engine_.setScrubbing(true); }
 void PlayerController::endScrub() { engine_.setScrubbing(false); }
 
 void PlayerController::stepFrames(const int frames) {
-  if (!engine_.isOpen() || engine_.isStill()) return;
+  if (!engine_.isOpen() || engine_.isStill())
+    return;
   engine_.pause();
-  engine_.seek(engine_.positionTicks() + static_cast<std::int64_t>(frames) * engine_.frameDurationTicks());
+  engine_.seek(engine_.positionTicks() +
+               static_cast<std::int64_t>(frames) * engine_.frameDurationTicks());
 }

@@ -31,7 +31,7 @@ struct WorldBounds {
 
 // One time the route passed near a clicked position.
 struct RouteCandidate {
-  std::size_t index{};  // into the points vector
+  std::size_t index{}; // into the points vector
   std::int64_t ticks{};
   double distance_metres{};
 };

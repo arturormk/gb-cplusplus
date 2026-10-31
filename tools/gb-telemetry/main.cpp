@@ -57,33 +57,61 @@ int main(const int argc, char **argv) {
   Options options;
   for (int index = 1; index < argc; ++index) {
     const std::string_view argument(argv[index]);
-    if (argument == "--help") { help(); return 0; }
-    if (argument == "--version") { std::cout << "gb-telemetry " << kVersion << '\n'; return 0; }
-    if (argument == "--include-invalid") { options.export_options.include_invalid = true; continue; }
+    if (argument == "--help") {
+      help();
+      return 0;
+    }
+    if (argument == "--version") {
+      std::cout << "gb-telemetry " << kVersion << '\n';
+      return 0;
+    }
+    if (argument == "--include-invalid") {
+      options.export_options.include_invalid = true;
+      continue;
+    }
     if (argument == "--format" || argument == "--track") {
-      if (++index >= argc) { std::cerr << "gb-telemetry: missing value for " << argument << '\n'; return 2; }
+      if (++index >= argc) {
+        std::cerr << "gb-telemetry: missing value for " << argument << '\n';
+        return 2;
+      }
       if (argument == "--format") {
         const auto format = gb::telemetry::parse_export_format(argv[index]);
-        if (!format.has_value()) { std::cerr << "gb-telemetry: format must be json, csv, gpx, or geojson\n"; return 2; }
+        if (!format.has_value()) {
+          std::cerr << "gb-telemetry: format must be json, csv, gpx, or geojson\n";
+          return 2;
+        }
         options.export_options.format = *format;
       } else {
         options.track_id = parse_id(argv[index]);
-        if (!options.track_id.has_value()) { std::cerr << "gb-telemetry: invalid track ID\n"; return 2; }
+        if (!options.track_id.has_value()) {
+          std::cerr << "gb-telemetry: invalid track ID\n";
+          return 2;
+        }
       }
       continue;
     }
-    if (argument.starts_with('-')) { std::cerr << "gb-telemetry: unknown option: " << argument << '\n'; return 2; }
-    if (!options.path.empty()) { std::cerr << "gb-telemetry: expected exactly one input file\n"; return 2; }
+    if (argument.starts_with('-')) {
+      std::cerr << "gb-telemetry: unknown option: " << argument << '\n';
+      return 2;
+    }
+    if (!options.path.empty()) {
+      std::cerr << "gb-telemetry: expected exactly one input file\n";
+      return 2;
+    }
     options.path = argument;
   }
-  if (options.path.empty()) { std::cerr << "gb-telemetry: missing input file\n"; return 2; }
+  if (options.path.empty()) {
+    std::cerr << "gb-telemetry: missing input file\n";
+    return 2;
+  }
   try {
     const std::vector<gb::telemetry::ExportSource> sources{
         {options.path, gb::telemetry::extract(options.path, options.track_id)}};
     gb::telemetry::write_export(std::cout, sources, options.export_options);
     return 0;
   } catch (const gb::metadata::GpmfError &error) {
-    std::cerr << "gb-telemetry: corrupt GPMF at payload byte " << error.offset() << ": " << error.what() << '\n';
+    std::cerr << "gb-telemetry: corrupt GPMF at payload byte " << error.offset() << ": "
+              << error.what() << '\n';
     return 4;
   } catch (const gb::container::InspectionError &error) {
     std::cerr << "gb-telemetry: " << gb::container::error_kind_name(error.kind()) << " at byte "

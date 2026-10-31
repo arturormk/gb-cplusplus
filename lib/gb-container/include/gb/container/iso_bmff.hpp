@@ -76,9 +76,9 @@ private:
 };
 
 [[nodiscard]] Inspection inspect_iso_bmff(const std::filesystem::path &path);
-[[nodiscard]] std::vector<std::uint8_t> read_sample(const std::filesystem::path &path,
-                                                    const SampleReference &sample,
-                                                    std::uint32_t maximum_size = 16U * 1024U * 1024U);
+[[nodiscard]] std::vector<std::uint8_t>
+read_sample(const std::filesystem::path &path, const SampleReference &sample,
+            std::uint32_t maximum_size = 16U * 1024U * 1024U);
 [[nodiscard]] std::string error_kind_name(ErrorKind kind);
 
 } // namespace gb::container

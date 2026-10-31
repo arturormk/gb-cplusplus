@@ -37,14 +37,12 @@ InputFormat detect_input_format(const std::filesystem::path &path) {
     throw gb::container::InspectionError(gb::container::ErrorKind::io, 0,
                                          "cannot open input for reading");
   }
-  input.read(reinterpret_cast<char *>(prefix.data()),
-             static_cast<std::streamsize>(prefix.size()));
+  input.read(reinterpret_cast<char *>(prefix.data()), static_cast<std::streamsize>(prefix.size()));
   const auto count = input.gcount();
   if (count >= 2 && prefix[0] == 0xffU && prefix[1] == 0xd8U) {
     return InputFormat::jpeg;
   }
-  if (count >= 8 && prefix[4] == 'f' && prefix[5] == 't' && prefix[6] == 'y' &&
-      prefix[7] == 'p') {
+  if (count >= 8 && prefix[4] == 'f' && prefix[5] == 't' && prefix[6] == 'y' && prefix[7] == 'p') {
     return InputFormat::iso_bmff;
   }
   throw gb::container::InspectionError(gb::container::ErrorKind::unsupported, 0,
@@ -131,10 +129,9 @@ void print_json(const gb::container::Inspection &inspection) {
             << "  \"file_size\": " << inspection.file_size << ",\n"
             << "  \"identity\": {\n"
             << "    \"format\": \"ISO BMFF\",\n"
-            << "    \"major_brand\": "
-            << json_string(inspection.identity.major_brand.value_or("")) << ",\n"
-            << "    \"minor_version\": " << inspection.identity.minor_version.value_or(0U)
+            << "    \"major_brand\": " << json_string(inspection.identity.major_brand.value_or(""))
             << ",\n"
+            << "    \"minor_version\": " << inspection.identity.minor_version.value_or(0U) << ",\n"
             << "    \"compatible_brands\": [";
   for (std::size_t index = 0; index < inspection.identity.compatible_brands.size(); ++index) {
     if (index != 0U) {
@@ -180,9 +177,8 @@ void print_json(const gb::container::Inspection &inspection) {
 }
 
 void print_box_text(const gb::container::Box &box, const unsigned depth) {
-  std::cout << std::string(depth * 2U, ' ') << display_fourcc(box.type)
-            << " offset=" << box.offset << " size=" << box.size
-            << " header=" << box.header_size << '\n';
+  std::cout << std::string(depth * 2U, ' ') << display_fourcc(box.type) << " offset=" << box.offset
+            << " size=" << box.size << " header=" << box.header_size << '\n';
   for (const auto &child : box.children) {
     print_box_text(child, depth + 1U);
   }
@@ -205,15 +201,15 @@ void print_text(const gb::container::Inspection &inspection) {
   std::cout << "tracks:\n";
   for (const auto &track : inspection.tracks) {
     std::cout << "  id=" << track.id << " handler=" << display_fourcc(track.handler_type)
-              << " codec=" << display_fourcc(track.codec) << " time_base="
-              << track.time_base.numerator << '/' << track.time_base.denominator
+              << " codec=" << display_fourcc(track.codec)
+              << " time_base=" << track.time_base.numerator << '/' << track.time_base.denominator
               << " duration_ticks=" << track.duration_ticks << " samples=" << track.sample_count;
     if (track.width != 0U || track.height != 0U) {
       std::cout << " geometry=" << track.width << 'x' << track.height;
     }
     if (track.channel_count != 0U) {
-      std::cout << " audio=" << track.sample_rate << "Hz/" << track.channel_count
-                << "ch/" << track.bits_per_sample << "bit";
+      std::cout << " audio=" << track.sample_rate << "Hz/" << track.channel_count << "ch/"
+                << track.bits_per_sample << "bit";
     }
     if (!track.handler_name.empty()) {
       std::cout << " name=" << track.handler_name;
@@ -287,10 +283,9 @@ void print_jpeg_text(const gb::image::JpegInspection &inspection) {
             << "size: " << inspection.file_size << " bytes\n"
             << "format: JPEG\n"
             << "images: " << inspection.images.size() << '\n'
-            << "metadata:"
-            << (inspection.has_jfif ? " JFIF" : "") << (inspection.has_exif ? " Exif" : "")
-            << (inspection.has_xmp ? " XMP" : "") << (inspection.has_mpf ? " MPF" : "")
-            << (inspection.has_app6 ? " APP6" : "") << '\n';
+            << "metadata:" << (inspection.has_jfif ? " JFIF" : "")
+            << (inspection.has_exif ? " Exif" : "") << (inspection.has_xmp ? " XMP" : "")
+            << (inspection.has_mpf ? " MPF" : "") << (inspection.has_app6 ? " APP6" : "") << '\n';
   for (std::size_t index = 0; index < inspection.images.size(); ++index) {
     const auto &image = inspection.images[index];
     std::cout << "image[" << index << "]: offset=" << image.offset << " size=" << image.size
@@ -298,8 +293,7 @@ void print_jpeg_text(const gb::image::JpegInspection &inspection) {
               << " precision=" << static_cast<unsigned>(image.precision)
               << " components=" << static_cast<unsigned>(image.components) << '\n';
     for (const auto &segment : image.segments) {
-      std::cout << "  " << segment.name << " offset=" << segment.offset
-                << " size=" << segment.size;
+      std::cout << "  " << segment.name << " offset=" << segment.offset << " size=" << segment.size;
       if (!segment.content.empty()) {
         std::cout << " content=" << segment.content;
       }
@@ -391,8 +385,8 @@ int main(const int argc, char **argv) {
               << ": " << error.what() << '\n';
     return is_io ? 3 : 4;
   } catch (const gb::container::InspectionError &error) {
-    std::cerr << "gb-inspect: " << gb::container::error_kind_name(error.kind())
-              << " at byte " << error.offset() << ": " << error.what() << '\n';
+    std::cerr << "gb-inspect: " << gb::container::error_kind_name(error.kind()) << " at byte "
+              << error.offset() << ": " << error.what() << '\n';
     return error_exit_code(error.kind());
   } catch (const std::exception &error) {
     std::cerr << "gb-inspect: unexpected: " << error.what() << '\n';

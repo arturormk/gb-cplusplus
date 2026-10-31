@@ -13,7 +13,8 @@ constexpr double kRadiansPerDegree = std::numbers::pi / 180.0;
 } // namespace
 
 WorldPoint project(const LatLon position) {
-  const auto latitude = std::clamp(position.latitude, -kMaximumMercatorLatitude, kMaximumMercatorLatitude);
+  const auto latitude =
+      std::clamp(position.latitude, -kMaximumMercatorLatitude, kMaximumMercatorLatitude);
   const auto sine = std::sin(latitude * kRadiansPerDegree);
   const auto x = (position.longitude + 180.0) / 360.0;
   const auto y = 0.5 - std::log((1.0 + sine) / (1.0 - sine)) / (4.0 * std::numbers::pi);
@@ -22,7 +23,8 @@ WorldPoint project(const LatLon position) {
 
 LatLon unproject(const WorldPoint point) {
   const auto y = std::clamp(point.y, 0.0, 1.0);
-  const auto latitude = std::atan(std::sinh(std::numbers::pi * (1.0 - 2.0 * y))) / kRadiansPerDegree;
+  const auto latitude =
+      std::atan(std::sinh(std::numbers::pi * (1.0 - 2.0 * y))) / kRadiansPerDegree;
   return {latitude, point.x * 360.0 - 180.0};
 }
 

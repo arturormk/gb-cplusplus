@@ -45,7 +45,8 @@ Pixel sample(const RgbFrame &image, const long double x, const long double y,
   auto mapped_x = x;
   if (wrap_x) {
     mapped_x = std::fmod(mapped_x, static_cast<long double>(image.width));
-    if (mapped_x < 0.0L) mapped_x += image.width;
+    if (mapped_x < 0.0L)
+      mapped_x += image.width;
   }
   const auto floor_x = std::floor(mapped_x);
   const auto floor_y = std::floor(y);
@@ -58,8 +59,7 @@ Pixel sample(const RgbFrame &image, const long double x, const long double y,
   Pixel result{};
   for (std::size_t channel = 0; channel < result.size(); ++channel) {
     const auto at = [&](const int px, const int py) {
-      return image.pixels[(static_cast<std::size_t>(py) *
-                           static_cast<std::size_t>(image.width) +
+      return image.pixels[(static_cast<std::size_t>(py) * static_cast<std::size_t>(image.width) +
                            static_cast<std::size_t>(px)) *
                               3U +
                           channel];
@@ -75,8 +75,8 @@ void store(RgbFrame &image, const int x, const int y, const Pixel color) {
                        static_cast<std::size_t>(x)) *
                       3U;
   for (std::size_t channel = 0; channel < color.size(); ++channel) {
-    image.pixels[offset + channel] = static_cast<std::uint8_t>(
-        std::clamp(std::lround(color[channel]), 0L, 255L));
+    image.pixels[offset + channel] =
+        static_cast<std::uint8_t>(std::clamp(std::lround(color[channel]), 0L, 255L));
   }
 }
 
@@ -100,34 +100,26 @@ FaceCoordinate face_coordinate(const Vec3 direction) {
     face = direction.z < 0.0L ? CubeFace::down : CubeFace::top;
   }
 
-  const auto equal_area = [](const long double value) {
-    return std::atan(value) * 4.0L / kPi;
-  };
+  const auto equal_area = [](const long double value) { return std::atan(value) * 4.0L / kPi; };
   Vec2 uv;
   switch (face) {
   case CubeFace::left:
-    uv = {(equal_area(intersection.y) + 1.0L) * 0.5L,
-          (equal_area(intersection.z) + 1.0L) * 0.5L};
+    uv = {(equal_area(intersection.y) + 1.0L) * 0.5L, (equal_area(intersection.z) + 1.0L) * 0.5L};
     break;
   case CubeFace::right:
-    uv = {(1.0L - equal_area(intersection.y)) * 0.5L,
-          (equal_area(intersection.z) + 1.0L) * 0.5L};
+    uv = {(1.0L - equal_area(intersection.y)) * 0.5L, (equal_area(intersection.z) + 1.0L) * 0.5L};
     break;
   case CubeFace::front:
-    uv = {(equal_area(intersection.x) + 1.0L) * 0.5L,
-          (equal_area(intersection.z) + 1.0L) * 0.5L};
+    uv = {(equal_area(intersection.x) + 1.0L) * 0.5L, (equal_area(intersection.z) + 1.0L) * 0.5L};
     break;
   case CubeFace::back:
-    uv = {(1.0L - equal_area(intersection.x)) * 0.5L,
-          (equal_area(intersection.z) + 1.0L) * 0.5L};
+    uv = {(1.0L - equal_area(intersection.x)) * 0.5L, (equal_area(intersection.z) + 1.0L) * 0.5L};
     break;
   case CubeFace::down:
-    uv = {(1.0L - equal_area(intersection.x)) * 0.5L,
-          (1.0L - equal_area(intersection.y)) * 0.5L};
+    uv = {(1.0L - equal_area(intersection.x)) * 0.5L, (1.0L - equal_area(intersection.y)) * 0.5L};
     break;
   case CubeFace::top:
-    uv = {(1.0L - equal_area(intersection.x)) * 0.5L,
-          (equal_area(intersection.y) + 1.0L) * 0.5L};
+    uv = {(1.0L - equal_area(intersection.x)) * 0.5L, (equal_area(intersection.y) + 1.0L) * 0.5L};
     break;
   }
   if (face == CubeFace::down || face == CubeFace::back || face == CubeFace::top) {
@@ -152,19 +144,14 @@ Pixel packed_face_color(const FaceCoordinate coordinate, const RgbFrame &first,
     return sample(coordinate.face == CubeFace::front ? first : second, x, y);
   }
 
-  const auto *source = coordinate.face == CubeFace::left ||
-                               coordinate.face == CubeFace::right
-                           ? &first
-                           : &second;
-  const auto offset = coordinate.face == CubeFace::right ||
-                              coordinate.face == CubeFace::top
-                          ? right_offset
-                          : 0;
+  const auto *source =
+      coordinate.face == CubeFace::left || coordinate.face == CubeFace::right ? &first : &second;
+  const auto offset =
+      coordinate.face == CubeFace::right || coordinate.face == CubeFace::top ? right_offset : 0;
   const auto duplicate_ratio = static_cast<long double>(blend_width) / side_width;
   const auto left_u = 2.0L * (0.5L - duplicate_ratio) * coordinate.uv.x;
-  const auto right_u = 2.0L * (0.5L - duplicate_ratio) *
-                           (coordinate.uv.x - 0.5L) +
-                       0.5L + duplicate_ratio;
+  const auto right_u =
+      2.0L * (0.5L - duplicate_ratio) * (coordinate.uv.x - 0.5L) + 0.5L + duplicate_ratio;
   if (left_u <= 0.5L - 2.0L * duplicate_ratio) {
     return sample(*source, offset + left_u * side_width, y);
   }
@@ -173,13 +160,11 @@ Pixel packed_face_color(const FaceCoordinate coordinate, const RgbFrame &first,
   }
   const auto first_color = sample(*source, offset + left_u * side_width, y);
   const auto second_color = sample(*source, offset + right_u * side_width, y);
-  const auto alpha = std::clamp((left_u - 0.5L + 2.0L * duplicate_ratio) /
-                                    (2.0L * duplicate_ratio),
-                                0.0L, 1.0L);
+  const auto alpha =
+      std::clamp((left_u - 0.5L + 2.0L * duplicate_ratio) / (2.0L * duplicate_ratio), 0.0L, 1.0L);
   Pixel result{};
   for (std::size_t channel = 0; channel < result.size(); ++channel) {
-    result[channel] = first_color[channel] * (1.0L - alpha) +
-                      second_color[channel] * alpha;
+    result[channel] = first_color[channel] * (1.0L - alpha) + second_color[channel] * alpha;
   }
   return result;
 }
@@ -194,8 +179,8 @@ Vec3 rotate_camera(Vec3 value, const long double yaw, const long double pitch,
                    const long double roll) {
   const auto roll_cosine = std::cos(roll);
   const auto roll_sine = std::sin(roll);
-  value = {value.x * roll_cosine - value.y * roll_sine,
-           value.x * roll_sine + value.y * roll_cosine, value.z};
+  value = {value.x * roll_cosine - value.y * roll_sine, value.x * roll_sine + value.y * roll_cosine,
+           value.z};
   const auto pitch_cosine = std::cos(pitch);
   const auto pitch_sine = std::sin(pitch);
   value = {value.x, value.y * pitch_cosine + value.z * pitch_sine,
@@ -206,19 +191,22 @@ Vec3 rotate_camera(Vec3 value, const long double yaw, const long double pitch,
           -value.x * yaw_sine + value.z * yaw_cosine};
 }
 
-std::optional<Vec3> camera_ray(const ProjectionMode mode, const long double x,
-                               const long double y, const long double aspect,
-                               const long double field_of_view) {
+std::optional<Vec3> camera_ray(const ProjectionMode mode, const long double x, const long double y,
+                               const long double aspect, const long double field_of_view) {
   if (mode == ProjectionMode::rectilinear) {
     const auto tangent = std::tan(field_of_view * 0.5L);
     return normalize({x * aspect * tangent, y * tangent, 1.0L});
   }
   const auto radius = std::sqrt(x * x + y * y);
-  if (radius > 1.0L) return std::nullopt;
-  if (radius == 0.0L) return Vec3{0.0L, 0.0L, 1.0L};
+  if (radius > 1.0L)
+    return std::nullopt;
+  if (radius == 0.0L)
+    return Vec3{0.0L, 0.0L, 1.0L};
   long double theta{};
-  if (mode == ProjectionMode::fisheye) theta = radius * field_of_view * 0.5L;
-  else theta = 2.0L * std::atan(radius * std::tan(field_of_view * 0.25L));
+  if (mode == ProjectionMode::fisheye)
+    theta = radius * field_of_view * 0.5L;
+  else
+    theta = 2.0L * std::atan(radius * std::tan(field_of_view * 0.25L));
   const auto sine = std::sin(theta);
   return Vec3{x / radius * sine, y / radius * sine, std::cos(theta)};
 }
@@ -250,8 +238,7 @@ RgbFrame reconstruct_equirectangular(const RgbFrame &front, const RgbFrame &rear
   output.source_color = {"rgb24", "pc", "bt709", "bt709", "bt709", "unspecified"};
 
   for (int y = 0; y < height; ++y) {
-    const auto latitude = kPi * 0.5L -
-                          (static_cast<long double>(y) + 0.5L) / height * kPi;
+    const auto latitude = kPi * 0.5L - (static_cast<long double>(y) + 0.5L) / height * kPi;
     const auto latitude_cosine = std::cos(latitude);
     for (int x = 0; x < width; ++x) {
       const auto longitude = (static_cast<long double>(x) + 0.5L) / width * 2.0L * kPi - kPi;
@@ -265,14 +252,13 @@ RgbFrame reconstruct_equirectangular(const RgbFrame &front, const RgbFrame &rear
 
 RgbFrame project_equirectangular(const RgbFrame &source, const ProjectionMode mode,
                                  const std::int32_t width, const std::int32_t height,
-                                 const long double yaw_degrees,
-                                 const long double pitch_degrees,
+                                 const long double yaw_degrees, const long double pitch_degrees,
                                  const long double roll_degrees,
                                  const long double field_of_view_degrees) {
   validate_output_dimensions(width, height);
   if (source.width <= 0 || source.height <= 0 ||
-      source.pixels.size() != static_cast<std::size_t>(source.width) *
-                                  static_cast<std::size_t>(source.height) * 3U) {
+      source.pixels.size() !=
+          static_cast<std::size_t>(source.width) * static_cast<std::size_t>(source.height) * 3U) {
     throw MediaError(ErrorKind::invalid_argument, "projection source must be packed RGB24");
   }
   if (!std::isfinite(yaw_degrees) || !std::isfinite(pitch_degrees) ||
@@ -284,13 +270,13 @@ RgbFrame project_equirectangular(const RgbFrame &source, const ProjectionMode mo
   RgbFrame output = source;
   output.width = width;
   output.height = height;
-  output.pixels.assign(static_cast<std::size_t>(width) * static_cast<std::size_t>(height) * 3U,
-                       0U);
+  output.pixels.assign(static_cast<std::size_t>(width) * static_cast<std::size_t>(height) * 3U, 0U);
   const auto yaw = yaw_degrees * kPi / 180.0L;
   auto pitch = pitch_degrees * kPi / 180.0L;
   const auto roll = roll_degrees * kPi / 180.0L;
   const auto field_of_view = field_of_view_degrees * kPi / 180.0L;
-  if (mode == ProjectionMode::little_planet) pitch -= kPi * 0.5L;
+  if (mode == ProjectionMode::little_planet)
+    pitch -= kPi * 0.5L;
   const auto aspect = static_cast<long double>(width) / height;
   for (int y = 0; y < height; ++y) {
     const auto normalized_y = 1.0L - 2.0L * (static_cast<long double>(y) + 0.5L) / height;
@@ -303,7 +289,8 @@ RgbFrame project_equirectangular(const RgbFrame &source, const ProjectionMode mo
       }
       const auto normalized_x = 2.0L * (static_cast<long double>(x) + 0.5L) / width - 1.0L;
       const auto ray = camera_ray(mode, normalized_x, normalized_y, aspect, field_of_view);
-      if (!ray.has_value()) continue;
+      if (!ray.has_value())
+        continue;
       const auto direction = normalize(rotate_camera(*ray, yaw, pitch, roll));
       const auto longitude = std::atan2(direction.x, direction.z);
       const auto latitude = std::asin(std::clamp(direction.y, -1.0L, 1.0L));
@@ -317,11 +304,16 @@ RgbFrame project_equirectangular(const RgbFrame &source, const ProjectionMode mo
 
 std::string projection_mode_name(const ProjectionMode mode) {
   switch (mode) {
-  case ProjectionMode::equirectangular: return "equirectangular";
-  case ProjectionMode::rectilinear: return "rectilinear";
-  case ProjectionMode::fisheye: return "fisheye";
-  case ProjectionMode::stereographic: return "stereographic";
-  case ProjectionMode::little_planet: return "little_planet";
+  case ProjectionMode::equirectangular:
+    return "equirectangular";
+  case ProjectionMode::rectilinear:
+    return "rectilinear";
+  case ProjectionMode::fisheye:
+    return "fisheye";
+  case ProjectionMode::stereographic:
+    return "stereographic";
+  case ProjectionMode::little_planet:
+    return "little_planet";
   }
   return "unknown";
 }

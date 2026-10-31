@@ -87,7 +87,8 @@ public:
   [[nodiscard]] QString inputPath() const { return input_path_; }
   [[nodiscard]] QString inputName() const;
   // File names of the chapters of the open recording (GSnnmmmm.360 / GHnnmmmm.MP4 /
-  // GXnnmmmm.MP4 with the same mmmm), in chapter order, and the open one's index. A file that is not chaptered is alone.
+  // GXnnmmmm.MP4 with the same mmmm), in chapter order, and the open one's index. A file that is
+  // not chaptered is alone.
   [[nodiscard]] QStringList sequenceNames() const;
   [[nodiscard]] int sequenceIndex() const { return sequence_index_; }
   [[nodiscard]] bool hasMedia() const { return engine_.isOpen(); }
@@ -155,7 +156,8 @@ public:
   Q_INVOKABLE void endScrub();
   // Seek targets near a clicked map position, in media order: one per separate pass of the route,
   // each {ticks, timeText, distanceMetres, record, nearestToNow}. ticks are video ticks.
-  Q_INVOKABLE QVariantList routeCandidates(double latitude, double longitude, double toleranceMetres) const;
+  Q_INVOKABLE QVariantList routeCandidates(double latitude, double longitude,
+                                           double toleranceMetres) const;
   Q_INVOKABLE void seekTicks(double ticks);
   // Asks for a format and file, then writes the GPS track of every chapter of the open recording,
   // in chapter order, in the background. The result is reported in the status line.
@@ -192,8 +194,8 @@ private:
   void updateGpmfSample();
   void updateDiagnostics();
   void buildFileRows();
-  void setMapPosition(const QString &state, const QString &message, std::optional<std::size_t> record,
-                      std::optional<double> course);
+  void setMapPosition(const QString &state, const QString &message,
+                      std::optional<std::size_t> record, std::optional<double> course);
   [[nodiscard]] std::int64_t ticksForSeconds(double seconds) const;
   [[nodiscard]] QString formatTicks(std::int64_t ticks) const;
 

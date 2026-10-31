@@ -1,8 +1,8 @@
 #include "map_view.hpp"
 
-#include "player_controller.hpp"
 #include "gb/geo/route.hpp"
 #include "gb/tiles/tile_fetcher.hpp"
+#include "player_controller.hpp"
 
 #include <QMouseEvent>
 #include <QPainter>
@@ -31,7 +31,8 @@ constexpr double kPanTimeConstant = 0.3;
 constexpr std::size_t kSnapRecords = 25;
 
 quint64 packed(const gb::geo::TileKey key) {
-  return (static_cast<quint64>(key.zoom) << 56U) | (static_cast<quint64>(key.x) << 28U) | static_cast<quint64>(key.y);
+  return (static_cast<quint64>(key.zoom) << 56U) | (static_cast<quint64>(key.x) << 28U) |
+         static_cast<quint64>(key.y);
 }
 
 const QColor kBackground(0x1a, 0x23, 0x2b);
@@ -55,7 +56,8 @@ QObject *MapView::controller() const { return player_; }
 
 void MapView::setController(QObject *object) {
   auto *controller = qobject_cast<PlayerController *>(object);
-  if (controller == player_) return;
+  if (controller == player_)
+    return;
   if (player_ != nullptr) {
     player_->disconnect(this);
     player_->tileFetcher()->disconnect(this);
@@ -84,24 +86,30 @@ double MapView::maximumZoom() const {
 
 void MapView::setZoom(const double zoom) {
   const auto clamped = std::clamp(zoom, minimumZoom(), maximumZoom());
-  if (!std::isfinite(clamped) || clamped == zoom_) return;
+  if (!std::isfinite(clamped) || clamped == zoom_)
+    return;
   zoom_ = clamped;
   emit viewChanged();
   refreshTiles();
 }
 
 void MapView::setFollow(const bool follow) {
-  if (follow_ == follow) return;
+  if (follow_ == follow)
+    return;
   follow_ = follow;
   emit followChanged();
-  if (follow_) onPositionChanged();
+  if (follow_)
+    onPositionChanged();
 }
 
-void MapView::zoomBy(const double steps) { zoomAround(zoom_ + steps, {width() / 2.0, height() / 2.0}); }
+void MapView::zoomBy(const double steps) {
+  zoomAround(zoom_ + steps, {width() / 2.0, height() / 2.0});
+}
 
 void MapView::zoomAround(const double new_zoom, const QPointF anchor) {
   const auto clamped = std::clamp(new_zoom, minimumZoom(), maximumZoom());
-  if (clamped == zoom_) return;
+  if (clamped == zoom_)
+    return;
   const auto before = viewport();
   const gb::geo::WorldPoint under{(before.left + anchor.x()) / before.world_pixels,
                                   (before.top + anchor.y()) / before.world_pixels};
@@ -129,12 +137,14 @@ MapView::Viewport MapView::viewport() const {
 
 std::vector<gb::geo::TileKey> MapView::visibleTiles(const Viewport &view) const {
   std::vector<gb::geo::TileKey> keys;
-  if (width() <= 0.0 || height() <= 0.0 || route_.empty()) return keys;
+  if (width() <= 0.0 || height() <= 0.0 || route_.empty())
+    return keys;
   const auto count = 1 << view.tile_zoom;
   const auto first_x = static_cast<int>(std::floor(view.left / view.tile_pixels));
   const auto last_x = static_cast<int>(std::floor((view.left + width()) / view.tile_pixels));
   const auto first_y = std::max(0, static_cast<int>(std::floor(view.top / view.tile_pixels)));
-  const auto last_y = std::min(count - 1, static_cast<int>(std::floor((view.top + height()) / view.tile_pixels)));
+  const auto last_y =
+      std::min(count - 1, static_cast<int>(std::floor((view.top + height()) / view.tile_pixels)));
   const auto center_x = (view.left + width() / 2.0) / view.tile_pixels;
   const auto center_y = (view.top + height() / 2.0) / view.tile_pixels;
   std::vector<std::pair<double, gb::geo::TileKey>> ordered;
@@ -146,24 +156,31 @@ std::vector<gb::geo::TileKey> MapView::visibleTiles(const Viewport &view) const 
       ordered.emplace_back(dx * dx + dy * dy, gb::geo::TileKey{view.tile_zoom, wrapped, y});
     }
   }
-  std::sort(ordered.begin(), ordered.end(), [](const auto &a, const auto &b) { return a.first < b.first; });
-  for (const auto &[distance, key] : ordered) keys.push_back(key);
+  std::sort(ordered.begin(), ordered.end(),
+            [](const auto &a, const auto &b) { return a.first < b.first; });
+  for (const auto &[distance, key] : ordered)
+    keys.push_back(key);
   return keys;
 }
 
-const QImage *MapView::tileImage(const gb::geo::TileKey key) const { return images_.object(packed(key)); }
+const QImage *MapView::tileImage(const gb::geo::TileKey key) const {
+  return images_.object(packed(key));
+}
 
 void MapView::refreshTiles() {
   update();
-  if (player_ == nullptr) return;
+  if (player_ == nullptr)
+    return;
   auto *fetcher = player_->tileFetcher();
   const auto wanted = visibleTiles(viewport());
-  for (const auto key : fetcher->retain(wanted)) pending_.erase(key);
+  for (const auto key : fetcher->retain(wanted))
+    pending_.erase(key);
   std::vector<gb::geo::TileKey> missing;
   const auto now = clock_.elapsed();
   int unavailable = 0;
   for (const auto key : wanted) {
-    if (images_.contains(packed(key)) || pending_.contains(key)) continue;
+    if (images_.contains(packed(key)) || pending_.contains(key))
+      continue;
     if (const auto failed = unavailable_.find(key); failed != unavailable_.end()) {
       if (now - failed->second < kRetryUnavailableMs) {
         ++unavailable;
@@ -175,7 +192,8 @@ void MapView::refreshTiles() {
     pending_.insert(key);
   }
   missing_tiles_ = unavailable;
-  if (!missing.empty()) fetcher->request(missing);
+  if (!missing.empty())
+    fetcher->request(missing);
   updateTileStatus();
 }
 
@@ -209,7 +227,8 @@ void MapView::updateTileStatus() {
     const auto *fetcher = player_->tileFetcher();
     const auto statistics = fetcher->statistics();
     if (statistics.blocked) {
-      status = QStringLiteral("Tile server refused service (%1); showing cached tiles only").arg(statistics.last_error);
+      status = QStringLiteral("Tile server refused service (%1); showing cached tiles only")
+                   .arg(statistics.last_error);
     } else if (!fetcher->networkEnabled()) {
       status = QStringLiteral("Network disabled: cached tiles only");
     } else if (statistics.in_flight + statistics.queued > 0) {
@@ -217,7 +236,9 @@ void MapView::updateTileStatus() {
     }
     if (missing_tiles_ > 0 && !last_unavailable_reason_.isEmpty()) {
       status += (status.isEmpty() ? QString() : QStringLiteral(" · ")) +
-                QStringLiteral("%1 tiles unavailable: %2").arg(missing_tiles_).arg(last_unavailable_reason_);
+                QStringLiteral("%1 tiles unavailable: %2")
+                    .arg(missing_tiles_)
+                    .arg(last_unavailable_reason_);
     }
   }
   if (status != tile_status_) {
@@ -255,14 +276,16 @@ void MapView::onRouteChanged() {
 }
 
 void MapView::fitRoute() {
-  if (player_ == nullptr || route_.empty()) return;
+  if (player_ == nullptr || route_.empty())
+    return;
   if (width() <= 0.0 || height() <= 0.0) {
     fit_pending_ = true;
     return;
   }
   fit_pending_ = false;
   const auto bounds = gb::geo::route_bounds(player_->mapRoute());
-  if (!bounds.has_value()) return;
+  if (!bounds.has_value())
+    return;
   constexpr double kPadding = 32.0;
   const auto span_x = std::max(bounds->maximum.x - bounds->minimum.x, 1e-12);
   const auto span_y = std::max(bounds->maximum.y - bounds->minimum.y, 1e-12);
@@ -270,13 +293,15 @@ void MapView::fitRoute() {
   const auto fit_y = std::log2(std::max(1.0, height() - 2.0 * kPadding) / (256.0 * span_y));
   // A stationary recording should not open at street-furniture scale.
   zoom_ = std::clamp(std::min({fit_x, fit_y, 17.0}), minimumZoom(), maximumZoom());
-  center_ = {(bounds->minimum.x + bounds->maximum.x) / 2.0, (bounds->minimum.y + bounds->maximum.y) / 2.0};
+  center_ = {(bounds->minimum.x + bounds->maximum.x) / 2.0,
+             (bounds->minimum.y + bounds->maximum.y) / 2.0};
   emit viewChanged();
   refreshTiles();
 }
 
 std::optional<gb::geo::WorldPoint> MapView::followTarget() const {
-  if (player_ == nullptr || route_.empty()) return std::nullopt;
+  if (player_ == nullptr || route_.empty())
+    return std::nullopt;
   const auto record = player_->mapRecord();
   const auto state = player_->mapState();
   if (!record.has_value() || *record >= route_.size() || !usable_[*record] ||
@@ -291,10 +316,13 @@ void MapView::onPositionChanged() {
     const auto record = player_->mapRecord();
     const auto course = player_->mapCourse();
     // The first course, or one after a seek, is shown at once instead of swinging round to it.
-    const auto jumped = !last_record_.has_value() || !record.has_value() ||
-                        std::max(*record, *last_record_) - std::min(*record, *last_record_) > kSnapRecords;
-    if (course.has_value() && (jumped || !shown_course_.has_value())) shown_course_ = *course;
-    if (record.has_value()) last_record_ = record;
+    const auto jumped =
+        !last_record_.has_value() || !record.has_value() ||
+        std::max(*record, *last_record_) - std::min(*record, *last_record_) > kSnapRecords;
+    if (course.has_value() && (jumped || !shown_course_.has_value()))
+      shown_course_ = *course;
+    if (record.has_value())
+      last_record_ = record;
   }
   if (follow_) {
     if (const auto target = followTarget(); target.has_value()) {
@@ -314,7 +342,8 @@ void MapView::onPositionChanged() {
 }
 
 void MapView::startAnimation() {
-  if (animation_.isActive()) return;
+  if (animation_.isActive())
+    return;
   animation_clock_.start();
   animation_.start();
 }
@@ -354,14 +383,18 @@ void MapView::animate() {
       }
     }
   }
-  if (!active) animation_.stop();
+  if (!active)
+    animation_.stop();
 }
 
 void MapView::geometryChange(const QRectF &new_geometry, const QRectF &old_geometry) {
   QQuickPaintedItem::geometryChange(new_geometry, old_geometry);
-  if (new_geometry.size() == old_geometry.size()) return;
-  if (fit_pending_) fitRoute();
-  else refreshTiles();
+  if (new_geometry.size() == old_geometry.size())
+    return;
+  if (fit_pending_)
+    fitRoute();
+  else
+    refreshTiles();
 }
 
 void MapView::paint(QPainter *painter) {
@@ -376,12 +409,13 @@ void MapView::paint(QPainter *painter) {
   const auto first_x = static_cast<int>(std::floor(view.left / view.tile_pixels));
   const auto last_x = static_cast<int>(std::floor((view.left + width()) / view.tile_pixels));
   const auto first_y = std::max(0, static_cast<int>(std::floor(view.top / view.tile_pixels)));
-  const auto last_y = std::min(count - 1, static_cast<int>(std::floor((view.top + height()) / view.tile_pixels)));
+  const auto last_y =
+      std::min(count - 1, static_cast<int>(std::floor((view.top + height()) / view.tile_pixels)));
 
   for (int x = first_x; x <= last_x && x - first_x < count; ++x) {
     for (int y = first_y; y <= last_y; ++y) {
-      const QRectF target(x * view.tile_pixels - view.left, y * view.tile_pixels - view.top, view.tile_pixels,
-                          view.tile_pixels);
+      const QRectF target(x * view.tile_pixels - view.left, y * view.tile_pixels - view.top,
+                          view.tile_pixels, view.tile_pixels);
       const auto wrapped = ((x % count) + count) % count;
       if (const auto *image = tileImage({view.tile_zoom, wrapped, y}); image != nullptr) {
         painter->drawImage(target, *image);
@@ -389,17 +423,20 @@ void MapView::paint(QPainter *painter) {
       }
       // Placeholder: the nearest cached ancestor, scaled up, until the tile itself arrives.
       bool drawn = false;
-      for (int level = 1; level <= kAncestorLevels && view.tile_zoom - level >= 0 && !drawn; ++level) {
+      for (int level = 1; level <= kAncestorLevels && view.tile_zoom - level >= 0 && !drawn;
+           ++level) {
         const gb::geo::TileKey parent{view.tile_zoom - level, wrapped >> level, y >> level};
         if (const auto *image = tileImage(parent); image != nullptr) {
           const auto fraction = 1.0 / static_cast<double>(1 << level);
           const auto sx = (wrapped - (parent.x << level)) * fraction * image->width();
           const auto sy = (y - (parent.y << level)) * fraction * image->height();
-          painter->drawImage(target, *image, QRectF(sx, sy, image->width() * fraction, image->height() * fraction));
+          painter->drawImage(target, *image,
+                             QRectF(sx, sy, image->width() * fraction, image->height() * fraction));
           drawn = true;
         }
       }
-      if (!drawn) painter->fillRect(target.adjusted(0.5, 0.5, -0.5, -0.5), kPlaceholder);
+      if (!drawn)
+        painter->fillRect(target.adjusted(0.5, 0.5, -0.5, -0.5), kPlaceholder);
     }
   }
 
@@ -414,12 +451,14 @@ void MapView::paint(QPainter *painter) {
   QPainterPath travelled;
   QPainterPath remaining;
   const auto add = [&](QPainterPath &path, const std::size_t begin, const std::size_t end) {
-    if (end < begin + 2) return;
+    if (end < begin + 2)
+      return;
     QPointF previous = screen(route_[begin]);
     path.moveTo(previous);
     for (auto index = begin + 1; index < end; ++index) {
       const auto point = screen(route_[index]);
-      if (index + 1 < end && std::hypot(point.x() - previous.x(), point.y() - previous.y()) < 1.5) continue;
+      if (index + 1 < end && std::hypot(point.x() - previous.x(), point.y() - previous.y()) < 1.5)
+        continue;
       path.lineTo(point);
       previous = point;
     }
@@ -435,7 +474,8 @@ void MapView::paint(QPainter *painter) {
     }
   }
   const auto stroke = [painter](const QPainterPath &path, const QColor &color) {
-    painter->strokePath(path, QPen(QColor(255, 255, 255, 220), 6.0, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+    painter->strokePath(
+        path, QPen(QColor(255, 255, 255, 220), 6.0, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
     painter->strokePath(path, QPen(color, 3.5, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
   };
   stroke(remaining, kRemaining);
@@ -499,7 +539,8 @@ void MapView::mousePressEvent(QMouseEvent *event) {
 
 void MapView::mouseMoveEvent(QMouseEvent *event) {
   const auto position = event->position();
-  if (!dragging_ && std::hypot(position.x() - press_position_.x(), position.y() - press_position_.y()) < kDragThreshold) {
+  if (!dragging_ && std::hypot(position.x() - press_position_.x(),
+                               position.y() - press_position_.y()) < kDragThreshold) {
     return;
   }
   if (!dragging_) {
@@ -508,7 +549,8 @@ void MapView::mouseMoveEvent(QMouseEvent *event) {
   }
   const auto view = viewport();
   center_.x -= (position.x() - last_position_.x()) / view.world_pixels;
-  center_.y = std::clamp(center_.y - (position.y() - last_position_.y()) / view.world_pixels, 0.0, 1.0);
+  center_.y =
+      std::clamp(center_.y - (position.y() - last_position_.y()) / view.world_pixels, 0.0, 1.0);
   center_.x -= std::floor(center_.x);
   last_position_ = position;
   emit viewChanged();
@@ -524,9 +566,11 @@ void MapView::mouseReleaseEvent(QMouseEvent *event) {
     auto wrapped = world;
     wrapped.x -= std::floor(wrapped.x);
     const auto position = gb::geo::unproject(wrapped);
-    const auto metres_per_pixel = gb::geo::metres_per_world_unit(position.latitude) / view.world_pixels;
-    emit routeClicked(position.latitude, position.longitude,
-                      std::max(kMinimumClickToleranceMetres, metres_per_pixel * kClickTolerancePixels));
+    const auto metres_per_pixel =
+        gb::geo::metres_per_world_unit(position.latitude) / view.world_pixels;
+    emit routeClicked(
+        position.latitude, position.longitude,
+        std::max(kMinimumClickToleranceMetres, metres_per_pixel * kClickTolerancePixels));
   }
   dragging_ = false;
   event->accept();
@@ -539,7 +583,9 @@ void MapView::mouseDoubleClickEvent(QMouseEvent *event) {
 
 void MapView::wheelEvent(QWheelEvent *event) {
   const auto steps = event->angleDelta().y() / 120.0;
-  if (follow_) zoomBy(steps * 0.5);
-  else zoomAround(zoom_ + steps * 0.5, event->position());
+  if (follow_)
+    zoomBy(steps * 0.5);
+  else
+    zoomAround(zoom_ + steps * 0.5, event->position());
   event->accept();
 }

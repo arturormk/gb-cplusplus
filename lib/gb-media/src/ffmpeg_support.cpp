@@ -25,8 +25,7 @@ FormatPtr open_input(const std::filesystem::path &path) {
   std::error_code filesystem_error;
   if (!std::filesystem::exists(path, filesystem_error)) {
     if (filesystem_error) {
-      throw MediaError(ErrorKind::io,
-                       "cannot inspect input: " + filesystem_error.message());
+      throw MediaError(ErrorKind::io, "cannot inspect input: " + filesystem_error.message());
     }
     throw MediaError(ErrorKind::missing, "input does not exist: " + path.string());
   }
@@ -34,8 +33,10 @@ FormatPtr open_input(const std::filesystem::path &path) {
   const auto result = avformat_open_input(&raw, path.c_str(), nullptr, nullptr);
   if (result < 0) {
     auto kind = ErrorKind::unsupported;
-    if (result == AVERROR_INVALIDDATA) kind = ErrorKind::corrupt;
-    else if (result == AVERROR(EIO) || result == AVERROR(EACCES)) kind = ErrorKind::io;
+    if (result == AVERROR_INVALIDDATA)
+      kind = ErrorKind::corrupt;
+    else if (result == AVERROR(EIO) || result == AVERROR(EACCES))
+      kind = ErrorKind::io;
     throw MediaError(kind, "cannot open media: " + ffmpeg_error(result));
   }
   FormatPtr context(raw);
@@ -81,15 +82,20 @@ VideoStream describe_video_stream(const AVStream &stream, const int index) {
 
 CodecPtr open_decoder(const AVStream &stream, const int threads) {
   const auto *decoder = avcodec_find_decoder(stream.codecpar->codec_id);
-  if (decoder == nullptr) throw MediaError(ErrorKind::unsupported, "no decoder for selected stream");
+  if (decoder == nullptr)
+    throw MediaError(ErrorKind::unsupported, "no decoder for selected stream");
   CodecPtr codec(avcodec_alloc_context3(decoder));
-  if (!codec) throw MediaError(ErrorKind::io, "cannot allocate decoder context");
+  if (!codec)
+    throw MediaError(ErrorKind::io, "cannot allocate decoder context");
   auto result = avcodec_parameters_to_context(codec.get(), stream.codecpar);
-  if (result < 0) throw MediaError(ErrorKind::corrupt, "invalid codec parameters");
+  if (result < 0)
+    throw MediaError(ErrorKind::corrupt, "invalid codec parameters");
   codec->thread_count = threads;
-  if (threads != 1) codec->thread_type = FF_THREAD_FRAME | FF_THREAD_SLICE;
+  if (threads != 1)
+    codec->thread_type = FF_THREAD_FRAME | FF_THREAD_SLICE;
   result = avcodec_open2(codec.get(), decoder, nullptr);
-  if (result < 0) throw MediaError(ErrorKind::unsupported, "cannot open decoder: " + ffmpeg_error(result));
+  if (result < 0)
+    throw MediaError(ErrorKind::unsupported, "cannot open decoder: " + ffmpeg_error(result));
   return codec;
 }
 

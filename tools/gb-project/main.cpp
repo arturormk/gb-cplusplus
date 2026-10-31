@@ -42,7 +42,8 @@ Options parse(const int argc, char **argv) {
   for (int index = 1; index < argc; ++index) {
     const std::string_view argument(argv[index]);
     const auto value = [&]() -> std::string_view {
-      if (++index >= argc) throw std::runtime_error(std::string(argument) + " requires a value");
+      if (++index >= argc)
+        throw std::runtime_error(std::string(argument) + " requires a value");
       return argv[index];
     };
     if (argument == "--time") {
@@ -62,8 +63,8 @@ Options parse(const int argc, char **argv) {
       options.smoke_test = true;
     } else if (argument == "--screenshot") {
       const auto screenshot_path = value();
-      options.screenshot = QString::fromLocal8Bit(screenshot_path.data(),
-                                                   static_cast<int>(screenshot_path.size()));
+      options.screenshot =
+          QString::fromLocal8Bit(screenshot_path.data(), static_cast<int>(screenshot_path.size()));
     } else if (!argument.empty() && argument.front() == '-') {
       throw std::runtime_error("unknown option: " + std::string(argument));
     } else if (options.path.isEmpty()) {
@@ -103,7 +104,8 @@ int main(int argc, char **argv) {
     engine.rootContext()->setContextProperty(QStringLiteral("initialPanoramaWidth"),
                                              options.panorama_width);
     engine.load(QUrl(QStringLiteral("qrc:/qml/Main.qml")));
-    if (engine.rootObjects().isEmpty()) return 1;
+    if (engine.rootObjects().isEmpty())
+      return 1;
     if (!options.path.isEmpty()) {
       QTimer::singleShot(0, &controller, [&controller, options]() {
         controller.loadFile(options.path, options.seconds, options.panorama_width);

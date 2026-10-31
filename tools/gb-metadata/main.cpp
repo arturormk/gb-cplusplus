@@ -138,20 +138,29 @@ void print_help(std::ostream &output) {
 
 std::optional<std::string_view> semantic_description(const std::string &key) {
   static const std::map<std::string, std::string_view> descriptions{
-      {"DEVC", "device container"},       {"DVID", "device identifier"},
-      {"DVNM", "device name"},            {"STRM", "metadata stream container"},
-      {"STNM", "stream name"},            {"SCAL", "value divisors"},
-      {"SIUN", "SI component units"},     {"UNIT", "component units"},
-      {"TSMP", "cumulative sample count"},{"STMP", "first-sample timestamp"},
-      {"GPS5", "GPS position and speed"}, {"GPSU", "GPS UTC date/time"},
-      {"GPSF", "GPS fix classification"}, {"GPSP", "GPS precision"},
-      {"ACCL", "accelerometer samples"},  {"GYRO", "gyroscope samples"},
-      {"MAGN", "magnetometer samples"},   {"GRAV", "gravity-vector samples"},
+      {"DEVC", "device container"},
+      {"DVID", "device identifier"},
+      {"DVNM", "device name"},
+      {"STRM", "metadata stream container"},
+      {"STNM", "stream name"},
+      {"SCAL", "value divisors"},
+      {"SIUN", "SI component units"},
+      {"UNIT", "component units"},
+      {"TSMP", "cumulative sample count"},
+      {"STMP", "first-sample timestamp"},
+      {"GPS5", "GPS position and speed"},
+      {"GPSU", "GPS UTC date/time"},
+      {"GPSF", "GPS fix classification"},
+      {"GPSP", "GPS precision"},
+      {"ACCL", "accelerometer samples"},
+      {"GYRO", "gyroscope samples"},
+      {"MAGN", "magnetometer samples"},
+      {"GRAV", "gravity-vector samples"},
       {"ORIN", "input component orientation"},
       {"ORIO", "output component orientation"}};
   const auto iterator = descriptions.find(key);
   return iterator == descriptions.end() ? std::nullopt
-                                         : std::optional<std::string_view>(iterator->second);
+                                        : std::optional<std::string_view>(iterator->second);
 }
 
 std::vector<std::string_view> component_labels(const gb::metadata::GpmfElement &element,
@@ -187,20 +196,19 @@ bool contains_key(const gb::metadata::GpmfElement &element, const std::string &k
 
 void print_element_values(const gb::metadata::GpmfElement &element, const unsigned indent) {
   const std::string pad(indent, ' ');
-  const auto &display_values = element.normalized_values.empty() ? element.values
-                                                                 : element.normalized_values;
+  const auto &display_values =
+      element.normalized_values.empty() ? element.values : element.normalized_values;
   if (display_values.empty()) {
     if (element.type != 0U) {
-      std::cout << pad << "values: not decoded (" << gb::metadata::type_name(element.type)
-                << ")\n" << pad << "raw: " << hex_bytes(element.raw, 64U)
+      std::cout << pad << "values: not decoded (" << gb::metadata::type_name(element.type) << ")\n"
+                << pad << "raw: " << hex_bytes(element.raw, 64U)
                 << (element.raw.size() > 64U ? "..." : "") << '\n';
     }
     return;
   }
   const auto records = std::max<std::size_t>(element.repeat, 1U);
-  const auto components = display_values.size() % records == 0U
-                              ? display_values.size() / records
-                              : display_values.size();
+  const auto components = display_values.size() % records == 0U ? display_values.size() / records
+                                                                : display_values.size();
   const auto labels = component_labels(element, components);
   const auto units = split_units(element.unit);
   for (std::size_t record = 0; record < records && record * components < display_values.size();
@@ -313,9 +321,8 @@ void summarize(const std::vector<gb::metadata::GpmfElement> &elements,
     field.last_sample = sample_index;
     ++field.occurrences;
     field.record_count += element.type == 0U ? 0U : element.repeat;
-    field.value_count += element.type == 0U ? 0U
-                                            : (element.values.empty() ? element.repeat
-                                                                      : element.values.size());
+    field.value_count +=
+        element.type == 0U ? 0U : (element.values.empty() ? element.repeat : element.values.size());
     field.types.insert(gb::metadata::type_name(element.type));
     field.structure_sizes.insert(element.structure_size);
     if (!element.unit.empty()) {
@@ -412,11 +419,13 @@ void print_inventory_json(const Options &options, const gb::container::Track &tr
             << "  \"schema\": \"gb.metadata/v1\",\n"
             << "  \"path\": " << json_string(options.path.string()) << ",\n"
             << "  \"source\": \"gpmf\",\n"
-            << "  \"track\": {\"id\": " << track.id << ", \"handler\": "
-            << json_string(track.handler_type) << ", \"codec\": " << json_string(track.codec)
+            << "  \"track\": {\"id\": " << track.id
+            << ", \"handler\": " << json_string(track.handler_type)
+            << ", \"codec\": " << json_string(track.codec)
             << ", \"time_base\": {\"numerator\": " << track.time_base.numerator
-            << ", \"denominator\": " << track.time_base.denominator << "}, \"duration_ticks\": "
-            << track.duration_ticks << ", \"sample_count\": " << track.sample_count << "},\n"
+            << ", \"denominator\": " << track.time_base.denominator
+            << "}, \"duration_ticks\": " << track.duration_ticks
+            << ", \"sample_count\": " << track.sample_count << "},\n"
             << "  \"fields\": [" << (fields.empty() ? "" : "\n");
   std::size_t index = 0;
   for (const auto &[key, field] : fields) {
@@ -435,10 +444,8 @@ void print_inventory_json(const Options &options, const gb::container::Track &tr
     print_string_array(units, std::cout);
     std::cout << ", \"occurrences\": " << field.occurrences
               << ", \"record_count\": " << field.record_count
-              << ", \"value_count\": " << field.value_count
-              << ", \"record_rate_hz_estimate\": ";
-    if (field.record_count == 0U || track.duration_ticks == 0U ||
-        track.time_base.numerator == 0U) {
+              << ", \"value_count\": " << field.value_count << ", \"record_rate_hz_estimate\": ";
+    if (field.record_count == 0U || track.duration_ticks == 0U || track.time_base.numerator == 0U) {
       std::cout << "null";
     } else {
       const auto rate = static_cast<long double>(field.record_count) *
@@ -447,11 +454,9 @@ void print_inventory_json(const Options &options, const gb::container::Track &tr
                          static_cast<long double>(track.time_base.numerator));
       std::cout << std::setprecision(10) << rate;
     }
-    std::cout
-              << ", \"first_sample\": " << field.first_sample
+    std::cout << ", \"first_sample\": " << field.first_sample
               << ", \"last_sample\": " << field.last_sample
-              << ", \"has_normalized_values\": "
-              << (field.has_normalized_values ? "true" : "false")
+              << ", \"has_normalized_values\": " << (field.has_normalized_values ? "true" : "false")
               << ", \"raw_hex_preview\": " << json_string(field.raw_preview) << "}"
               << (++index == fields.size() ? "\n" : ",\n");
   }
@@ -470,8 +475,7 @@ void print_inventory_text(const Options &options, const gb::container::Track &tr
     }
     std::cout << "  " << key << " occurrences=" << field.occurrences
               << " records=" << field.record_count << " values=" << field.value_count
-              << " samples=" << field.first_sample << ".."
-              << field.last_sample << " type=";
+              << " samples=" << field.first_sample << ".." << field.last_sample << " type=";
     for (const auto &type : field.types) {
       std::cout << type << ' ';
     }
@@ -481,8 +485,7 @@ void print_inventory_text(const Options &options, const gb::container::Track &tr
         std::cout << unit << ' ';
       }
     }
-    if (field.record_count != 0U && track.duration_ticks != 0U &&
-        track.time_base.numerator != 0U) {
+    if (field.record_count != 0U && track.duration_ticks != 0U && track.time_base.numerator != 0U) {
       const auto rate = static_cast<long double>(field.record_count) *
                         static_cast<long double>(track.time_base.denominator) /
                         (static_cast<long double>(track.duration_ticks) *
@@ -639,9 +642,10 @@ int main(const int argc, char **argv) {
       if (options.values) {
         const auto matches = count_matching_values(elements, *options.key);
         if (matches != 0U) {
-          std::cout << "  sample[" << index << "] decode_time_ticks="
-                    << track.samples[index].decode_time << " duration_ticks="
-                    << track.samples[index].duration << " matches=" << matches << '\n';
+          std::cout << "  sample[" << index
+                    << "] decode_time_ticks=" << track.samples[index].decode_time
+                    << " duration_ticks=" << track.samples[index].duration << " matches=" << matches
+                    << '\n';
           (void)print_matching_values(elements, *options.key, 4U);
           value_matches += matches;
         }

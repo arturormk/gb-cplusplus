@@ -63,8 +63,7 @@ Bytes metadata_payload(const bool include_gps = true, const std::uint32_t gps_fi
   append(stream, gpmf("SCAL", 'l', 4U, 3U, scales));
   append(stream, gpmf("SIUN", 'c', 3U, 3U, {'m', '/', 's', 'm', '/', 's', 'm', '/', 's'}));
   Bytes acceleration;
-  for (const std::uint16_t value :
-       std::vector<std::uint16_t>{100U, 200U, 300U, 400U, 500U, 600U}) {
+  for (const std::uint16_t value : std::vector<std::uint16_t>{100U, 200U, 300U, 400U, 500U, 600U}) {
     append_u16(acceleration, value);
   }
   append(stream, gpmf("ACCL", 's', 6U, 2U, acceleration));
@@ -106,8 +105,7 @@ Bytes metadata_payload(const bool include_gps = true, const std::uint32_t gps_fi
   append(device, gpmf("DVID", 'L', 4U, 1U, id));
   append(device, gpmf("STRM", 0U, 1U, static_cast<std::uint16_t>(stream.size()), stream));
   if (include_gps) {
-    append(device,
-           gpmf("STRM", 0U, 1U, static_cast<std::uint16_t>(gps_stream.size()), gps_stream));
+    append(device, gpmf("STRM", 0U, 1U, static_cast<std::uint16_t>(gps_stream.size()), gps_stream));
   }
   return gpmf("DEVC", 0U, 1U, static_cast<std::uint16_t>(device.size()), device);
 }

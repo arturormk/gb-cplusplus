@@ -61,8 +61,7 @@ bool is_start_of_frame(const std::uint8_t marker) {
          (marker >= 0xc9U && marker <= 0xcbU) || (marker >= 0xcdU && marker <= 0xcfU);
 }
 
-std::string classify_content(const std::uint8_t marker,
-                             const std::vector<std::uint8_t> &prefix) {
+std::string classify_content(const std::uint8_t marker, const std::vector<std::uint8_t> &prefix) {
   if (marker == 0xe0U && starts_with(prefix, std::string_view("JFIF\0", 5))) {
     return "JFIF";
   }

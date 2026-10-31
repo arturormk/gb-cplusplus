@@ -66,7 +66,8 @@ float radians(const double degrees) { return static_cast<float>(qDegreesToRadian
 class VideoRenderNode final : public QSGRenderNode {
 public:
   ~VideoRenderNode() override {
-    if (QOpenGLContext::currentContext() != nullptr) releaseResources();
+    if (QOpenGLContext::currentContext() != nullptr)
+      releaseResources();
   }
 
   void synchronize(PlaybackEngine *engine, PresentedFrame frame, const ViewParameters &parameters) {
@@ -91,13 +92,18 @@ public:
 
   void releaseResources() override {
     auto *context = QOpenGLContext::currentContext();
-    if (context == nullptr || !initialized_) return;
+    if (context == nullptr || !initialized_)
+      return;
     auto *f = context->extraFunctions();
-    if (program_ != 0U) f->glDeleteProgram(program_);
-    if (buffer_ != 0U) f->glDeleteBuffers(1, &buffer_);
-    if (vertex_array_ != 0U) f->glDeleteVertexArrays(1, &vertex_array_);
+    if (program_ != 0U)
+      f->glDeleteProgram(program_);
+    if (buffer_ != 0U)
+      f->glDeleteBuffers(1, &buffer_);
+    if (vertex_array_ != 0U)
+      f->glDeleteVertexArrays(1, &vertex_array_);
     f->glDeleteTextures(kTextureCount, textures_.data());
-    if (timer_queries_) f->glDeleteQueries(kQueryCount, queries_.data());
+    if (timer_queries_)
+      f->glDeleteQueries(kQueryCount, queries_.data());
     program_ = buffer_ = vertex_array_ = 0U;
     textures_.fill(0U);
     texture_sizes_.fill(QSize());
@@ -107,10 +113,13 @@ public:
 
   void render(const RenderState *state) override {
     auto *context = QOpenGLContext::currentContext();
-    if (context == nullptr) return;
+    if (context == nullptr)
+      return;
     auto *f = context->extraFunctions();
-    if (!initialized_ && !failed_) initialize(context, f);
-    if (failed_) return;
+    if (!initialized_ && !failed_)
+      initialize(context, f);
+    if (failed_)
+      return;
     if (engine_ != nullptr && !renderer_reported_) {
       engine_->setRendererDescription(renderer_);
       renderer_reported_ = true;
@@ -124,7 +133,8 @@ public:
     GLint previous_alignment{};
     std::array<GLint, kTextureCount> previous_textures{};
     f->glGetIntegerv(GL_CURRENT_PROGRAM, &previous_program);
-    if (vertex_array_ != 0U) f->glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &previous_vertex_array);
+    if (vertex_array_ != 0U)
+      f->glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &previous_vertex_array);
     f->glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &previous_buffer);
     f->glGetIntegerv(GL_ACTIVE_TEXTURE, &previous_active);
     f->glGetIntegerv(GL_UNPACK_ROW_LENGTH, &previous_row_length);
@@ -136,30 +146,36 @@ public:
 
     const bool upload = frame_.frames != nullptr && frame_.serial != uploaded_serial_;
     std::optional<int> query_slot;
-    if (upload && timer_queries_) query_slot = beginQuery(f);
+    if (upload && timer_queries_)
+      query_slot = beginQuery(f);
     QElapsedTimer upload_timer;
     upload_timer.start();
-    if (upload) uploadFrame(f);
+    if (upload)
+      uploadFrame(f);
     const auto upload_ms = static_cast<double>(upload_timer.nsecsElapsed()) / 1.0e6;
 
     draw(f, state);
-    if (query_slot.has_value()) f->glEndQuery(GL_TIME_ELAPSED);
+    if (query_slot.has_value())
+      f->glEndQuery(GL_TIME_ELAPSED);
 
     if (upload) {
       uploaded_serial_ = frame_.serial;
       const auto gpu_ms = timer_queries_ ? collectQueries(f) : std::nullopt;
-      if (engine_ != nullptr) engine_->reportRendered(frame_.serial, frame_.generation, upload_ms, gpu_ms);
+      if (engine_ != nullptr)
+        engine_->reportRendered(frame_.serial, frame_.generation, upload_ms, gpu_ms);
     }
 
     for (int unit = 0; unit < kTextureCount; ++unit) {
       f->glActiveTexture(static_cast<GLenum>(GL_TEXTURE0 + unit));
-      f->glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(previous_textures[static_cast<std::size_t>(unit)]));
+      f->glBindTexture(GL_TEXTURE_2D,
+                       static_cast<GLuint>(previous_textures[static_cast<std::size_t>(unit)]));
     }
     f->glActiveTexture(static_cast<GLenum>(previous_active));
     f->glPixelStorei(GL_UNPACK_ROW_LENGTH, previous_row_length);
     f->glPixelStorei(GL_UNPACK_ALIGNMENT, previous_alignment);
     f->glBindBuffer(GL_ARRAY_BUFFER, static_cast<GLuint>(previous_buffer));
-    if (vertex_array_ != 0U) f->glBindVertexArray(static_cast<GLuint>(previous_vertex_array));
+    if (vertex_array_ != 0U)
+      f->glBindVertexArray(static_cast<GLuint>(previous_vertex_array));
     f->glUseProgram(static_cast<GLuint>(previous_program));
   }
 
@@ -203,8 +219,10 @@ private:
     }
     const QByteArray header = es ? "#version 300 es\nprecision highp float;\nprecision highp int;\n"
                                  : "#version 330 core\n";
-    const auto vertex = compile(f, GL_VERTEX_SHADER, QStringLiteral(":/shaders/player.vert"), header);
-    const auto fragment = compile(f, GL_FRAGMENT_SHADER, QStringLiteral(":/shaders/player.frag"), header);
+    const auto vertex =
+        compile(f, GL_VERTEX_SHADER, QStringLiteral(":/shaders/player.vert"), header);
+    const auto fragment =
+        compile(f, GL_FRAGMENT_SHADER, QStringLiteral(":/shaders/player.frag"), header);
     if (vertex == 0U || fragment == 0U) {
       failed_ = true;
       return;
@@ -250,7 +268,8 @@ private:
     static constexpr std::array<const char *, kTextureCount> samplers{"uY0", "uU0", "uV0",
                                                                       "uY1", "uU1", "uV1"};
     for (int unit = 0; unit < kTextureCount; ++unit) {
-      f->glUniform1i(f->glGetUniformLocation(program_, samplers[static_cast<std::size_t>(unit)]), unit);
+      f->glUniform1i(f->glGetUniformLocation(program_, samplers[static_cast<std::size_t>(unit)]),
+                     unit);
     }
     for (std::size_t index = 0; index < uniform_names_.size(); ++index) {
       uniforms_[index] = f->glGetUniformLocation(program_, uniform_names_[index]);
@@ -267,7 +286,8 @@ private:
 
   std::optional<int> beginQuery(QOpenGLExtraFunctions *f) {
     const auto slot = next_query_;
-    if (query_pending_[static_cast<std::size_t>(slot)]) return std::nullopt;
+    if (query_pending_[static_cast<std::size_t>(slot)])
+      return std::nullopt;
     f->glBeginQuery(GL_TIME_ELAPSED, queries_[static_cast<std::size_t>(slot)]);
     query_pending_[static_cast<std::size_t>(slot)] = true;
     next_query_ = (next_query_ + 1) % kQueryCount;
@@ -279,10 +299,12 @@ private:
     std::optional<double> latest;
     for (int offset = 0; offset < kQueryCount; ++offset) {
       const auto slot = static_cast<std::size_t>((next_query_ + offset) % kQueryCount);
-      if (!query_pending_[slot]) continue;
+      if (!query_pending_[slot])
+        continue;
       GLuint available{};
       f->glGetQueryObjectuiv(queries_[slot], GL_QUERY_RESULT_AVAILABLE, &available);
-      if (available == 0U) continue;
+      if (available == 0U)
+        continue;
       GLuint nanoseconds{};
       f->glGetQueryObjectuiv(queries_[slot], GL_QUERY_RESULT, &nanoseconds);
       query_pending_[slot] = false;
@@ -350,7 +372,8 @@ private:
     f->glUniform1i(uniform(Uniform::has_frame), picture != nullptr ? 1 : 0);
     f->glUniform1f(uniform(Uniform::overlap), parameters_.overlap);
     f->glUniform4f(uniform(Uniform::crop), static_cast<float>(parameters_.crop.x()),
-                   static_cast<float>(parameters_.crop.y()), static_cast<float>(parameters_.crop.width()),
+                   static_cast<float>(parameters_.crop.y()),
+                   static_cast<float>(parameters_.crop.width()),
                    static_cast<float>(parameters_.crop.height()));
     f->glUniform1f(uniform(Uniform::yaw), parameters_.yaw);
     f->glUniform1f(uniform(Uniform::pitch), parameters_.pitch);
@@ -358,20 +381,39 @@ private:
     f->glUniform1f(uniform(Uniform::field_of_view), parameters_.field_of_view);
     f->glUniform1f(uniform(Uniform::zoom), parameters_.zoom);
     f->glUniform2f(uniform(Uniform::pan), parameters_.pan_x, parameters_.pan_y);
-    f->glUniform1f(uniform(Uniform::luma_red), picture ? static_cast<float>(picture->luma_red) : 0.2126F);
-    f->glUniform1f(uniform(Uniform::luma_blue), picture ? static_cast<float>(picture->luma_blue) : 0.0722F);
+    f->glUniform1f(uniform(Uniform::luma_red),
+                   picture ? static_cast<float>(picture->luma_red) : 0.2126F);
+    f->glUniform1f(uniform(Uniform::luma_blue),
+                   picture ? static_cast<float>(picture->luma_blue) : 0.0722F);
     f->glUniform1i(uniform(Uniform::full_range), picture != nullptr && picture->full_range ? 1 : 0);
     f->glBindVertexArray(vertex_array_);
     f->glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
   }
 
   enum class Uniform {
-    matrix, size, source, mode, layout, has_frame, overlap, crop, yaw, pitch, roll, field_of_view,
-    zoom, pan, luma_red, luma_blue, full_range, count
+    matrix,
+    size,
+    source,
+    mode,
+    layout,
+    has_frame,
+    overlap,
+    crop,
+    yaw,
+    pitch,
+    roll,
+    field_of_view,
+    zoom,
+    pan,
+    luma_red,
+    luma_blue,
+    full_range,
+    count
   };
-  static constexpr std::array<const char *, static_cast<std::size_t>(Uniform::count)> uniform_names_{
-      "uMatrix", "uSize", "uSource", "uMode", "uLayout", "uHasFrame", "uOverlap", "uCrop", "uYaw",
-      "uPitch", "uRoll", "uFieldOfView", "uZoom", "uPan", "uKr", "uKb", "uFullRange"};
+  static constexpr std::array<const char *, static_cast<std::size_t>(Uniform::count)>
+      uniform_names_{"uMatrix",  "uSize", "uSource", "uMode",  "uLayout",   "uHasFrame",
+                     "uOverlap", "uCrop", "uYaw",    "uPitch", "uRoll",     "uFieldOfView",
+                     "uZoom",    "uPan",  "uKr",     "uKb",    "uFullRange"};
   [[nodiscard]] GLint uniform(const Uniform name) const {
     return uniforms_[static_cast<std::size_t>(name)];
   }
@@ -409,7 +451,8 @@ void VideoView::attachWindow(QQuickWindow *window) {
   disconnect(animation_connection_);
   if (window != nullptr && gpuAvailable()) {
     animation_connection_ = connect(window, &QQuickWindow::afterAnimating, this, [this, window] {
-      if (engine_ == nullptr || !engine_->playing()) return;
+      if (engine_ == nullptr || !engine_->playing())
+        return;
       engine_->advanceFrame();
       window->update();
     });
@@ -418,7 +461,8 @@ void VideoView::attachWindow(QQuickWindow *window) {
 }
 
 void VideoView::connectEngine() {
-  if (engine_ == nullptr) return;
+  if (engine_ == nullptr)
+    return;
   engine_->setFrameDriven(window() != nullptr && gpuAvailable());
 }
 
@@ -426,14 +470,17 @@ QObject *VideoView::engine() const { return engine_; }
 
 void VideoView::setEngine(QObject *engine) {
   auto *typed = qobject_cast<PlaybackEngine *>(engine);
-  if (typed == engine_) return;
-  if (engine_ != nullptr) disconnect(engine_, nullptr, this, nullptr);
+  if (typed == engine_)
+    return;
+  if (engine_ != nullptr)
+    disconnect(engine_, nullptr, this, nullptr);
   engine_ = typed;
   if (engine_ != nullptr) {
     connect(engine_, &PlaybackEngine::frameChanged, this, &QQuickItem::update);
     // Keep the scene graph producing frames while playing.
     connect(engine_, &PlaybackEngine::playingChanged, this, [this] {
-      if (window() != nullptr && engine_ != nullptr && engine_->playing()) window()->update();
+      if (window() != nullptr && engine_ != nullptr && engine_->playing())
+        window()->update();
     });
     connectEngine();
   }
@@ -442,31 +489,36 @@ void VideoView::setEngine(QObject *engine) {
 }
 
 void VideoView::setValue(double &field, const double value) {
-  if (!std::isfinite(value) || field == value) return;
+  if (!std::isfinite(value) || field == value)
+    return;
   field = value;
   emit viewChanged();
 }
 
 void VideoView::setMode(const int value) {
-  if (mode_ == value || value < Rectilinear || value > Original) return;
+  if (mode_ == value || value < Rectilinear || value > Original)
+    return;
   mode_ = value;
   emit viewChanged();
 }
 
 void VideoView::setSourceLayout(const int value) {
-  if (source_layout_ == value) return;
+  if (source_layout_ == value)
+    return;
   source_layout_ = value;
   emit viewChanged();
 }
 
 void VideoView::setOverlap(const int value) {
-  if (overlap_ == value) return;
+  if (overlap_ == value)
+    return;
   overlap_ = value;
   emit viewChanged();
 }
 
 void VideoView::setPanoramaCrop(const QRectF &value) {
-  if (panorama_crop_ == value || !value.isValid()) return;
+  if (panorama_crop_ == value || !value.isValid())
+    return;
   panorama_crop_ = value;
   emit viewChanged();
 }
@@ -488,13 +540,15 @@ bool VideoView::gpuAvailable() {
 QSGNode *VideoView::updatePaintNode(QSGNode *old, UpdatePaintNodeData *) {
   if (!gpuAvailable()) {
     auto *node = static_cast<QSGSimpleRectNode *>(old);
-    if (node == nullptr) node = new QSGSimpleRectNode;
+    if (node == nullptr)
+      node = new QSGSimpleRectNode;
     node->setRect(boundingRect());
     node->setColor(QColor(9, 13, 17));
     return node;
   }
   auto *node = static_cast<VideoRenderNode *>(old);
-  if (node == nullptr) node = new VideoRenderNode;
+  if (node == nullptr)
+    node = new VideoRenderNode;
   ViewParameters parameters;
   parameters.mode = mode_;
   parameters.layout = source_layout_;

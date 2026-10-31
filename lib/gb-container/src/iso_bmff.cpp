@@ -98,9 +98,9 @@ std::uint32_t checked_count(std::ifstream &input, const Box &box, const std::uin
 }
 
 bool is_container_box(const std::string &type) {
-  static const std::set<std::string> types{
-      "moov", "trak", "mdia", "minf", "dinf", "stbl", "edts", "udta", "mvex",
-      "moof", "traf", "mfra", "sinf", "schi", "tref", "meco"};
+  static const std::set<std::string> types{"moov", "trak", "mdia", "minf", "dinf", "stbl",
+                                           "edts", "udta", "mvex", "moof", "traf", "mfra",
+                                           "sinf", "schi", "tref", "meco"};
   return types.contains(type);
 }
 
@@ -115,7 +115,8 @@ std::vector<Box> parse_boxes(std::ifstream &input, const std::uint64_t begin,
   while (offset < end) {
     const auto remaining = end - offset;
     if (remaining < kBasicHeaderSize) {
-      throw InspectionError(ErrorKind::corrupt, offset, "trailing bytes are shorter than a box header");
+      throw InspectionError(ErrorKind::corrupt, offset,
+                            "trailing bytes are shorter than a box header");
     }
 
     const auto size32 = read_u32(input, offset);
@@ -226,8 +227,8 @@ void parse_media_header(std::ifstream &input, const Box &box, Track &track) {
     throw InspectionError(ErrorKind::corrupt, timescale_offset, "mdhd timescale is zero");
   }
   track.time_base = Rational{1U, timescale};
-  track.duration_ticks = version == 1U ? read_u64(input, duration_offset)
-                                       : read_u32(input, duration_offset);
+  track.duration_ticks =
+      version == 1U ? read_u64(input, duration_offset) : read_u32(input, duration_offset);
 }
 
 void parse_handler(std::ifstream &input, const Box &box, Track &track) {
@@ -289,8 +290,8 @@ SampleTables parse_sample_tables(std::ifstream &input, const Box &stbl,
     const auto mapping_limit = mapping_required ? kMaxTableEntries : kMaxOptionalMappedSamples;
     if (tables.sample_count > mapping_limit) {
       if (tables.sample_size == 0U) {
-        require_range(*stsz, payload + 12U,
-                      static_cast<std::uint64_t>(tables.sample_count) * 4U, "stsz entries");
+        require_range(*stsz, payload + 12U, static_cast<std::uint64_t>(tables.sample_count) * 4U,
+                      "stsz entries");
       }
       if (mapping_required) {
         throw InspectionError(ErrorKind::corrupt, payload + 8U, "stsz exceeds entry limit");
@@ -302,7 +303,8 @@ SampleTables parse_sample_tables(std::ifstream &input, const Box &stbl,
                     "stsz entries");
       tables.sizes.reserve(tables.sample_count);
       for (std::uint32_t index = 0; index < tables.sample_count; ++index) {
-        tables.sizes.push_back(read_u32(input, payload + 12U + static_cast<std::uint64_t>(index) * 4U));
+        tables.sizes.push_back(
+            read_u32(input, payload + 12U + static_cast<std::uint64_t>(index) * 4U));
       }
     }
   }
@@ -311,14 +313,16 @@ SampleTables parse_sample_tables(std::ifstream &input, const Box &stbl,
     const auto count = checked_count(input, *stco, payload + 4U, 4U, "stco");
     tables.chunks.reserve(count);
     for (std::uint32_t index = 0; index < count; ++index) {
-      tables.chunks.push_back(read_u32(input, payload + 8U + static_cast<std::uint64_t>(index) * 4U));
+      tables.chunks.push_back(
+          read_u32(input, payload + 8U + static_cast<std::uint64_t>(index) * 4U));
     }
   } else if (const auto *co64 = find_child(stbl, "co64")) {
     const auto payload = co64->offset + co64->header_size;
     const auto count = checked_count(input, *co64, payload + 4U, 8U, "co64");
     tables.chunks.reserve(count);
     for (std::uint32_t index = 0; index < count; ++index) {
-      tables.chunks.push_back(read_u64(input, payload + 8U + static_cast<std::uint64_t>(index) * 8U));
+      tables.chunks.push_back(
+          read_u64(input, payload + 8U + static_cast<std::uint64_t>(index) * 8U));
     }
   }
   if (const auto *stsc = find_child(stbl, "stsc")) {
@@ -399,8 +403,8 @@ std::vector<SampleReference> build_sample_references(const SampleTables &tables,
   std::size_t composition_run = 0;
   std::uint32_t composition_run_used = 0;
   std::uint64_t decode_time = 0;
-  for (std::size_t chunk_index = 0; chunk_index < tables.chunks.size() &&
-                                    samples.size() < tables.sample_count; ++chunk_index) {
+  for (std::size_t chunk_index = 0;
+       chunk_index < tables.chunks.size() && samples.size() < tables.sample_count; ++chunk_index) {
     const auto chunk_number = static_cast<std::uint32_t>(chunk_index + 1U);
     while (run + 1U < tables.chunk_runs.size() &&
            tables.chunk_runs[run + 1U].first_chunk <= chunk_number) {
@@ -408,7 +412,8 @@ std::vector<SampleReference> build_sample_references(const SampleTables &tables,
     }
     auto offset = tables.chunks[chunk_index];
     for (std::uint32_t in_chunk = 0; in_chunk < tables.chunk_runs[run].samples_per_chunk &&
-                                     samples.size() < tables.sample_count; ++in_chunk) {
+                                     samples.size() < tables.sample_count;
+         ++in_chunk) {
       const auto index = samples.size();
       const auto size = tables.sample_size == 0U ? tables.sizes.at(index) : tables.sample_size;
       std::uint32_t duration = 0;
@@ -423,7 +428,8 @@ std::vector<SampleReference> build_sample_references(const SampleTables &tables,
         throw InspectionError(ErrorKind::corrupt, offset, "sample extends beyond the file");
       }
       if (decode_time > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
-        throw InspectionError(ErrorKind::corrupt, offset, "sample decode time exceeds signed range");
+        throw InspectionError(ErrorKind::corrupt, offset,
+                              "sample decode time exceeds signed range");
       }
       auto presentation_time = static_cast<std::int64_t>(decode_time);
       if (composition_run < tables.composition_runs.size()) {

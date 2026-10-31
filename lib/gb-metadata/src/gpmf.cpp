@@ -215,9 +215,9 @@ void normalize(std::vector<GpmfElement> &elements) {
       }
     }
   }
-  static const std::set<std::string> non_data_keys{
-      "SCAL", "SIUN", "UNIT", "STNM", "DVNM", "DVID", "TSMP", "STMP", "TICK",
-      "TOCK", "TIMO", "TYPE", "ORIN", "ORIO", "GPSU", "GPSF", "GPSP", "GPSA"};
+  static const std::set<std::string> non_data_keys{"SCAL", "SIUN", "UNIT", "STNM", "DVNM", "DVID",
+                                                   "TSMP", "STMP", "TICK", "TOCK", "TIMO", "TYPE",
+                                                   "ORIN", "ORIO", "GPSU", "GPSF", "GPSP", "GPSA"};
   for (auto &element : elements) {
     if (!element.children.empty()) {
       normalize(element.children);
@@ -226,8 +226,7 @@ void normalize(std::vector<GpmfElement> &elements) {
       element.unit = unit;
     }
     if (scale.empty() || element.values.empty() || non_data_keys.contains(element.key) ||
-        element.type == 'c' || element.type == 'u' || element.type == 'U' ||
-        element.type == 'F') {
+        element.type == 'c' || element.type == 'u' || element.type == 'U' || element.type == 'F') {
       continue;
     }
     for (std::size_t index = 0; index < element.values.size(); ++index) {
@@ -309,11 +308,10 @@ std::string type_name(const std::uint8_t type) {
 
 bool is_known_key(const std::string &key) {
   static const std::set<std::string> keys{
-      "DEVC", "DVID", "DVNM", "STRM", "STNM", "SIUN", "UNIT", "MTRX", "ORIN",
-      "ORIO", "SCAL", "TYPE", "TSMP", "TICK", "TOCK", "TIMO", "STMP", "STPS",
-      "PFRM", "TMPC", "EMPT", "QUAN", "VERS", "FREE", "RMRK", "GPS5", "GPS9",
-      "GPSU", "GPSF", "GPSP", "ACCL", "GYRO", "MAGN", "GRAV", "CORI", "IORI",
-      "MWET", "ISOE", "SHUT", "WBAL", "FACE"};
+      "DEVC", "DVID", "DVNM", "STRM", "STNM", "SIUN", "UNIT", "MTRX", "ORIN", "ORIO", "SCAL",
+      "TYPE", "TSMP", "TICK", "TOCK", "TIMO", "STMP", "STPS", "PFRM", "TMPC", "EMPT", "QUAN",
+      "VERS", "FREE", "RMRK", "GPS5", "GPS9", "GPSU", "GPSF", "GPSP", "ACCL", "GYRO", "MAGN",
+      "GRAV", "CORI", "IORI", "MWET", "ISOE", "SHUT", "WBAL", "FACE"};
   return keys.contains(key);
 }
 

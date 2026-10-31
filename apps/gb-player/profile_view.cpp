@@ -1,13 +1,13 @@
 #include "profile_view.hpp"
 
-#include "player_controller.hpp"
 #include "gb/telemetry/telemetry.hpp"
+#include "player_controller.hpp"
 
 #include <QMouseEvent>
-#include <QWheelEvent>
 #include <QPainter>
 #include <QPainterPath>
 #include <QQuickWindow>
+#include <QWheelEvent>
 
 #include <algorithm>
 #include <cmath>
@@ -38,19 +38,23 @@ const QColor kCursor(0xf7, 0x67, 0x07);
 
 // The smallest 1/2/5 × 10^n step that splits span into at most target intervals.
 double niceStep(const double span, const int target) {
-  if (!(span > 0.0)) return 1.0;
+  if (!(span > 0.0))
+    return 1.0;
   const auto raw = span / target;
   const auto magnitude = std::pow(10.0, std::floor(std::log10(raw)));
   for (const auto factor : {1.0, 2.0, 5.0, 10.0}) {
-    if (factor * magnitude >= raw) return factor * magnitude;
+    if (factor * magnitude >= raw)
+      return factor * magnitude;
   }
   return 10.0 * magnitude;
 }
 
 // Clock-friendly steps for the time axis, in seconds.
 double timeStep(const double span, const int target) {
-  for (const auto step : {1.0, 2.0, 5.0, 10.0, 15.0, 30.0, 60.0, 120.0, 300.0, 600.0, 900.0, 1800.0, 3600.0}) {
-    if (span / step <= target) return step;
+  for (const auto step :
+       {1.0, 2.0, 5.0, 10.0, 15.0, 30.0, 60.0, 120.0, 300.0, 600.0, 900.0, 1800.0, 3600.0}) {
+    if (span / step <= target)
+      return step;
   }
   return niceStep(span / 3600.0, target) * 3600.0;
 }
@@ -61,7 +65,10 @@ QString timeLabel(const double seconds) {
   const auto minutes = (total / 60) % 60;
   const auto secs = total % 60;
   if (hours > 0) {
-    return QStringLiteral("%1:%2:%3").arg(hours).arg(minutes, 2, 10, QLatin1Char('0')).arg(secs, 2, 10, QLatin1Char('0'));
+    return QStringLiteral("%1:%2:%3")
+        .arg(hours)
+        .arg(minutes, 2, 10, QLatin1Char('0'))
+        .arg(secs, 2, 10, QLatin1Char('0'));
   }
   return QStringLiteral("%1:%2").arg(minutes).arg(secs, 2, 10, QLatin1Char('0'));
 }
@@ -78,8 +85,10 @@ QObject *ProfileView::controller() const { return player_; }
 
 void ProfileView::setController(QObject *object) {
   auto *controller = qobject_cast<PlayerController *>(object);
-  if (controller == player_) return;
-  if (player_ != nullptr) player_->disconnect(this);
+  if (controller == player_)
+    return;
+  if (player_ != nullptr)
+    player_->disconnect(this);
   player_ = controller;
   if (player_ != nullptr) {
     connect(player_, &PlayerController::mapRouteChanged, this, &ProfileView::onDataChanged);
@@ -92,7 +101,8 @@ void ProfileView::setController(QObject *object) {
 }
 
 void ProfileView::setQuantity(const Quantity quantity) {
-  if (quantity == quantity_) return;
+  if (quantity == quantity_)
+    return;
   quantity_ = quantity;
   emit quantityChanged();
   plot_dirty_ = true;
@@ -100,7 +110,8 @@ void ProfileView::setQuantity(const Quantity quantity) {
 }
 
 void ProfileView::setSmoothed(const bool smoothed) {
-  if (smoothed == smoothed_) return;
+  if (smoothed == smoothed_)
+    return;
   smoothed_ = smoothed;
   emit smoothedChanged();
   plot_dirty_ = true;
@@ -118,9 +129,10 @@ void ProfileView::onDataChanged() {
                       static_cast<double>(telemetry->time_base.denominator);
     samples_.reserve(telemetry->gps.size());
     for (const auto &point : telemetry->gps) {
-      samples_.push_back({static_cast<double>(point.media_time_ticks) * base, static_cast<double>(point.altitude),
-                          static_cast<double>(point.speed_2d) * 3.6,
-                          0.0, 0.0, point.validity == gb::telemetry::Validity::valid});
+      samples_.push_back({static_cast<double>(point.media_time_ticks) * base,
+                          static_cast<double>(point.altitude),
+                          static_cast<double>(point.speed_2d) * 3.6, 0.0, 0.0,
+                          point.validity == gb::telemetry::Validity::valid});
     }
   }
   smoothSamples();
@@ -167,7 +179,8 @@ void ProfileView::smoothSamples() {
 }
 
 void ProfileView::onPositionChanged() {
-  if (cursorX() != painted_cursor_ || (player_ != nullptr ? player_->mapRecord() : std::nullopt) != painted_record_) {
+  if (cursorX() != painted_cursor_ ||
+      (player_ != nullptr ? player_->mapRecord() : std::nullopt) != painted_record_) {
     update();
   }
 }
@@ -186,10 +199,12 @@ QRectF ProfileView::plotArea() const {
 }
 
 void ProfileView::setWindow(const double start, const double span) {
-  if (!(duration_ > 0.0)) return;
+  if (!(duration_ > 0.0))
+    return;
   const auto clamped_span = std::clamp(span, std::min(kMinimumWindowSeconds, duration_), duration_);
   const auto clamped_start = std::clamp(start, 0.0, duration_ - clamped_span);
-  if (clamped_start == window_start_ && clamped_span == window_span_) return;
+  if (clamped_start == window_start_ && clamped_span == window_span_)
+    return;
   window_start_ = clamped_start;
   window_span_ = clamped_span;
   plot_dirty_ = true;
@@ -207,28 +222,36 @@ double ProfileView::secondsForX(const double x) const {
 }
 
 double ProfileView::value(const Sample &sample) const {
-  if (quantity_ == Height) return smoothed_ ? sample.smooth_height : sample.height;
+  if (quantity_ == Height)
+    return smoothed_ ? sample.smooth_height : sample.height;
   return smoothed_ ? sample.smooth_speed : sample.speed;
 }
 
 std::optional<double> ProfileView::cursorX() const {
-  if (player_ == nullptr || !player_->hasMedia() || !(window_span_ > 0.0)) return std::nullopt;
+  if (player_ == nullptr || !player_->hasMedia() || !(window_span_ > 0.0))
+    return std::nullopt;
   const auto position = std::clamp(player_->position(), 0.0, duration_);
-  if (position < window_start_ || position > window_start_ + window_span_) return std::nullopt;
+  if (position < window_start_ || position > window_start_ + window_span_)
+    return std::nullopt;
   // Whole pixels: a repaint is only worth it when the cursor visibly moves.
   return std::round(xForSeconds(position));
 }
 
 std::optional<QPointF> ProfileView::markerPoint() const {
-  if (player_ == nullptr || !(window_span_ > 0.0) || !(maximum_ > minimum_)) return std::nullopt;
+  if (player_ == nullptr || !(window_span_ > 0.0) || !(maximum_ > minimum_))
+    return std::nullopt;
   const auto record = player_->mapRecord();
-  if (!record.has_value() || *record >= samples_.size() || !samples_[*record].usable) return std::nullopt;
-  if (player_->mapState() != QStringLiteral("valid")) return std::nullopt;
+  if (!record.has_value() || *record >= samples_.size() || !samples_[*record].usable)
+    return std::nullopt;
+  if (player_->mapState() != QStringLiteral("valid"))
+    return std::nullopt;
   const auto area = plotArea();
   const auto &sample = samples_[*record];
-  if (sample.seconds < window_start_ || sample.seconds > window_start_ + window_span_) return std::nullopt;
-  return QPointF(xForSeconds(sample.seconds),
-                 area.bottom() - (value(sample) - minimum_) / (maximum_ - minimum_) * area.height());
+  if (sample.seconds < window_start_ || sample.seconds > window_start_ + window_span_)
+    return std::nullopt;
+  return QPointF(xForSeconds(sample.seconds), area.bottom() - (value(sample) - minimum_) /
+                                                                  (maximum_ - minimum_) *
+                                                                  area.height());
 }
 
 void ProfileView::renderPlot() {
@@ -248,16 +271,20 @@ void ProfileView::renderPlot() {
   const auto area = plotArea();
   painter.fillRect(area, kPlotBackground);
 
-  auto title = quantity_ == Height ? QStringLiteral("Height (WGS 84), m") : QStringLiteral("Speed 2D, km/h");
-  if (smoothed_) title += QStringLiteral(" \u00b7 %1 s mean").arg(kSmoothSeconds);
+  auto title =
+      quantity_ == Height ? QStringLiteral("Height (WGS 84), m") : QStringLiteral("Speed 2D, km/h");
+  if (smoothed_)
+    title += QStringLiteral(" \u00b7 %1 s mean").arg(kSmoothSeconds);
   painter.setPen(kAxisText);
-  painter.drawText(QRectF(area.left(), 0.0, area.width(), kTopMargin), Qt::AlignLeft | Qt::AlignVCenter, title);
+  painter.drawText(QRectF(area.left(), 0.0, area.width(), kTopMargin),
+                   Qt::AlignLeft | Qt::AlignVCenter, title);
 
   // The range comes from the raw values even when smoothed, so toggling keeps the axis.
   auto low = std::numeric_limits<double>::infinity();
   auto high = -std::numeric_limits<double>::infinity();
   for (const auto &sample : samples_) {
-    if (!sample.usable) continue;
+    if (!sample.usable)
+      continue;
     const auto raw = quantity_ == Height ? sample.height : sample.speed;
     low = std::min(low, raw);
     high = std::max(high, raw);
@@ -265,16 +292,17 @@ void ProfileView::renderPlot() {
   if (!(window_span_ > 0.0) || !std::isfinite(low)) {
     minimum_ = maximum_ = 0.0;
     const auto message = player_ == nullptr || !player_->hasMedia() ? QStringLiteral("No recording")
-                         : player_->metadataLoading()               ? QStringLiteral("Loading GPS telemetry…")
-                         : samples_.empty()                         ? QStringLiteral("No GPS in this recording")
-                                                                    : QStringLiteral("No valid GPS fix in this recording");
+                         : player_->metadataLoading() ? QStringLiteral("Loading GPS telemetry…")
+                         : samples_.empty()           ? QStringLiteral("No GPS in this recording")
+                                            : QStringLiteral("No valid GPS fix in this recording");
     painter.drawText(area, Qt::AlignCenter, message);
     return;
   }
 
   // The value axis covers the whole recording, so it stays put while zooming and panning.
   // Speed starts at zero; height gets a margin so a flat stretch does not sit on the frame.
-  if (quantity_ == Speed) low = 0.0;
+  if (quantity_ == Speed)
+    low = 0.0;
   const auto spread = std::max(high - low, quantity_ == Height ? 10.0 : 5.0);
   const auto middle = (high + low) / 2.0;
   if (quantity_ == Height) {
@@ -286,20 +314,24 @@ void ProfileView::renderPlot() {
   const auto step = niceStep(high - low, 4);
   minimum_ = std::floor(low / step) * step;
   maximum_ = std::ceil(high / step) * step;
-  const auto toY = [&](const double v) { return area.bottom() - (v - minimum_) / (maximum_ - minimum_) * area.height(); };
+  const auto toY = [&](const double v) {
+    return area.bottom() - (v - minimum_) / (maximum_ - minimum_) * area.height();
+  };
 
   for (auto v = minimum_; v <= maximum_ + step / 2.0; v += step) {
     const auto y = std::round(toY(v)) + 0.5;
     painter.setPen(kGrid);
     painter.drawLine(QPointF(area.left(), y), QPointF(area.right(), y));
     painter.setPen(kAxisText);
-    painter.drawText(QRectF(0.0, y - 8.0, kLeftMargin - 5.0, 16.0), Qt::AlignRight | Qt::AlignVCenter,
+    painter.drawText(QRectF(0.0, y - 8.0, kLeftMargin - 5.0, 16.0),
+                     Qt::AlignRight | Qt::AlignVCenter,
                      QString::number(v, 'f', step < 1.0 ? 1 : 0));
   }
-  const auto seconds_step = timeStep(window_span_, std::max(2, static_cast<int>(area.width() / 70.0)));
+  const auto seconds_step =
+      timeStep(window_span_, std::max(2, static_cast<int>(area.width() / 70.0)));
   const auto window_end = window_start_ + window_span_;
-  for (auto s = std::ceil(window_start_ / seconds_step - 1e-9) * seconds_step; s <= window_end + 1e-9;
-       s += seconds_step) {
+  for (auto s = std::ceil(window_start_ / seconds_step - 1e-9) * seconds_step;
+       s <= window_end + 1e-9; s += seconds_step) {
     const auto x = std::round(xForSeconds(s)) + 0.5;
     painter.setPen(kGrid);
     painter.drawLine(QPointF(x, area.top()), QPointF(x, area.bottom()));
@@ -336,14 +368,17 @@ void ProfileView::renderPlot() {
 }
 
 void ProfileView::paint(QPainter *painter) {
-  if (plot_dirty_) renderPlot();
+  if (plot_dirty_)
+    renderPlot();
   painter->drawImage(QPointF(0.0, 0.0), plot_);
   painted_cursor_ = cursorX();
   painted_record_ = player_ != nullptr ? player_->mapRecord() : std::nullopt;
-  if (!painted_cursor_.has_value()) return;
+  if (!painted_cursor_.has_value())
+    return;
   const auto area = plotArea();
   painter->setPen(QPen(kCursor, 1.0));
-  painter->drawLine(QPointF(*painted_cursor_ + 0.5, area.top()), QPointF(*painted_cursor_ + 0.5, area.bottom()));
+  painter->drawLine(QPointF(*painted_cursor_ + 0.5, area.top()),
+                    QPointF(*painted_cursor_ + 0.5, area.bottom()));
   if (const auto marker = markerPoint()) {
     painter->setRenderHint(QPainter::Antialiasing);
     painter->setPen(QPen(Qt::white, 1.5));
@@ -353,7 +388,8 @@ void ProfileView::paint(QPainter *painter) {
 }
 
 void ProfileView::seekTo(const double x) {
-  if (player_ == nullptr || !(duration_ > 0.0)) return;
+  if (player_ == nullptr || !(duration_ > 0.0))
+    return;
   player_->seekFraction(secondsForX(x) / duration_);
 }
 
@@ -394,17 +430,21 @@ void ProfileView::mouseReleaseEvent(QMouseEvent *event) {
 void ProfileView::mouseUngrabEvent() {
   setKeepMouseGrab(false);
   panning_ = false;
-  if (!scrubbing_) return;
+  if (!scrubbing_)
+    return;
   scrubbing_ = false;
-  if (player_ != nullptr) player_->endScrub();
+  if (player_ != nullptr)
+    player_->endScrub();
 }
 
 void ProfileView::wheelEvent(QWheelEvent *event) {
   // Taken even at the zoom limits, so the wheel never scrolls the panel from over the graph.
   event->accept();
-  if (!(window_span_ > 0.0) || panning_) return;
+  if (!(window_span_ > 0.0) || panning_)
+    return;
   const auto steps = event->angleDelta().y() / 120.0;
-  if (steps == 0.0) return;
+  if (steps == 0.0)
+    return;
   const auto area = plotArea();
   const auto fraction = std::clamp((event->position().x() - area.left()) / area.width(), 0.0, 1.0);
   const auto anchor = window_start_ + fraction * window_span_;

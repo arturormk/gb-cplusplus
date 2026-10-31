@@ -48,7 +48,8 @@ public:
   // Throws std::runtime_error when the tile cannot be written.
   void store(const TileProvider &provider, TileKey key, std::span<const std::uint8_t> bytes,
              const TileMetadata &metadata) const;
-  void store_metadata(const TileProvider &provider, TileKey key, const TileMetadata &metadata) const;
+  void store_metadata(const TileProvider &provider, TileKey key,
+                      const TileMetadata &metadata) const;
 
 private:
   std::filesystem::path root_;

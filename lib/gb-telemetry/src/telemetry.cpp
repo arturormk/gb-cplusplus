@@ -92,15 +92,13 @@ std::optional<TimePoint> parse_gpsu(const std::string &value) {
     if (value.size() == 16U) {
       millis = std::stoi(value.substr(13U, 3U));
     }
-    const std::chrono::year_month_day date{std::chrono::year{year},
-                                            std::chrono::month{month},
-                                            std::chrono::day{day}};
+    const std::chrono::year_month_day date{std::chrono::year{year}, std::chrono::month{month},
+                                           std::chrono::day{day}};
     if (!date.ok() || hour > 23 || minute > 59 || second > 60 || millis > 999) {
       return std::nullopt;
     }
-    return TimePoint{std::chrono::sys_days{date}.time_since_epoch()} +
-           std::chrono::hours{hour} + std::chrono::minutes{minute} +
-           std::chrono::seconds{second} + Milliseconds{millis};
+    return TimePoint{std::chrono::sys_days{date}.time_since_epoch()} + std::chrono::hours{hour} +
+           std::chrono::minutes{minute} + std::chrono::seconds{second} + Milliseconds{millis};
   } catch (const std::exception &) {
     return std::nullopt;
   }
@@ -113,10 +111,9 @@ std::string format_utc(const TimePoint point) {
   std::ostringstream output;
   output << std::setfill('0') << std::setw(4) << static_cast<int>(date.year()) << '-'
          << std::setw(2) << static_cast<unsigned>(date.month()) << '-' << std::setw(2)
-         << static_cast<unsigned>(date.day()) << 'T' << std::setw(2) << time.hours().count()
-         << ':' << std::setw(2) << time.minutes().count() << ':' << std::setw(2)
-         << time.seconds().count() << '.' << std::setw(3)
-         << time.subseconds().count() << 'Z';
+         << static_cast<unsigned>(date.day()) << 'T' << std::setw(2) << time.hours().count() << ':'
+         << std::setw(2) << time.minutes().count() << ':' << std::setw(2) << time.seconds().count()
+         << '.' << std::setw(3) << time.subseconds().count() << 'Z';
   return output.str();
 }
 
@@ -124,9 +121,8 @@ std::optional<long double> number(const std::string &value) {
   try {
     std::size_t consumed = 0;
     const auto result = std::stold(value, &consumed);
-    return consumed == value.size() && std::isfinite(result)
-               ? std::optional<long double>(result)
-               : std::nullopt;
+    return consumed == value.size() && std::isfinite(result) ? std::optional<long double>(result)
+                                                             : std::nullopt;
   } catch (const std::exception &) {
     return std::nullopt;
   }
@@ -141,8 +137,7 @@ void append_gap(std::vector<Gap> &gaps, const std::int64_t start, const std::int
   gaps.push_back({start, end, reason});
 }
 
-std::int64_t ticks_to_milliseconds(const std::uint64_t ticks,
-                                   const container::Rational time_base) {
+std::int64_t ticks_to_milliseconds(const std::uint64_t ticks, const container::Rational time_base) {
   if (time_base.denominator == 0U) {
     throw std::runtime_error("media time base denominator is zero");
   }
@@ -158,8 +153,7 @@ std::int64_t ticks_to_milliseconds(const std::uint64_t ticks,
 
 } // namespace
 
-Extraction extract(const std::filesystem::path &path,
-                   const std::optional<std::uint32_t> track_id) {
+Extraction extract(const std::filesystem::path &path, const std::optional<std::uint32_t> track_id) {
   const auto inspection = container::inspect_iso_bmff(path);
   const auto &track = select_track(inspection, track_id);
   Extraction result;
@@ -237,7 +231,7 @@ Extraction extract(const std::filesystem::path &path,
         point.speed_3d = decoded[4];
         point.fix = fix;
         point.dop = dop;
-        point.validity = !fix.has_value() ? Validity::unknown
+        point.validity = !fix.has_value()             ? Validity::unknown
                          : (*fix == 2U || *fix == 3U) ? Validity::valid
                                                       : Validity::invalid;
         if (anchor.has_value()) {
@@ -290,10 +284,10 @@ Extraction extract(const std::filesystem::path &path,
     }
     const auto track_end = static_cast<std::int64_t>(result.duration_ticks);
     const auto uncertainty = static_cast<std::int64_t>(result.gps.back().timing_uncertainty_ticks);
-    const auto last_end = result.gps.back().media_time_ticks >
-                                  std::numeric_limits<std::int64_t>::max() - uncertainty
-                              ? std::numeric_limits<std::int64_t>::max()
-                              : result.gps.back().media_time_ticks + uncertainty;
+    const auto last_end =
+        result.gps.back().media_time_ticks > std::numeric_limits<std::int64_t>::max() - uncertainty
+            ? std::numeric_limits<std::int64_t>::max()
+            : result.gps.back().media_time_ticks + uncertainty;
     if (last_end < track_end) {
       append_gap(result.gaps, last_end, track_end, "missing_gps_samples");
     }
@@ -308,10 +302,9 @@ std::optional<long double> forward_azimuth_degrees(const long double latitude_1,
                                                    const long double longitude_1,
                                                    const long double latitude_2,
                                                    const long double longitude_2) {
-  if (!std::isfinite(latitude_1) || !std::isfinite(longitude_1) ||
-      !std::isfinite(latitude_2) || !std::isfinite(longitude_2) ||
-      latitude_1 < -90.0L || latitude_1 > 90.0L || latitude_2 < -90.0L ||
-      latitude_2 > 90.0L || longitude_1 < -180.0L || longitude_1 > 180.0L ||
+  if (!std::isfinite(latitude_1) || !std::isfinite(longitude_1) || !std::isfinite(latitude_2) ||
+      !std::isfinite(longitude_2) || latitude_1 < -90.0L || latitude_1 > 90.0L ||
+      latitude_2 < -90.0L || latitude_2 > 90.0L || longitude_1 < -180.0L || longitude_1 > 180.0L ||
       longitude_2 < -180.0L || longitude_2 > 180.0L ||
       (latitude_1 == latitude_2 && longitude_1 == longitude_2)) {
     return std::nullopt;
@@ -322,16 +315,18 @@ std::optional<long double> forward_azimuth_degrees(const long double latitude_1,
   const auto longitude_delta = (longitude_2 - longitude_1) * pi / 180.0L;
   const auto y = std::sin(longitude_delta) * std::cos(second_latitude);
   const auto x = std::cos(first_latitude) * std::sin(second_latitude) -
-                 std::sin(first_latitude) * std::cos(second_latitude) *
-                     std::cos(longitude_delta);
-  if (x == 0.0L && y == 0.0L) return std::nullopt;
+                 std::sin(first_latitude) * std::cos(second_latitude) * std::cos(longitude_delta);
+  if (x == 0.0L && y == 0.0L)
+    return std::nullopt;
   auto result = std::atan2(y, x) * 180.0L / pi;
-  if (result < 0.0L) result += 360.0L;
+  if (result < 0.0L)
+    result += 360.0L;
   return result;
 }
 
 const GpsPoint *nearest_point(const Extraction &extraction, const std::int64_t media_ticks) {
-  if (extraction.gps.empty()) return nullptr;
+  if (extraction.gps.empty())
+    return nullptr;
   const auto distance = [media_ticks](const GpsPoint &point) {
     return std::fabs(static_cast<long double>(point.media_time_ticks) - media_ticks);
   };
@@ -347,9 +342,7 @@ std::optional<long double> motion_azimuth_degrees(const std::vector<GpsPoint> &p
       points[selected].speed_2d <= 0.01L) {
     return std::nullopt;
   }
-  const auto usable = [](const auto &point) {
-    return point.validity != Validity::invalid;
-  };
+  const auto usable = [](const auto &point) { return point.validity != Validity::invalid; };
   const auto differs = [](const auto &left, const auto &right) {
     return left.latitude != right.latitude || left.longitude != right.longitude;
   };
@@ -371,7 +364,8 @@ std::optional<long double> motion_azimuth_degrees(const std::vector<GpsPoint> &p
   }
   const auto *start = before != nullptr ? before : &points[selected];
   const auto *end = after != nullptr ? after : &points[selected];
-  if (start == end || !differs(*start, *end)) return std::nullopt;
+  if (start == end || !differs(*start, *end))
+    return std::nullopt;
 
   return forward_azimuth_degrees(start->latitude, start->longitude, end->latitude, end->longitude);
 }

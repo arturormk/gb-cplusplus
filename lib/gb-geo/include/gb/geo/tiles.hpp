@@ -19,8 +19,10 @@ struct TileKey {
     return left.zoom == right.zoom && left.x == right.x && left.y == right.y;
   }
   friend bool operator<(const TileKey &left, const TileKey &right) {
-    if (left.zoom != right.zoom) return left.zoom < right.zoom;
-    if (left.x != right.x) return left.x < right.x;
+    if (left.zoom != right.zoom)
+      return left.zoom < right.zoom;
+    if (left.x != right.x)
+      return left.x < right.x;
     return left.y < right.y;
   }
 };
@@ -34,16 +36,16 @@ inline constexpr int kMaximumTileZoom = 24;
 // Describes a raster tile source and the usage policy the fetcher must respect. Providers are
 // data, not code: adding one is adding a description, and every consumer reads its limits here.
 struct TileProvider {
-  std::string id;            // cache directory and configuration name: [a-z0-9_-]+
-  std::string name;          // human-readable name
-  std::string url_template;  // {z}, {x}, {y} and optional {s}
+  std::string id;           // cache directory and configuration name: [a-z0-9_-]+
+  std::string name;         // human-readable name
+  std::string url_template; // {z}, {x}, {y} and optional {s}
   std::vector<std::string> subdomains;
   int min_zoom{0};
   int max_zoom{19};
   int tile_size{256};
   std::string file_extension{"png"};
-  std::string attribution;      // text that must stay visible on the map
-  std::string attribution_url;  // where the attribution links
+  std::string attribution;     // text that must stay visible on the map
+  std::string attribution_url; // where the attribution links
   // Cache lifetime when the server sends no usable Cache-Control or Expires header.
   std::int64_t default_ttl_seconds{7 * 24 * 3600};
   int max_concurrent_requests{2};

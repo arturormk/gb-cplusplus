@@ -18,9 +18,9 @@
 #include <algorithm>
 #include <array>
 #include <clocale>
-#include <functional>
 #include <cmath>
 #include <filesystem>
+#include <functional>
 #include <iostream>
 #include <optional>
 #include <stdexcept>
@@ -47,8 +47,9 @@ struct Options {
   std::optional<std::filesystem::path> map_cache;
 };
 
-constexpr std::array<std::string_view, 8> kViewNames{
-    "rectilinear", "fisheye", "stereographic", "little-planet", "panorama", "raw-1", "raw-2", "original"};
+constexpr std::array<std::string_view, 8> kViewNames{"rectilinear",   "fisheye",  "stereographic",
+                                                     "little-planet", "panorama", "raw-1",
+                                                     "raw-2",         "original"};
 
 void help() {
   std::cout
@@ -99,7 +100,8 @@ double parseNumber(const std::string_view text, const char *what) {
   return result;
 }
 
-int parseInteger(const std::string_view text, const char *what, const int minimum, const int maximum) {
+int parseInteger(const std::string_view text, const char *what, const int minimum,
+                 const int maximum) {
   std::size_t consumed{};
   const std::string value(text);
   const auto result = std::stoi(value, &consumed);
@@ -114,16 +116,19 @@ Options parse(const int argc, char **argv) {
   for (int index = 1; index < argc; ++index) {
     const std::string_view argument(argv[index]);
     const auto value = [&]() -> std::string_view {
-      if (++index >= argc) throw std::runtime_error(std::string(argument) + " requires a value");
+      if (++index >= argc)
+        throw std::runtime_error(std::string(argument) + " requires a value");
       return argv[index];
     };
     if (argument == "--time") {
       options.seconds = parseNumber(value(), "media time");
-      if (options.seconds < 0.0) throw std::runtime_error("invalid media time");
+      if (options.seconds < 0.0)
+        throw std::runtime_error("invalid media time");
     } else if (argument == "--view") {
       const auto name = value();
       const auto found = std::find(kViewNames.begin(), kViewNames.end(), name);
-      if (found == kViewNames.end()) throw std::runtime_error("unknown view mode: " + std::string(name));
+      if (found == kViewNames.end())
+        throw std::runtime_error("unknown view mode: " + std::string(name));
       options.view = static_cast<int>(std::distance(kViewNames.begin(), found));
     } else if (argument == "--square") {
       options.square = true;
@@ -132,7 +137,8 @@ Options parse(const int argc, char **argv) {
     } else if (argument == "--decoder-threads") {
       options.player.decoder_threads = parseInteger(value(), "decoder thread count", 0, 64);
     } else if (argument == "--queue") {
-      options.player.queue_capacity = static_cast<std::size_t>(parseInteger(value(), "queue size", 1, 32));
+      options.player.queue_capacity =
+          static_cast<std::size_t>(parseInteger(value(), "queue size", 1, 32));
     } else if (argument == "--no-audio") {
       options.player.audio = false;
     } else if (argument == "--map-provider") {
@@ -144,7 +150,8 @@ Options parse(const int argc, char **argv) {
       options.map_network = false;
     } else if (argument == "--map-cache") {
       const auto directory = value();
-      if (directory.empty()) throw std::runtime_error("--map-cache requires a directory");
+      if (directory.empty())
+        throw std::runtime_error("--map-cache requires a directory");
       options.map_cache = std::filesystem::absolute(std::filesystem::path(std::string(directory)));
     } else if (argument == "--benchmark") {
       BenchmarkOptions benchmark;
@@ -184,7 +191,8 @@ Options parse(const int argc, char **argv) {
     throw std::runtime_error("--benchmark and --screenshot require an input file");
   }
   options.player.map_provider = *gb::geo::find_provider(options.map_provider);
-  options.player.map_tiles = gb::tiles::application_fetcher_options("gb-player", GB_PLAYER_VERSION, options.map_cache);
+  options.player.map_tiles =
+      gb::tiles::application_fetcher_options("gb-player", GB_PLAYER_VERSION, options.map_cache);
   options.player.map_tiles.network = options.map_network;
   if (options.smoke_test) {
     // Tests never touch the network or the user's cache.
@@ -196,13 +204,15 @@ Options parse(const int argc, char **argv) {
 
 // Polls until the first frame is visible (or presented without a GPU view) and metadata has
 // loaded, then runs the callback.
-void whenFirstFrameReady(PlayerController &controller, QObject *context, std::function<void(bool)> callback) {
+void whenFirstFrameReady(PlayerController &controller, QObject *context,
+                         std::function<void(bool)> callback) {
   auto *timer = new QTimer(context);
   auto *elapsed = new QElapsedTimer;
   elapsed->start();
   QObject::connect(timer, &QTimer::timeout, context, [&controller, timer, elapsed, callback] {
     const auto statistics = controller.playbackEngine().statistics();
-    const auto shown = VideoView::gpuAvailable() ? statistics.rendered_frames : statistics.presented_frames;
+    const auto shown =
+        VideoView::gpuAvailable() ? statistics.rendered_frames : statistics.presented_frames;
     const auto failed = controller.statusIsError();
     if ((shown > 0U && !controller.metadataLoading()) || failed || elapsed->elapsed() > 30000) {
       timer->stop();
@@ -252,21 +262,24 @@ int main(int argc, char **argv) {
   qmlRegisterType<ProfileView>("Gb.Player", 1, 0, "ProfileView");
 
   // A benchmark measures one file; it must not run on into the next chapter.
-  if (options.benchmark.has_value()) options.player.continue_sequence = false;
+  if (options.benchmark.has_value())
+    options.player.continue_sequence = false;
   PlayerController controller(options.player);
   QQmlApplicationEngine engine;
   engine.rootContext()->setContextProperty(QStringLiteral("player"), &controller);
   engine.rootContext()->setContextProperty(QStringLiteral("initialView"), options.view);
   engine.rootContext()->setContextProperty(QStringLiteral("initialSquare"), options.square);
   engine.load(QUrl(QStringLiteral("qrc:/qml/Main.qml")));
-  if (engine.rootObjects().isEmpty()) return 1;
+  if (engine.rootObjects().isEmpty())
+    return 1;
   auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().front());
 
   if (!options.path.isEmpty()) {
     const auto opened = controller.open(options.path, options.seconds);
     if (!opened) {
       std::cerr << "gb-player: " << controller.status().toStdString() << '\n';
-      if (options.smoke_test || options.benchmark || !options.screenshot.isEmpty()) return 1;
+      if (options.smoke_test || options.benchmark || !options.screenshot.isEmpty())
+        return 1;
     } else if (options.play && !options.benchmark) {
       controller.play();
     }
@@ -304,14 +317,18 @@ int main(int argc, char **argv) {
       whenFirstFrameReady(controller, &application, [&application, &controller](const bool ok) {
         const auto current = controller.playbackEngine().current();
         if (!ok || !current.frames) {
-          std::cerr << "gb-player: smoke test failed: " << controller.status().toStdString() << '\n';
+          std::cerr << "gb-player: smoke test failed: " << controller.status().toStdString()
+                    << '\n';
           application.exit(1);
           return;
         }
         const auto layout = controller.sourceLayout();
         std::cout << "gb-player smoke: layout="
-                  << (layout == 1 ? "max_dual_eac" : layout == 2 ? "equirectangular" : "flat")
-                  << " streams=" << current.frames->pictures.size() << " pts=" << current.frames->pts
+                  << (layout == 1   ? "max_dual_eac"
+                      : layout == 2 ? "equirectangular"
+                                    : "flat")
+                  << " streams=" << current.frames->pictures.size()
+                  << " pts=" << current.frames->pts
                   << " telemetry=" << controller.telemetryState().toStdString()
                   << " audio=" << (controller.hasAudio() ? "open" : "none")
                   << " map=" << controller.mapState().toStdString() << '\n';

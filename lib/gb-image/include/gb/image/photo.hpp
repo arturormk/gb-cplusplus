@@ -19,13 +19,13 @@ struct ExifRational {
 };
 
 struct ExifData {
-  std::string byte_order;  // "big-endian" or "little-endian"
+  std::string byte_order; // "big-endian" or "little-endian"
   std::optional<std::string> make;
   std::optional<std::string> model;
   std::optional<std::string> software;
-  std::optional<std::string> date_time_original;  // "YYYY:MM:DD HH:MM:SS", camera local clock
+  std::optional<std::string> date_time_original; // "YYYY:MM:DD HH:MM:SS", camera local clock
   std::optional<std::uint16_t> orientation;
-  std::optional<ExifRational> exposure_time;  // seconds
+  std::optional<ExifRational> exposure_time; // seconds
   std::optional<ExifRational> f_number;
   std::optional<std::uint32_t> iso;
   std::optional<double> exposure_bias_ev;
@@ -40,10 +40,10 @@ struct ExifData {
 
 // The EXIF GPS IFD. A position needs both coordinates with their references.
 struct PhotoGps {
-  double latitude{};   // degrees, north positive
-  double longitude{};  // degrees, east positive
-  std::optional<double> altitude;  // metres; below sea level negative
-  std::optional<std::string> utc;  // "YYYY-MM-DDTHH:MM:SSZ" when date and time stamps exist
+  double latitude{};              // degrees, north positive
+  double longitude{};             // degrees, east positive
+  std::optional<double> altitude; // metres; below sea level negative
+  std::optional<std::string> utc; // "YYYY-MM-DDTHH:MM:SSZ" when date and time stamps exist
   std::optional<double> dop;
   std::optional<double> speed_mps;
 };
@@ -106,7 +106,8 @@ struct PhotoInspection {
 [[nodiscard]] std::string field_of_view_name(PhotoFieldOfView value);
 
 // Bounded parsers over segment payloads, exposed for tests.
-[[nodiscard]] ExifData parse_exif(const std::vector<std::uint8_t> &tiff, std::optional<PhotoGps> &gps);
+[[nodiscard]] ExifData parse_exif(const std::vector<std::uint8_t> &tiff,
+                                  std::optional<PhotoGps> &gps);
 [[nodiscard]] std::optional<Panorama> parse_gpano(const std::string &xmp);
 
 } // namespace gb::image

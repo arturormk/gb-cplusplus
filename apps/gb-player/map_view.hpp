@@ -76,9 +76,9 @@ protected:
 private:
   struct Viewport {
     int tile_zoom{};
-    double world_pixels{};  // size of the whole world in item pixels at the current zoom
+    double world_pixels{}; // size of the whole world in item pixels at the current zoom
     double tile_pixels{};
-    double left{};          // world pixel at the item's left edge
+    double left{}; // world pixel at the item's left edge
     double top{};
   };
 
@@ -103,18 +103,18 @@ private:
   bool fit_pending_{};
   QString tile_status_;
 
-  std::vector<gb::geo::WorldPoint> route_;  // projected record positions, same indices as records
+  std::vector<gb::geo::WorldPoint> route_; // projected record positions, same indices as records
   std::vector<bool> usable_;
   QCache<quint64, QImage> images_;
   std::set<gb::geo::TileKey> pending_;
-  std::map<gb::geo::TileKey, qint64> unavailable_;  // key -> time of failure (ms)
+  std::map<gb::geo::TileKey, qint64> unavailable_; // key -> time of failure (ms)
   int missing_tiles_{};
   QString last_unavailable_reason_;
   QElapsedTimer clock_;
 
   QTimer animation_;
   QElapsedTimer animation_clock_;
-  std::optional<double> shown_course_;  // filtered arrow angle (degrees), kept across stops
+  std::optional<double> shown_course_; // filtered arrow angle (degrees), kept across stops
   std::optional<std::size_t> last_record_;
 
   QPointF press_position_;

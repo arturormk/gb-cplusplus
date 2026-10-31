@@ -49,8 +49,8 @@ class FixtureDirectory {
 public:
   FixtureDirectory() {
     const auto stamp = std::chrono::steady_clock::now().time_since_epoch().count();
-    path_ = std::filesystem::temp_directory_path() /
-            ("gb-container-tests-" + std::to_string(stamp));
+    path_ =
+        std::filesystem::temp_directory_path() / ("gb-container-tests-" + std::to_string(stamp));
     std::filesystem::create_directory(path_);
   }
   ~FixtureDirectory() { std::filesystem::remove_all(path_); }
@@ -118,8 +118,9 @@ void test_truncated_fixture(const FixtureDirectory &fixtures) {
   append_u32(file, 20U);
   append_fourcc(file, "ftyp");
   append_fourcc(file, "isom");
-  require_error([&] { (void)gb::container::inspect_iso_bmff(fixtures.write("truncated.mp4", file)); },
-                gb::container::ErrorKind::corrupt, "truncated box was accepted");
+  require_error(
+      [&] { (void)gb::container::inspect_iso_bmff(fixtures.write("truncated.mp4", file)); },
+      gb::container::ErrorKind::corrupt, "truncated box was accepted");
 }
 
 void test_malicious_small_extended_size(const FixtureDirectory &fixtures) {
@@ -136,8 +137,9 @@ void test_malicious_oversized_box(const FixtureDirectory &fixtures) {
   Bytes file;
   append_u32(file, 0xffffffffU);
   append_fourcc(file, "free");
-  require_error([&] { (void)gb::container::inspect_iso_bmff(fixtures.write("oversized.mp4", file)); },
-                gb::container::ErrorKind::corrupt, "oversized box was accepted");
+  require_error(
+      [&] { (void)gb::container::inspect_iso_bmff(fixtures.write("oversized.mp4", file)); },
+      gb::container::ErrorKind::corrupt, "oversized box was accepted");
 }
 
 void test_size_zero_extends_to_parent(const FixtureDirectory &fixtures) {

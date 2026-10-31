@@ -21,12 +21,14 @@ constexpr double kQueueSeconds = 0.5;
 constexpr double kSeekLeadSeconds = 0.02;
 
 std::int64_t framesIn(const AudioOutput::Clock::duration duration, const std::int32_t rate) {
-  return static_cast<std::int64_t>(std::floor(std::chrono::duration<double>(duration).count() * rate));
+  return static_cast<std::int64_t>(
+      std::floor(std::chrono::duration<double>(duration).count() * rate));
 }
 
 } // namespace
 
-AudioOutput::AudioOutput(const std::string &path, const int stream_index, const std::string &application_name) {
+AudioOutput::AudioOutput(const std::string &path, const int stream_index,
+                         const std::string &application_name) {
   try {
     reader_ = std::make_unique<gb::media::AudioReader>(path, stream_index);
   } catch (const std::exception &error) {
@@ -75,7 +77,8 @@ AudioOutput::~AudioOutput() {
     stop_thread_ = true;
   }
   condition_.notify_all();
-  if (thread_.joinable()) thread_.join();
+  if (thread_.joinable())
+    thread_.join();
   SDL_CloseAudioDevice(device_);
   SDL_QuitSubSystem(SDL_INIT_AUDIO);
 }
@@ -93,7 +96,8 @@ void AudioOutput::start(const std::int64_t anchor_sample, const Clock::time_poin
     anchor_time_ = anchor_time;
     last_position_.reset();
     decoding_ = true;
-    const auto expected = anchor_sample + framesIn(Clock::now() + latency_ - anchor_time, sample_rate_);
+    const auto expected =
+        anchor_sample + framesIn(Clock::now() + latency_ - anchor_time, sample_rate_);
     seek_request_ = std::max<std::int64_t>(
         0, expected - static_cast<std::int64_t>(kSeekLeadSeconds * sample_rate_));
     ++statistics_.starts;
@@ -123,11 +127,13 @@ void AudioOutput::stop() {
 
 std::optional<std::int64_t> AudioOutput::position(const Clock::time_point now) {
   const std::lock_guard lock(mutex_);
-  if (state_ != State::playing) return std::nullopt;
+  if (state_ != State::playing)
+    return std::nullopt;
   // The buffer's first sample is heard `latency_` after it was requested.
   auto result = buffer_first_sample_ + framesIn(now - buffer_time_ - latency_, sample_rate_);
   result = std::min(result, buffer_first_sample_ + buffer_frames_);
-  if (last_position_.has_value()) result = std::max(result, *last_position_);
+  if (last_position_.has_value())
+    result = std::max(result, *last_position_);
   last_position_ = result;
   return result;
 }
@@ -143,9 +149,11 @@ void AudioOutput::setMuted(const bool muted) {
 }
 
 void AudioOutput::pauseDeviceIfIdle() {
-  if (!device_running_) return;
+  if (!device_running_)
+    return;
   const auto current = state();
-  if (current != State::idle && current != State::finished) return;
+  if (current != State::idle && current != State::finished)
+    return;
   SDL_PauseAudioDevice(device_, 1);
   device_running_ = false;
 }
@@ -161,7 +169,9 @@ void AudioOutput::clearQueue() {
   queued_frames_ = 0;
 }
 
-std::int64_t AudioOutput::queuedPosition() const { return queue_.front().first_sample + front_offset_; }
+std::int64_t AudioOutput::queuedPosition() const {
+  return queue_.front().first_sample + front_offset_;
+}
 
 void AudioOutput::discardQueued(std::int64_t frames) {
   while (frames > 0 && !queue_.empty()) {
@@ -187,13 +197,15 @@ std::int64_t AudioOutput::copyQueued(float *out, const std::int64_t frames) {
     const auto *source = block.samples.data() + static_cast<std::size_t>(front_offset_) * 2U;
     for (std::int64_t frame = 0; frame < count; ++frame) {
       const auto target = state_ == State::fading || muted_ ? 0.0F : 1.0F;
-      gain_ = gain_ < target ? std::min(target, gain_ + gain_step_) : std::max(target, gain_ - gain_step_);
+      gain_ = gain_ < target ? std::min(target, gain_ + gain_step_)
+                             : std::max(target, gain_ - gain_step_);
       out[(written + frame) * 2] = source[frame * 2] * gain_;
       out[(written + frame) * 2 + 1] = source[frame * 2 + 1] * gain_;
     }
     written += count;
     discardQueued(count);
-    if (state_ == State::fading && gain_ <= 0.0F) break;
+    if (state_ == State::fading && gain_ <= 0.0F)
+      break;
   }
   return written;
 }
@@ -233,11 +245,13 @@ void AudioOutput::fill(float *out, const std::int64_t frames) {
         wake = true;
       }
       if (queue_.empty()) {
-        if (end_of_stream_) state_ = State::finished;
+        if (end_of_stream_)
+          state_ = State::finished;
         break;
       }
       const auto silence = queuedPosition() - first;
-      if (silence < 0 || silence >= frames) break;
+      if (silence < 0 || silence >= frames)
+        break;
       statistics_.aligned_silence_frames += static_cast<std::uint64_t>(silence);
       state_ = State::playing;
       gain_ = 0.0F;
@@ -279,7 +293,8 @@ void AudioOutput::fill(float *out, const std::int64_t frames) {
     }
     }
   }
-  if (wake) condition_.notify_all();
+  if (wake)
+    condition_.notify_all();
 }
 
 void AudioOutput::worker() {
@@ -289,7 +304,8 @@ void AudioOutput::worker() {
       return stop_thread_ || seek_request_.has_value() ||
              (decoding_ && !end_of_stream_ && queued_frames_ < capacity_frames_);
     });
-    if (stop_thread_) return;
+    if (stop_thread_)
+      return;
     const auto target = std::exchange(seek_request_, std::nullopt);
     const auto generation = generation_;
     lock.unlock();
@@ -297,14 +313,16 @@ void AudioOutput::worker() {
     std::optional<gb::media::AudioBlock> block;
     std::optional<std::string> error;
     try {
-      if (target.has_value()) reader_->seek(*target);
+      if (target.has_value())
+        reader_->seek(*target);
       block = reader_->next();
     } catch (const std::exception &failure) {
       error = failure.what();
     }
 
     lock.lock();
-    if (generation != generation_ || seek_request_.has_value()) continue;
+    if (generation != generation_ || seek_request_.has_value())
+      continue;
     if (error.has_value()) {
       statistics_.error = *error;
       end_of_stream_ = true;

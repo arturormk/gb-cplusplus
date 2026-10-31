@@ -13,10 +13,12 @@
 namespace {
 
 void require(const bool condition, const std::string &message) {
-  if (!condition) throw std::runtime_error(message);
+  if (!condition)
+    throw std::runtime_error(message);
 }
 
-gb::media::VideoStream stream(const int index, const std::int32_t width, const std::int32_t height) {
+gb::media::VideoStream stream(const int index, const std::int32_t width,
+                              const std::int32_t height) {
   gb::media::VideoStream result;
   result.index = index;
   result.width = width;
@@ -25,8 +27,7 @@ gb::media::VideoStream stream(const int index, const std::int32_t width, const s
   return result;
 }
 
-template <typename Function>
-bool rejects(Function function, const gb::media::ErrorKind kind) {
+template <typename Function> bool rejects(Function function, const gb::media::ErrorKind kind) {
   try {
     function();
   } catch (const gb::media::MediaError &error) {
@@ -51,17 +52,20 @@ int mean_plane(const gb::media::PlanarPicture &picture, const std::size_t plane)
 
 void layout_tests() {
   using gb::media::SourceLayout;
-  const auto max = gb::media::select_playback_layout({stream(0, 4096, 1344), stream(5, 4096, 1344)});
+  const auto max =
+      gb::media::select_playback_layout({stream(0, 4096, 1344), stream(5, 4096, 1344)});
   require(max.layout == SourceLayout::max_dual_eac && max.streams == std::vector<int>{0, 5} &&
               max.overlap == 64,
           "verified MAX geometry was not selected as dual EAC");
   const auto single = gb::media::select_playback_layout({stream(0, 1920, 1080)});
   require(single.layout == SourceLayout::flat && single.streams == std::vector<int>{0},
           "single stream is not flat");
-  const auto odd = gb::media::select_playback_layout({stream(0, 4097, 1344), stream(1, 4097, 1344)});
+  const auto odd =
+      gb::media::select_playback_layout({stream(0, 4097, 1344), stream(1, 4097, 1344)});
   require(odd.layout == SourceLayout::flat && odd.streams == std::vector<int>{0},
           "odd overlap must not be claimed as MAX EAC");
-  const auto mismatch = gb::media::select_playback_layout({stream(0, 4096, 1344), stream(1, 2048, 1344)});
+  const auto mismatch =
+      gb::media::select_playback_layout({stream(0, 4096, 1344), stream(1, 2048, 1344)});
   require(mismatch.layout == SourceLayout::flat, "mismatched streams must not be paired");
   require(rejects([] { static_cast<void>(gb::media::select_playback_layout({})); },
                   gb::media::ErrorKind::unsupported),
@@ -73,14 +77,18 @@ void layout_tests() {
   require(gb::media::rescale_ticks(3599, {1, 90000}, {1, 1000}) == 39, "rescale does not floor");
   require(gb::media::rescale_ticks(-1, {1, 90000}, {1, 1000}) == -1,
           "negative rescale does not floor");
-  require(gb::media::rescale_ticks(482560, {1, 1000}, {1, 90000}) == 43430400,
-          "upscale is wrong");
-  require(rejects([] { static_cast<void>(gb::media::rescale_ticks(1, {0, 1}, {1, 1})); },
-                  gb::media::ErrorKind::invalid_argument),
+  require(gb::media::rescale_ticks(482560, {1, 1000}, {1, 90000}) == 43430400, "upscale is wrong");
+  require(rejects(
+              [] {
+                static_cast<void>(gb::media::rescale_ticks(1, {0, 1}, {1, 1}));
+              },
+              gb::media::ErrorKind::invalid_argument),
           "invalid time base was not rejected");
-  require(rejects([] {
-            static_cast<void>(gb::media::rescale_ticks(INT64_MAX, {1, 1}, {1, 90000}));
-          }, gb::media::ErrorKind::invalid_argument),
+  require(rejects(
+              [] {
+                static_cast<void>(gb::media::rescale_ticks(INT64_MAX, {1, 1}, {1, 90000}));
+              },
+              gb::media::ErrorKind::invalid_argument),
           "overflow was not rejected");
 }
 
@@ -118,14 +126,16 @@ void reader_tests(const char *path) {
   }
   require(sequence.size() == 20U, "expected 20 synchronized frame sets");
   for (std::size_t index = 0; index < sequence.size(); ++index) {
-    require(sequence[index] == static_cast<std::int64_t>(index) * tenth, "PTS sequence is not exact");
+    require(sequence[index] == static_cast<std::int64_t>(index) * tenth,
+            "PTS sequence is not exact");
   }
   require(reader.unpaired_frames() == 0U, "unexpected unpaired frames");
 
   // Mid-frame target inside a GOP: latest frame not after the target.
   reader.seek(13 * tenth + tenth / 2);
   auto selected = reader.next();
-  require(selected.has_value() && selected->pts == 13 * tenth, "accurate seek selected wrong frame");
+  require(selected.has_value() && selected->pts == 13 * tenth,
+          "accurate seek selected wrong frame");
   auto following = reader.next();
   require(following.has_value() && following->pts == 14 * tenth, "seek lost the following frame");
 
@@ -139,13 +149,17 @@ void reader_tests(const char *path) {
 
   reader.seek(1000 * tenth);
   selected = reader.next();
-  require(selected.has_value() && selected->pts == 19 * tenth, "seek beyond end must hold last frame");
+  require(selected.has_value() && selected->pts == 19 * tenth,
+          "seek beyond end must hold last frame");
   require(!reader.next().has_value(), "reader did not end after the last frame");
 
   require(rejects([&reader] { reader.seek(-1); }, gb::media::ErrorKind::invalid_argument),
           "negative seek was not rejected");
-  require(rejects([path] { gb::media::SynchronizedReader invalid(path, {0, 0}); },
-                  gb::media::ErrorKind::invalid_argument),
+  require(rejects(
+              [path] {
+                gb::media::SynchronizedReader invalid(path, {0, 0});
+              },
+              gb::media::ErrorKind::invalid_argument),
           "duplicate stream selection was not rejected");
   require(rejects([path] { gb::media::SynchronizedReader invalid(path, {7}); },
                   gb::media::ErrorKind::invalid_argument),
@@ -168,8 +182,10 @@ void audio_selection_tests() {
           "MAX stereo track was not selected");
   require(!gb::media::select_playback_audio({audio(6, 4)}).stream.has_value(),
           "multichannel audio must not be selected");
-  require(gb::media::select_playback_audio({audio(3, 1)}).stream == 3, "mono stream was not selected");
-  require(!gb::media::select_playback_audio({}).stream.has_value(), "no-audio input selected a stream");
+  require(gb::media::select_playback_audio({audio(3, 1)}).stream == 3,
+          "mono stream was not selected");
+  require(!gb::media::select_playback_audio({}).stream.has_value(),
+          "no-audio input selected a stream");
 }
 
 void audio_aac_tests(const char *path) {
@@ -209,7 +225,8 @@ void audio_pcm_tests(const char *path) {
       const auto left = block.samples[static_cast<std::size_t>(frame) * 2U];
       require(std::abs(left - value_at(block.first_sample + frame)) < 1.0e-3F,
               "PCM sample does not match its position");
-      require(left == block.samples[static_cast<std::size_t>(frame) * 2U + 1U], "mono was not duplicated");
+      require(left == block.samples[static_cast<std::size_t>(frame) * 2U + 1U],
+              "mono was not duplicated");
     }
   };
   std::int64_t total{};

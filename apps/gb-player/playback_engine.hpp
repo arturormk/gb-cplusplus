@@ -66,9 +66,9 @@ public:
   explicit PlaybackEngine(QObject *parent = nullptr);
   ~PlaybackEngine() override;
 
-  void open(const std::string &path, const gb::media::PlaybackLayout &layout,
-            int decoder_threads, std::size_t queue_capacity, std::int64_t start_ticks,
-            std::optional<int> audio_stream, const std::string &application_name);
+  void open(const std::string &path, const gb::media::PlaybackLayout &layout, int decoder_threads,
+            std::size_t queue_capacity, std::int64_t start_ticks, std::optional<int> audio_stream,
+            const std::string &application_name);
   // Shows one decoded picture (a photo) with no decoder, clock, audio or seeking.
   void openStill(std::shared_ptr<const gb::media::FrameSet> frames);
   void close();

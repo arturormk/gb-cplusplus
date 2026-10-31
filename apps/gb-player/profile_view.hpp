@@ -55,8 +55,8 @@ protected:
 private:
   struct Sample {
     double seconds{};
-    double height{};  // WGS 84 altitude, metres
-    double speed{};   // 2D speed, km/h
+    double height{}; // WGS 84 altitude, metres
+    double speed{};  // 2D speed, km/h
     double smooth_height{};
     double smooth_speed{};
     bool usable{};
@@ -81,9 +81,9 @@ private:
   bool smoothed_{true};
   std::vector<Sample> samples_;
   double duration_{};
-  double window_start_{};  // visible time window, seconds
+  double window_start_{}; // visible time window, seconds
   double window_span_{};
-  double minimum_{};  // value range of the plot area
+  double minimum_{}; // value range of the plot area
   double maximum_{};
   QImage plot_;
   bool plot_dirty_{true};

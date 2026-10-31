@@ -24,9 +24,8 @@ void append(Bytes &destination, const Bytes &source) {
   destination.insert(destination.end(), source.begin(), source.end());
 }
 
-Bytes element(const std::string &key, const std::uint8_t type,
-              const std::uint8_t structure_size, const std::uint16_t repeat,
-              const Bytes &payload) {
+Bytes element(const std::string &key, const std::uint8_t type, const std::uint8_t structure_size,
+              const std::uint16_t repeat, const Bytes &payload) {
   Bytes bytes(key.begin(), key.end());
   bytes.push_back(type);
   bytes.push_back(structure_size);
@@ -63,8 +62,7 @@ void test_nested_scaling_and_unknown_preservation() {
   const auto &unknown = result[0].children[2];
   require(!gb::metadata::is_known_key(unknown.key), "unknown key was classified as known");
   require(unknown.raw == data, "unknown raw bytes were not preserved");
-  require(unknown.values.size() == 2U && unknown.values[0] == "20" &&
-              unknown.values[1] == "300",
+  require(unknown.values.size() == 2U && unknown.values[0] == "20" && unknown.values[1] == "300",
           "raw values decoded incorrectly");
   require(unknown.normalized_values.size() == 2U && unknown.normalized_values[0] == "2" &&
               unknown.normalized_values[1] == "3",

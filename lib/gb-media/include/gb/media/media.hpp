@@ -77,15 +77,11 @@ private:
 [[nodiscard]] std::vector<VideoStream> video_streams(const std::filesystem::path &path);
 [[nodiscard]] RgbFrame decode_frame(const std::filesystem::path &path, int stream_index,
                                     std::int64_t presentation_ticks);
-[[nodiscard]] RgbFrame reconstruct_equirectangular(const RgbFrame &front,
-                                                   const RgbFrame &rear,
-                                                   std::int32_t width,
-                                                   std::int32_t height,
+[[nodiscard]] RgbFrame reconstruct_equirectangular(const RgbFrame &front, const RgbFrame &rear,
+                                                   std::int32_t width, std::int32_t height,
                                                    std::int32_t overlap = 64);
-[[nodiscard]] RgbFrame project_equirectangular(const RgbFrame &source,
-                                               ProjectionMode mode,
-                                               std::int32_t width,
-                                               std::int32_t height,
+[[nodiscard]] RgbFrame project_equirectangular(const RgbFrame &source, ProjectionMode mode,
+                                               std::int32_t width, std::int32_t height,
                                                long double yaw_degrees = 0.0L,
                                                long double pitch_degrees = 0.0L,
                                                long double roll_degrees = 0.0L,

@@ -9,9 +9,9 @@
 
 #include <algorithm>
 #include <exception>
+#include <span>
 #include <stdexcept>
 #include <string>
-#include <span>
 #include <utility>
 
 namespace gb::tiles {
@@ -23,22 +23,28 @@ std::int64_t now_unix() { return QDateTime::currentSecsSinceEpoch(); }
 // HTTP-date in the preferred IMF-fixdate form, e.g. "Sun, 06 Nov 1994 08:49:37 GMT".
 std::optional<std::int64_t> parse_http_date(const QByteArray &value) {
   const auto text = QString::fromLatin1(value).trimmed();
-  if (text.isEmpty()) return std::nullopt;
-  const auto parsed = QLocale::c().toDateTime(text, QStringLiteral("ddd, dd MMM yyyy HH:mm:ss 'GMT'"));
-  if (!parsed.isValid()) return std::nullopt;
+  if (text.isEmpty())
+    return std::nullopt;
+  const auto parsed =
+      QLocale::c().toDateTime(text, QStringLiteral("ddd, dd MMM yyyy HH:mm:ss 'GMT'"));
+  if (!parsed.isValid())
+    return std::nullopt;
   return QDateTime(parsed.date(), parsed.time(), Qt::UTC).toSecsSinceEpoch();
 }
 
 std::span<const std::uint8_t> bytes_of(const QByteArray &data) {
-  return {reinterpret_cast<const std::uint8_t *>(data.constData()), static_cast<std::size_t>(data.size())};
+  return {reinterpret_cast<const std::uint8_t *>(data.constData()),
+          static_cast<std::size_t>(data.size())};
 }
 
 void check_product_token(const std::string_view value, const char *what) {
   const bool bad = value.empty() || std::any_of(value.begin(), value.end(), [](const char c) {
-    return c == '/' || c == '(' || c == ')' || static_cast<unsigned char>(c) <= ' ' ||
-           static_cast<unsigned char>(c) >= 0x7F;
-  });
-  if (bad) throw std::invalid_argument(std::string("invalid User-Agent ") + what);
+                     return c == '/' || c == '(' || c == ')' ||
+                            static_cast<unsigned char>(c) <= ' ' ||
+                            static_cast<unsigned char>(c) >= 0x7F;
+                   });
+  if (bad)
+    throw std::invalid_argument(std::string("invalid User-Agent ") + what);
 }
 
 } // namespace
@@ -47,16 +53,19 @@ QString application_user_agent(const std::string_view application, const std::st
   check_product_token(application, "application name");
   check_product_token(version, "version");
   std::string agent = std::string(application) + "/" + std::string(version) + " (gb-cplusplus";
-  if (const std::string_view contact = GB_MAP_CONTACT; !contact.empty()) agent += "; " + std::string(contact);
+  if (const std::string_view contact = GB_MAP_CONTACT; !contact.empty())
+    agent += "; " + std::string(contact);
   agent += ")";
   return QString::fromStdString(agent);
 }
 
-FetcherOptions application_fetcher_options(const std::string_view application, const std::string_view version,
+FetcherOptions application_fetcher_options(const std::string_view application,
+                                           const std::string_view version,
                                            std::optional<std::filesystem::path> cache_root) {
   FetcherOptions options;
   options.network = true;
-  options.cache_root = cache_root.has_value() ? std::move(cache_root) : geo::default_tile_cache_root();
+  options.cache_root =
+      cache_root.has_value() ? std::move(cache_root) : geo::default_tile_cache_root();
   options.user_agent = application_user_agent(application, version);
   return options;
 }
@@ -67,7 +76,8 @@ TileFetcher::TileFetcher(geo::TileProvider provider, FetcherOptions options, QOb
   if (options_.user_agent.trimmed().isEmpty()) {
     throw std::invalid_argument("a tile fetcher needs an application User-Agent");
   }
-  if (options_.cache_root.has_value()) cache_.emplace(*options_.cache_root);
+  if (options_.cache_root.has_value())
+    cache_.emplace(*options_.cache_root);
   network_ = new QNetworkAccessManager(this);
   // Redirects to plain HTTP are refused; the provider's own cache rules are applied, not Qt's.
   network_->setRedirectPolicy(QNetworkRequest::NoLessSafeRedirectPolicy);
@@ -81,7 +91,8 @@ TileFetcher::~TileFetcher() {
 }
 
 QString TileFetcher::cacheDirectory() const {
-  return cache_.has_value() ? QString::fromStdString((cache_->root() / provider_.id).string()) : QString();
+  return cache_.has_value() ? QString::fromStdString((cache_->root() / provider_.id).string())
+                            : QString();
 }
 
 FetcherStatistics TileFetcher::statistics() const {
@@ -113,7 +124,8 @@ void TileFetcher::answerUnavailable(const geo::TileKey key, const QString &reaso
 
 void TileFetcher::request(const std::vector<geo::TileKey> &keys) {
   for (const auto key : keys) {
-    if (awaiting_.contains(key)) continue;
+    if (awaiting_.contains(key))
+      continue;
     if (!geo::is_valid(key) || key.zoom < provider_.min_zoom || key.zoom > provider_.max_zoom) {
       awaiting_.insert(key);
       answerUnavailable(key, QStringLiteral("outside the provider's zoom range"));
@@ -128,9 +140,11 @@ void TileFetcher::request(const std::vector<geo::TileKey> &keys) {
         cached.reset();
       }
     }
-    const auto queued = std::any_of(queue_.begin(), queue_.end(), [key](const auto &item) { return item.key == key; });
+    const auto queued = std::any_of(queue_.begin(), queue_.end(),
+                                    [key](const auto &item) { return item.key == key; });
     if (cached.has_value() && geo::looks_like_tile_image(cached->bytes)) {
-      const QByteArray data(reinterpret_cast<const char *>(cached->bytes.data()), static_cast<qsizetype>(cached->bytes.size()));
+      const QByteArray data(reinterpret_cast<const char *>(cached->bytes.data()),
+                            static_cast<qsizetype>(cached->bytes.size()));
       answerReady(key, data);
       if (cached->fresh(now_unix())) {
         ++statistics_.cache_fresh;
@@ -142,11 +156,13 @@ void TileFetcher::request(const std::vector<geo::TileKey> &keys) {
       }
       continue;
     }
-    if (in_flight_.contains(key) || queued) continue;  // answered when the download completes
+    if (in_flight_.contains(key) || queued)
+      continue; // answered when the download completes
     if (!options_.network) {
       answerUnavailable(key, QStringLiteral("not cached; network disabled"));
     } else if (statistics_.blocked) {
-      answerUnavailable(key, QStringLiteral("not cached; tile server refused service: ") + statistics_.last_error);
+      answerUnavailable(key, QStringLiteral("not cached; tile server refused service: ") +
+                                 statistics_.last_error);
     } else {
       queue_.push_back({key, false, {}});
     }
@@ -159,11 +175,14 @@ std::vector<geo::TileKey> TileFetcher::retain(const std::vector<geo::TileKey> &w
   const std::set<geo::TileKey> keep(wanted.begin(), wanted.end());
   std::vector<geo::TileKey> dropped;
   std::erase_if(queue_, [&](const Pending &pending) {
-    if (keep.contains(pending.key)) return false;
-    if (!pending.revalidate && awaiting_.erase(pending.key) > 0U) dropped.push_back(pending.key);
+    if (keep.contains(pending.key))
+      return false;
+    if (!pending.revalidate && awaiting_.erase(pending.key) > 0U)
+      dropped.push_back(pending.key);
     return true;
   });
-  if (!dropped.empty()) emit statisticsChanged();
+  if (!dropped.empty())
+    emit statisticsChanged();
   return dropped;
 }
 
@@ -183,13 +202,15 @@ void TileFetcher::pump() {
         request.setRawHeader("If-None-Match", QByteArray::fromStdString(pending.metadata.etag));
       }
       if (!pending.metadata.last_modified.empty()) {
-        request.setRawHeader("If-Modified-Since", QByteArray::fromStdString(pending.metadata.last_modified));
+        request.setRawHeader("If-Modified-Since",
+                             QByteArray::fromStdString(pending.metadata.last_modified));
       }
     }
     auto *reply = network_->get(request);
     in_flight_[pending.key] = reply;
     ++statistics_.network_requests;
-    connect(reply, &QNetworkReply::finished, this, [this, reply, pending] { finished(reply, pending); });
+    connect(reply, &QNetworkReply::finished, this,
+            [this, reply, pending] { finished(reply, pending); });
   }
 }
 
@@ -198,7 +219,8 @@ void TileFetcher::block(const QString &reason) {
   statistics_.last_error = reason;
   for (const auto &pending : queue_) {
     if (!pending.revalidate && awaiting_.contains(pending.key)) {
-      answerUnavailable(pending.key, QStringLiteral("not cached; tile server refused service: ") + reason);
+      answerUnavailable(pending.key,
+                        QStringLiteral("not cached; tile server refused service: ") + reason);
     }
   }
   queue_.clear();
@@ -213,16 +235,18 @@ void TileFetcher::finished(QNetworkReply *reply, const Pending &pending) {
   const auto fail = [&](const QString &reason) {
     ++statistics_.failures;
     statistics_.last_error = reason;
-    if (waiting) answerUnavailable(key, reason);
+    if (waiting)
+      answerUnavailable(key, reason);
   };
 
   const auto metadata_from_headers = [&](geo::TileMetadata metadata) {
     const auto now = now_unix();
     metadata.fetched_unix = now;
-    metadata.expires_unix = geo::tile_expiry(provider_, now,
-                                             geo::parse_cache_control(reply->rawHeader("Cache-Control").toStdString()),
-                                             parse_http_date(reply->rawHeader("Expires")));
-    if (const auto etag = reply->rawHeader("ETag"); !etag.isEmpty()) metadata.etag = etag.toStdString();
+    metadata.expires_unix = geo::tile_expiry(
+        provider_, now, geo::parse_cache_control(reply->rawHeader("Cache-Control").toStdString()),
+        parse_http_date(reply->rawHeader("Expires")));
+    if (const auto etag = reply->rawHeader("ETag"); !etag.isEmpty())
+      metadata.etag = etag.toStdString();
     if (const auto modified = reply->rawHeader("Last-Modified"); !modified.isEmpty()) {
       metadata.last_modified = modified.toStdString();
     }
@@ -242,19 +266,23 @@ void TileFetcher::finished(QNetworkReply *reply, const Pending &pending) {
   } else if (status == 403 || status == 418 || status == 429) {
     ++statistics_.failures;
     block(QStringLiteral("HTTP %1 from %2").arg(status).arg(reply->url().host()));
-    if (waiting) answerUnavailable(key, QStringLiteral("not cached; tile server refused service: ") + statistics_.last_error);
+    if (waiting)
+      answerUnavailable(key, QStringLiteral("not cached; tile server refused service: ") +
+                                 statistics_.last_error);
   } else if (reply->error() != QNetworkReply::NoError) {
     fail(status > 0 ? QStringLiteral("HTTP %1").arg(status) : reply->errorString());
   } else if (status != 200) {
     fail(QStringLiteral("unexpected HTTP %1").arg(status));
   } else {
     const auto data = reply->read(static_cast<qint64>(geo::kMaximumTileBytes) + 1);
-    if (data.size() > static_cast<qsizetype>(geo::kMaximumTileBytes) || !geo::looks_like_tile_image(bytes_of(data))) {
+    if (data.size() > static_cast<qsizetype>(geo::kMaximumTileBytes) ||
+        !geo::looks_like_tile_image(bytes_of(data))) {
       fail(QStringLiteral("response is not a tile image"));
     } else {
       ++statistics_.downloaded;
       statistics_.downloaded_bytes += static_cast<std::uint64_t>(data.size());
-      const auto cache_control = geo::parse_cache_control(reply->rawHeader("Cache-Control").toStdString());
+      const auto cache_control =
+          geo::parse_cache_control(reply->rawHeader("Cache-Control").toStdString());
       if (cache_.has_value() && !cache_control.no_store) {
         try {
           cache_->store(provider_, key, bytes_of(data), metadata_from_headers({}));
