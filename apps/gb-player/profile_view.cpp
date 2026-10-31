@@ -17,6 +17,10 @@ namespace {
 
 // Records further apart than this are not joined: the stretch between them has no data.
 constexpr double kBreakSeconds = 3.0;
+// Width of the centred smoothing window. Measured on walking recordings (18 Hz GPS): 1-2 s still
+// leaves speed swinging by 1-3 km/h within a second or two, which a walker does not do; 5 s
+// starts to fill in real stops. Height is clean from 1-2 s, and 3 s does not flatten it.
+constexpr double kSmoothSeconds = 3.0;
 constexpr double kLeftMargin = 46.0;
 constexpr double kRightMargin = 8.0;
 constexpr double kTopMargin = 18.0;
@@ -95,6 +99,14 @@ void ProfileView::setQuantity(const Quantity quantity) {
   update();
 }
 
+void ProfileView::setSmoothed(const bool smoothed) {
+  if (smoothed == smoothed_) return;
+  smoothed_ = smoothed;
+  emit smoothedChanged();
+  plot_dirty_ = true;
+  update();
+}
+
 void ProfileView::onDataChanged() {
   samples_.clear();
   duration_ = player_ != nullptr && player_->hasMedia() ? player_->duration() : 0.0;
@@ -108,11 +120,50 @@ void ProfileView::onDataChanged() {
     for (const auto &point : telemetry->gps) {
       samples_.push_back({static_cast<double>(point.media_time_ticks) * base, static_cast<double>(point.altitude),
                           static_cast<double>(point.speed_2d) * 3.6,
-                          point.validity == gb::telemetry::Validity::valid});
+                          0.0, 0.0, point.validity == gb::telemetry::Validity::valid});
     }
   }
+  smoothSamples();
   plot_dirty_ = true;
   update();
+}
+
+void ProfileView::smoothSamples() {
+  // Stretches are the runs of usable records the plot joins; a window never reaches across a gap.
+  std::size_t begin = 0;
+  while (begin < samples_.size()) {
+    if (!samples_[begin].usable) {
+      ++begin;
+      continue;
+    }
+    auto end = begin + 1;
+    while (end < samples_.size() && samples_[end].usable &&
+           samples_[end].seconds - samples_[end - 1].seconds <= kBreakSeconds) {
+      ++end;
+    }
+    // Sliding sums over [low, high), the records within half a window of the current one.
+    double height_sum = 0.0;
+    double speed_sum = 0.0;
+    auto low = begin;
+    auto high = begin;
+    for (auto i = begin; i < end; ++i) {
+      auto &sample = samples_[i];
+      while (high < end && samples_[high].seconds <= sample.seconds + kSmoothSeconds / 2.0) {
+        height_sum += samples_[high].height;
+        speed_sum += samples_[high].speed;
+        ++high;
+      }
+      while (samples_[low].seconds < sample.seconds - kSmoothSeconds / 2.0) {
+        height_sum -= samples_[low].height;
+        speed_sum -= samples_[low].speed;
+        ++low;
+      }
+      const auto count = static_cast<double>(high - low);
+      sample.smooth_height = height_sum / count;
+      sample.smooth_speed = speed_sum / count;
+    }
+    begin = end;
+  }
 }
 
 void ProfileView::onPositionChanged() {
@@ -155,7 +206,10 @@ double ProfileView::secondsForX(const double x) const {
   return window_start_ + std::clamp((x - area.left()) / area.width(), 0.0, 1.0) * window_span_;
 }
 
-double ProfileView::value(const Sample &sample) const { return quantity_ == Height ? sample.height : sample.speed; }
+double ProfileView::value(const Sample &sample) const {
+  if (quantity_ == Height) return smoothed_ ? sample.smooth_height : sample.height;
+  return smoothed_ ? sample.smooth_speed : sample.speed;
+}
 
 std::optional<double> ProfileView::cursorX() const {
   if (player_ == nullptr || !player_->hasMedia() || !(window_span_ > 0.0)) return std::nullopt;
@@ -194,16 +248,19 @@ void ProfileView::renderPlot() {
   const auto area = plotArea();
   painter.fillRect(area, kPlotBackground);
 
-  const auto title = quantity_ == Height ? QStringLiteral("Height (WGS 84), m") : QStringLiteral("Speed 2D, km/h");
+  auto title = quantity_ == Height ? QStringLiteral("Height (WGS 84), m") : QStringLiteral("Speed 2D, km/h");
+  if (smoothed_) title += QStringLiteral(" \u00b7 %1 s mean").arg(kSmoothSeconds);
   painter.setPen(kAxisText);
   painter.drawText(QRectF(area.left(), 0.0, area.width(), kTopMargin), Qt::AlignLeft | Qt::AlignVCenter, title);
 
+  // The range comes from the raw values even when smoothed, so toggling keeps the axis.
   auto low = std::numeric_limits<double>::infinity();
   auto high = -std::numeric_limits<double>::infinity();
   for (const auto &sample : samples_) {
     if (!sample.usable) continue;
-    low = std::min(low, value(sample));
-    high = std::max(high, value(sample));
+    const auto raw = quantity_ == Height ? sample.height : sample.speed;
+    low = std::min(low, raw);
+    high = std::max(high, raw);
   }
   if (!(window_span_ > 0.0) || !std::isfinite(low)) {
     minimum_ = maximum_ = 0.0;

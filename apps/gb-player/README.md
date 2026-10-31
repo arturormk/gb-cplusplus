@@ -80,6 +80,10 @@ the requested time. Frame stepping and the timeline both use the first stream's 
   them. Click or drag on the graph to seek. The mouse wheel zooms the time axis around the
   pointer, from the whole recording down to 30 seconds, and dragging with the middle button pans;
   the view never extends past the start or end of the video.
+  Both graphs are smoothed: each value is the mean of the records within a centred 3-second
+  window, never reaching across a break in the line. The jagged-line button left of the export
+  button shows the raw records instead. The value axis stays the same, so the raw and smoothed
+  curves can be compared.
   The square button at the right of the Height/Speed tabs exports the GPS track as GPX, GeoJSON,
   CSV or JSON, the formats of `gb-telemetry`: pick the file type and name in the save dialog. For
   a chaptered recording the export always covers every chapter, in chapter order, in one file; see

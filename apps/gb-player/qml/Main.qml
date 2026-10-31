@@ -380,6 +380,43 @@ ApplicationWindow {
                                             }
                                         }
                                         Item { Layout.fillWidth: true }
+                                        // The graphs are smoothed with a 3 s sliding mean; this shows the raw records instead.
+                                        Button {
+                                            id: rawButton
+                                            checkable: true
+                                            implicitWidth: 24
+                                            implicitHeight: 24
+                                            padding: 0
+                                            Layout.bottomMargin: 3
+                                            hoverEnabled: true
+                                            ToolTip.visible: hovered
+                                            ToolTip.delay: 400
+                                            ToolTip.text: checked ? "Show smoothed height and speed (3 s mean)" : "Show raw GPS records"
+                                            background: Rectangle {
+                                                radius: 3
+                                                color: rawButton.down ? "#174b6b" : rawButton.checked ? "#16323f"
+                                                       : rawButton.hovered ? "#1b2833" : "#0d1419"
+                                                border.color: rawButton.hovered || rawButton.checked ? "#4b94ba" : "#26343f"
+                                            }
+                                            // A jagged, noisy trace, drawn so it needs no icon font.
+                                            contentItem: Canvas {
+                                                readonly property color ink: rawButton.checked || rawButton.hovered ? "#61dc97" : "#9fb0bd"
+                                                onInkChanged: requestPaint()
+                                                onPaint: {
+                                                    var context = getContext("2d")
+                                                    context.reset()
+                                                    context.strokeStyle = ink
+                                                    context.lineWidth = 1.25
+                                                    context.lineCap = "round"
+                                                    context.lineJoin = "round"
+                                                    context.beginPath()
+                                                    context.moveTo(4, 14); context.lineTo(6, 9); context.lineTo(8, 16)
+                                                    context.lineTo(10, 6); context.lineTo(12, 15); context.lineTo(14, 8)
+                                                    context.lineTo(16, 17); context.lineTo(18, 10); context.lineTo(20, 13)
+                                                    context.stroke()
+                                                }
+                                            }
+                                        }
                                         // Export the GPS track of the whole recording (every chapter).
                                         Button {
                                             id: exportButton
@@ -460,6 +497,7 @@ ApplicationWindow {
                                             anchors.margins: 1
                                             controller: player
                                             quantity: profileTabs.currentIndex === 0 ? ProfileView.Height : ProfileView.Speed
+                                            smoothed: !rawButton.checked
                                         }
                                     }
                                 }
