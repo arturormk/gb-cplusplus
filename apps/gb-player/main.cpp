@@ -37,6 +37,7 @@ struct Options {
   PlayerOptions player;
   std::optional<BenchmarkOptions> benchmark;
   int seeks{10};
+  double stall{};
   std::uint32_t seed{1};
   QString screenshot;
   bool smoke_test{};
@@ -72,6 +73,8 @@ void help() {
          "                        JSON report, and exit\n"
          "  --seeks N             benchmark seek count (default 10)\n"
          "  --seed N              benchmark seek seed (default 1)\n"
+         "  --stall SECONDS       benchmark: also block the GUI thread for SECONDS while\n"
+         "                        playing and check that decoding kept pace (default 0)\n"
          "  --screenshot PATH     save a window screenshot after the first frame, then exit\n"
          "  --help                show this help and exit\n"
          "  --version             show the program version and exit\n\n"
@@ -151,6 +154,11 @@ Options parse(const int argc, char **argv) {
       options.benchmark = benchmark;
     } else if (argument == "--seeks") {
       options.seeks = parseInteger(value(), "seek count", 0, 1000);
+    } else if (argument == "--stall") {
+      options.stall = parseNumber(value(), "stall duration");
+      if (options.stall < 0.0 || options.stall > 60.0) {
+        throw std::runtime_error("stall duration must be within [0, 60] seconds");
+      }
     } else if (argument == "--seed") {
       options.seed = static_cast<std::uint32_t>(parseInteger(value(), "seed", 0, 2147483647));
     } else if (argument == "--screenshot") {
@@ -168,6 +176,7 @@ Options parse(const int argc, char **argv) {
   if (options.benchmark.has_value()) {
     options.benchmark->seeks = options.seeks;
     options.benchmark->seed = options.seed;
+    options.benchmark->stall_seconds = options.stall;
     options.benchmark->view_mode = options.view;
   }
   if ((options.benchmark.has_value() || !options.screenshot.isEmpty()) && options.path.isEmpty()) {

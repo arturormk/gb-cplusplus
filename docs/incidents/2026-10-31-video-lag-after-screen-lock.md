@@ -4,8 +4,8 @@ Date: 2026-10-31
 Component: gb-player (`PlaybackEngine`, `VideoView`)
 Environment: Ubuntu, GNOME on X11
 Severity: Minor. Playback was wrong for a while, but nothing crashed and no data was lost.
-Status: Fixed in `2f48d62` and checked with a real screen lock. A first attempt, `b1ea7fe`, did
-not fix it.
+Status: Closed. Fixed in `2f48d62`, checked with a real screen lock, and covered by the
+`gb_player_gui_stall` test. A first attempt, `b1ea7fe`, did not fix it.
 
 ## Summary
 
@@ -123,6 +123,15 @@ While locked, the video keeps decoding at the same CPU cost as visible playback.
   the video stays in sync during the lock and after unlocking (see Timeline).
 - Normal playback is unchanged: 25 sets a second, no dropped frames, 25–50 ms behind the clock.
 - Builds cleanly; all 62 tests pass (`ctest --preset dev`).
+- **Regression test** (added after the fix): `gb_player_gui_stall` runs the real benchmark
+  (`--benchmark 1 --seeks 0 --stall 3`) on a generated 10 s, 25 fps clip with SDL's dummy audio
+  driver. While playing, it blocks the GUI thread for 3 s, which stops `advanceFrame()` and the
+  engine timer alike, as the throttled swap did. It fails unless the decode worker decodes at
+  least 80% of the sets due during the stall. With the fix, 74 of 75 sets were decoded and dropped
+  by the worker. With `dropStaleLocked()` and the `kWorkerPoll` timeout turned off, 0 were
+  decoded and the test failed. Under the offscreen platform the engine presents from its timer,
+  not frame-driven; that does not change what the test proves, since a blocked GUI thread stops
+  both paths. All 63 tests pass.
 
 ## Lessons and follow-ups
 
@@ -135,9 +144,11 @@ While locked, the video keeps decoding at the same CPU cost as visible playback.
   compositor cannot block.
 - **Keep the diagnostic.** `GB_PLAYER_TRACE=1` is documented in the gb-player README for future
   timing problems.
-- **Possible follow-up:** an automated test that runs `PlaybackEngine` frame-driven, leaves
-  `tick()` uncalled for several seconds, and checks that the worker kept the queue current. It
-  would need the engine to accept an injected clock.
-- **Not investigated:** the 1–2 s stutter right after unlocking. The trace shows the player
-  presenting on time during it. Adding the render-skip count to the trace would confirm that
-  the stutter is outside the player.
+- **Test the mechanism, not the symptom.** The regression test does not simulate a screen lock.
+  It reproduces what the lock did to the player, a blocked GUI thread, and checks the property
+  the fix guarantees. An injected clock, first thought necessary, turned out not to be: the worker
+  decodes and waits in real time anyway, and the gap between passing and failing (74 against 0
+  sets) leaves a wide margin for slow machines.
+- **Closed without investigation:** the 1–2 s stutter right after unlocking. It was brief, and
+  the trace shows the player presenting on time during it, so it is taken to be GNOME's unlock
+  animation. Reopen if a similar stutter appears outside an unlock.

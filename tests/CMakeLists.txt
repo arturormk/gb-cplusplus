@@ -130,6 +130,16 @@ set_tests_properties(gb_player_audio_gating PROPERTIES
   TIMEOUT 90
   PASS_REGULAR_EXPRESSION "\"gating_ok\": true")
 
+# GUI-thread stall while playing (docs/incidents/2026-10-31-video-lag-after-screen-lock.md): the
+# decode worker must keep decoding and dropping stale sets in step with the clock on its own.
+add_test(NAME gb_player_gui_stall
+  COMMAND gb_player --benchmark 1 --seeks 0 --stall 3 "${GB_CLI_FIXTURE_DIR}/audio-gating.mp4")
+set_tests_properties(gb_player_gui_stall PROPERTIES
+  FIXTURES_REQUIRED gb_audio_gating_media
+  ENVIRONMENT "QT_QPA_PLATFORM=offscreen;SDL_AUDIODRIVER=dummy"
+  TIMEOUT 90
+  PASS_REGULAR_EXPRESSION "\"stall_ok\": true")
+
 add_test(NAME gb_player_playback_smoke
   COMMAND gb_player --smoke-test --time 1.05 "${GB_CLI_FIXTURE_DIR}/playback.mp4")
 set_tests_properties(gb_player_playback_smoke PROPERTIES

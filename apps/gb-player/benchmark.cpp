@@ -13,6 +13,7 @@
 #include <QQuickWindow>
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <iostream>
 #include <limits>
@@ -199,7 +200,7 @@ void BenchmarkRunner::checkAudioGating() {
   if (!engine_.hasAudio()) {
     audio_ = {{QStringLiteral("available"), false},
               {QStringLiteral("reason"), engine_.audioError().isEmpty() ? controller_.audioDescription() : engine_.audioError()}};
-    startSeeks();
+    startStall();
     return;
   }
   const auto statistics = engine_.audioStatistics();
@@ -263,9 +264,58 @@ void BenchmarkRunner::checkAudioGating() {
     audio_.insert(QStringLiteral("starts"), static_cast<qint64>(statistics.starts));
     audio_.insert(QStringLiteral("underruns"), static_cast<qint64>(statistics.underruns));
     audio_.insert(QStringLiteral("gating_ok"), audio_ok_);
-    startSeeks();
+    startStall();
   });
   runSteps();
+}
+
+// GUI-thread stall, the mechanism of docs/incidents/2026-10-31-video-lag-after-screen-lock.md: on
+// GNOME/X11 a locked screen throttles buffer swaps to about one a second, and each swap blocks the
+// GUI thread, so neither advanceFrame() nor the engine timer runs. Blocking the GUI thread here
+// stops both presentation paths in the same way, whether or not the engine is frame-driven. While
+// it is blocked, only the decode worker can keep the queue current: it must go on decoding and
+// dropping stale sets in step with the clock. Without that, it waits behind a full queue and
+// decodes at most a queue's worth of sets, and the video falls behind the audio.
+void BenchmarkRunner::startStall() {
+  if (options_.stall_seconds <= 0.0) {
+    startSeeks();
+    return;
+  }
+  engine_.seek(0);
+  timeout_.start(15000);
+  connect(&poll_, &QTimer::timeout, this, [this] {
+    if (engine_.seeking()) return;
+    poll_.stop();
+    disconnect(&poll_, nullptr, this, nullptr);
+    timeout_.stop();
+    controller_.play();
+    // Past the seek settle hold, so the clock is in steady playback when the stall begins.
+    QTimer::singleShot(1000, this, &BenchmarkRunner::stallGuiThread);
+  });
+  poll_.start();
+}
+
+void BenchmarkRunner::stallGuiThread() {
+  const auto before = engine_.statistics();
+  std::this_thread::sleep_for(std::chrono::duration<double>(options_.stall_seconds));
+  const auto after = engine_.statistics();
+  const auto frame = static_cast<double>(seconds(engine_.frameDurationTicks(), engine_.timeBase()));
+  const auto due = frame > 0.0 ? static_cast<std::uint64_t>(std::floor(options_.stall_seconds / frame)) : 0U;
+  const auto decoded = after.decoded_sets - before.decoded_sets;
+  const auto dropped = after.late_drops - before.late_drops;
+  // 80% leaves room for a slow machine. Without the worker keeping pace, decoded is at most the
+  // queue capacity.
+  const auto kept_pace = due > 0U && decoded * 5U >= due * 4U;
+  stall_ok_ = engine_.playing() && kept_pace;
+  stall_ = QJsonObject{{QStringLiteral("seconds"), options_.stall_seconds},
+                       {QStringLiteral("presentation"), gpu_ ? QStringLiteral("frame-driven") : QStringLiteral("timer")},
+                       {QStringLiteral("sets_due"), static_cast<qint64>(due)},
+                       {QStringLiteral("decoded_sets"), static_cast<qint64>(decoded)},
+                       {QStringLiteral("worker_late_drops"), static_cast<qint64>(dropped)},
+                       {QStringLiteral("queue_capacity"), static_cast<qint64>(after.queue_capacity)},
+                       {QStringLiteral("stall_ok"), stall_ok_}};
+  controller_.pause();
+  startSeeks();
 }
 
 void BenchmarkRunner::startSeeks() {
@@ -385,10 +435,11 @@ void BenchmarkRunner::report() {
                    {QStringLiteral("window"), window}}},
       {QStringLiteral("playback"), playback_},
       {QStringLiteral("audio"), audio_},
+      {QStringLiteral("stall"), stall_.isEmpty() ? QJsonValue() : QJsonValue(stall_)},
       {QStringLiteral("seeks"), seeks},
       {QStringLiteral("map"), map},
       {QStringLiteral("resources"), QJsonObject{{QStringLiteral("peak_rss_mib"), mebibytes(usage.peak_resident_bytes)},
                                                 {QStringLiteral("rss_mib_end"), mebibytes(usage.resident_bytes)}}}};
   std::cout << QJsonDocument(root).toJson(QJsonDocument::Indented).toStdString();
-  emit finished(exact == static_cast<qint64>(latencies_.size()) && audio_ok_ && map_ok ? 0 : 1);
+  emit finished(exact == static_cast<qint64>(latencies_.size()) && audio_ok_ && stall_ok_ && map_ok ? 0 : 1);
 }

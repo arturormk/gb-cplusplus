@@ -57,6 +57,14 @@ using the real benchmark. It fails if any audio frame is emitted while scrubbing
 seeks while playing, or while paused, or if audio does not resume after each. A deliberately
 broken gate was confirmed to fail this test.
 
+`gb_player_gui_stall` plays the same clip with the real benchmark and `--stall 3`, which blocks the
+GUI thread for 3 s while playing. This is how a locked screen on GNOME/X11 stalls the player (see
+`docs/incidents/2026-10-31-video-lag-after-screen-lock.md`). It stops both presentation paths, so
+the decode worker must keep decoding and dropping stale sets in step with the clock on its own. The
+test fails if the worker decodes fewer than 80% of the sets due during the stall. With the
+worker's stale-frame drop and polling wait turned off, it decoded 0 of 75 sets and failed; with
+them, 74 of 75.
+
 `gb_geo_tests` covers Web Mercator round trips, known tile indices, haversine distance and
 scale, provider validation (path characters in ids, missing attribution, non-HTTP URLs),
 URL templates with subdomains, and the tile cache. Cache checks include layout, metadata round
