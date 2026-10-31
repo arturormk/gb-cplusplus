@@ -6,7 +6,6 @@
 
 #include <QMouseEvent>
 #include <QPainter>
-#include <QPainterPath>
 #include <QWheelEvent>
 
 #include <algorithm>
@@ -16,7 +15,6 @@
 namespace {
 
 constexpr int kMemoryTiles = 192;
-constexpr int kAncestorLevels = 4;
 constexpr qint64 kRetryUnavailableMs = 60000;
 constexpr double kDragThreshold = 4.0;
 constexpr double kClickTolerancePixels = 10.0;
@@ -36,9 +34,6 @@ quint64 packed(const gb::geo::TileKey key) {
 }
 
 const QColor kBackground(0x1a, 0x23, 0x2b);
-const QColor kPlaceholder(0x22, 0x2d, 0x36);
-const QColor kRemaining(0x3b, 0x5b, 0xdb);
-const QColor kTravelled(0xf7, 0x67, 0x07);
 
 } // namespace
 
@@ -135,32 +130,10 @@ MapView::Viewport MapView::viewport() const {
   return view;
 }
 
-std::vector<gb::geo::TileKey> MapView::visibleTiles(const Viewport &view) const {
-  std::vector<gb::geo::TileKey> keys;
-  if (width() <= 0.0 || height() <= 0.0 || route_.empty())
-    return keys;
-  const auto count = 1 << view.tile_zoom;
-  const auto first_x = static_cast<int>(std::floor(view.left / view.tile_pixels));
-  const auto last_x = static_cast<int>(std::floor((view.left + width()) / view.tile_pixels));
-  const auto first_y = std::max(0, static_cast<int>(std::floor(view.top / view.tile_pixels)));
-  const auto last_y =
-      std::min(count - 1, static_cast<int>(std::floor((view.top + height()) / view.tile_pixels)));
-  const auto center_x = (view.left + width() / 2.0) / view.tile_pixels;
-  const auto center_y = (view.top + height() / 2.0) / view.tile_pixels;
-  std::vector<std::pair<double, gb::geo::TileKey>> ordered;
-  for (int x = first_x; x <= last_x && x - first_x < count; ++x) {
-    for (int y = first_y; y <= last_y; ++y) {
-      const auto wrapped = ((x % count) + count) % count;
-      const auto dx = x + 0.5 - center_x;
-      const auto dy = y + 0.5 - center_y;
-      ordered.emplace_back(dx * dx + dy * dy, gb::geo::TileKey{view.tile_zoom, wrapped, y});
-    }
-  }
-  std::sort(ordered.begin(), ordered.end(),
-            [](const auto &a, const auto &b) { return a.first < b.first; });
-  for (const auto &[distance, key] : ordered)
-    keys.push_back(key);
-  return keys;
+std::vector<gb::geo::TileKey> MapView::visibleTiles() const {
+  if (route_.empty())
+    return {};
+  return gb::render::map_tiles(size(), scene());
 }
 
 const QImage *MapView::tileImage(const gb::geo::TileKey key) const {
@@ -172,7 +145,7 @@ void MapView::refreshTiles() {
   if (player_ == nullptr)
     return;
   auto *fetcher = player_->tileFetcher();
-  const auto wanted = visibleTiles(viewport());
+  const auto wanted = visibleTiles();
   for (const auto key : fetcher->retain(wanted))
     pending_.erase(key);
   std::vector<gb::geo::TileKey> missing;
@@ -397,137 +370,37 @@ void MapView::geometryChange(const QRectF &new_geometry, const QRectF &old_geome
     refreshTiles();
 }
 
+gb::render::MapScene MapView::scene() const {
+  gb::render::MapScene scene;
+  scene.center = center_;
+  scene.zoom = zoom_;
+  scene.scale = 1.0;
+  if (player_ != nullptr) {
+    scene.min_zoom = player_->tileFetcher()->provider().min_zoom;
+    scene.max_zoom = player_->tileFetcher()->provider().max_zoom;
+    scene.points = &player_->mapRoute();
+    scene.record = player_->mapRecord();
+    const auto state = player_->mapState();
+    scene.marker = state == QStringLiteral("valid") ? gb::render::MapMarker::valid
+                   : state == QStringLiteral("gap") ? gb::render::MapMarker::gap
+                                                    : gb::render::MapMarker::none;
+    // The course arrow is smoothed for display.
+    if (const auto course = player_->mapCourse(); course.has_value())
+      scene.course = shown_course_.value_or(*course);
+  }
+  scene.route = &route_;
+  scene.tile = [this](const gb::geo::TileKey key) { return tileImage(key); };
+  return scene;
+}
+
 void MapView::paint(QPainter *painter) {
   ++paint_count_;
-  painter->setRenderHint(QPainter::SmoothPixmapTransform, true);
   if (route_.empty() || player_ == nullptr) {
     painted_record_.store(-1);
     return;
   }
-  const auto view = viewport();
-  const auto count = 1 << view.tile_zoom;
-  const auto first_x = static_cast<int>(std::floor(view.left / view.tile_pixels));
-  const auto last_x = static_cast<int>(std::floor((view.left + width()) / view.tile_pixels));
-  const auto first_y = std::max(0, static_cast<int>(std::floor(view.top / view.tile_pixels)));
-  const auto last_y =
-      std::min(count - 1, static_cast<int>(std::floor((view.top + height()) / view.tile_pixels)));
-
-  for (int x = first_x; x <= last_x && x - first_x < count; ++x) {
-    for (int y = first_y; y <= last_y; ++y) {
-      const QRectF target(x * view.tile_pixels - view.left, y * view.tile_pixels - view.top,
-                          view.tile_pixels, view.tile_pixels);
-      const auto wrapped = ((x % count) + count) % count;
-      if (const auto *image = tileImage({view.tile_zoom, wrapped, y}); image != nullptr) {
-        painter->drawImage(target, *image);
-        continue;
-      }
-      // Placeholder: the nearest cached ancestor, scaled up, until the tile itself arrives.
-      bool drawn = false;
-      for (int level = 1; level <= kAncestorLevels && view.tile_zoom - level >= 0 && !drawn;
-           ++level) {
-        const gb::geo::TileKey parent{view.tile_zoom - level, wrapped >> level, y >> level};
-        if (const auto *image = tileImage(parent); image != nullptr) {
-          const auto fraction = 1.0 / static_cast<double>(1 << level);
-          const auto sx = (wrapped - (parent.x << level)) * fraction * image->width();
-          const auto sy = (y - (parent.y << level)) * fraction * image->height();
-          painter->drawImage(target, *image,
-                             QRectF(sx, sy, image->width() * fraction, image->height() * fraction));
-          drawn = true;
-        }
-      }
-      if (!drawn)
-        painter->fillRect(target.adjusted(0.5, 0.5, -0.5, -0.5), kPlaceholder);
-    }
-  }
-
-  painter->setRenderHint(QPainter::Antialiasing, true);
-  const auto screen = [&view](const gb::geo::WorldPoint point) {
-    return QPointF(point.x * view.world_pixels - view.left, point.y * view.world_pixels - view.top);
-  };
-  const auto record = player_->mapRecord();
-  const auto state = player_->mapState();
-  // Each run of usable records becomes up to two paths, travelled and remaining, that meet at the
-  // current record. Points closer than 1.5 px to the previous kept point are skipped.
-  QPainterPath travelled;
-  QPainterPath remaining;
-  const auto add = [&](QPainterPath &path, const std::size_t begin, const std::size_t end) {
-    if (end < begin + 2)
-      return;
-    QPointF previous = screen(route_[begin]);
-    path.moveTo(previous);
-    for (auto index = begin + 1; index < end; ++index) {
-      const auto point = screen(route_[index]);
-      if (index + 1 < end && std::hypot(point.x() - previous.x(), point.y() - previous.y()) < 1.5)
-        continue;
-      path.lineTo(point);
-      previous = point;
-    }
-  };
-  for (const auto &[first, last] : gb::geo::usable_runs(player_->mapRoute())) {
-    if (!record.has_value() || *record < first) {
-      add(remaining, first, last);
-    } else if (*record >= last) {
-      add(travelled, first, last);
-    } else {
-      add(travelled, first, *record + 1);
-      add(remaining, *record, last);
-    }
-  }
-  const auto stroke = [painter](const QPainterPath &path, const QColor &color) {
-    painter->strokePath(
-        path, QPen(QColor(255, 255, 255, 220), 6.0, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
-    painter->strokePath(path, QPen(color, 3.5, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
-  };
-  stroke(remaining, kRemaining);
-  stroke(travelled, kTravelled);
-
-  // Start and end of the recorded route. A single position (a photo) has neither.
-  const auto first_usable = std::find(usable_.begin(), usable_.end(), true) - usable_.begin();
-  const auto last_usable = usable_.rend() - std::find(usable_.rbegin(), usable_.rend(), true) - 1;
-  if (route_.size() > 1U) {
-    painter->setPen(QPen(Qt::white, 2.0));
-    painter->setBrush(QColor(0x2f, 0x9e, 0x44));
-    painter->drawEllipse(screen(route_[static_cast<std::size_t>(first_usable)]), 5.5, 5.5);
-    painter->setBrush(QColor(0xc9, 0x2a, 0x2a));
-    const auto end_point = screen(route_[static_cast<std::size_t>(last_usable)]);
-    painter->drawRect(QRectF(end_point.x() - 5.0, end_point.y() - 5.0, 10.0, 10.0));
-  }
-
-  long long drawn_record = -1;
-  if (record.has_value() && *record < route_.size() && usable_[*record]) {
-    const auto position = screen(route_[*record]);
-    if (state == QStringLiteral("valid")) {
-      if (const auto course = player_->mapCourse(); course.has_value()) {
-        // Direction of travel from neighbouring fixes, not the camera's pointing direction,
-        // smoothed for display.
-        painter->save();
-        painter->translate(position);
-        painter->rotate(shown_course_.value_or(*course));
-        QPainterPath arrow;
-        arrow.moveTo(0.0, -19.0);
-        arrow.lineTo(7.0, -8.0);
-        arrow.lineTo(-7.0, -8.0);
-        arrow.closeSubpath();
-        painter->setPen(QPen(Qt::white, 1.5));
-        painter->setBrush(kTravelled.darker(130));
-        painter->drawPath(arrow);
-        painter->restore();
-      }
-      painter->setPen(QPen(Qt::white, 3.0));
-      painter->setBrush(kTravelled);
-      painter->drawEllipse(position, 8.0, 8.0);
-      drawn_record = static_cast<long long>(*record);
-    } else if (state == QStringLiteral("gap")) {
-      // Inside a GPS gap: a hollow ring at the nearest recorded fix, not an estimated position.
-      painter->setBrush(Qt::NoBrush);
-      painter->setPen(QPen(QColor(255, 255, 255, 230), 5.0));
-      painter->drawEllipse(position, 9.0, 9.0);
-      painter->setPen(QPen(QColor(0x49, 0x50, 0x57), 2.5, Qt::DashLine));
-      painter->drawEllipse(position, 9.0, 9.0);
-      drawn_record = static_cast<long long>(*record);
-    }
-  }
-  painted_record_.store(drawn_record);
+  const auto result = gb::render::paint_map(*painter, size(), scene());
+  painted_record_.store(result.marker_record);
 }
 
 void MapView::mousePressEvent(QMouseEvent *event) {

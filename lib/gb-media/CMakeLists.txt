@@ -9,6 +9,7 @@ add_library(gb_media
   src/hud.cpp
   src/media.cpp
   src/playback.cpp
+  src/position.cpp
   src/projection.cpp)
 add_library(gb::media ALIAS gb_media)
 

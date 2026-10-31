@@ -1,5 +1,6 @@
 add_library(gb_image
   src/jpeg.cpp
+  src/exif_writer.cpp
   src/photo.cpp
 )
 

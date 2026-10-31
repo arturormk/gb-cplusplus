@@ -23,6 +23,13 @@ Each spike is recorded in `research/findings/` with commands and results.
 
 ## Phase 1: shared renderer
 
+**Done (2026-10-31)**, with the parts of phase 2 that Capture mode needs: the chapter positions,
+the EXIF writer, the INI syntax reader and the Capture settings writer in `lib/gb-export`, and
+Capture mode itself (ADR-0012). Still to do in phase 2: settings validation and combining, the
+`--print-settings` family, and `tools/gb-render --still`, with the test that compares it with a
+capture. The GPU-versus-CPU comparison is not done yet: the offscreen test compares the GPU
+renderer with itself (a crop against the whole canvas), not with `project_equirectangular`.
+
 - Move shader, upload and draw from `video_view.cpp` into `lib/gb-render`'s `FrameRenderer`, with
   the `uViewCrop` rectangle. `VideoView` uses it with the whole canvas. No visible change.
 - Add an offscreen render path and an automated test that renders synthetic frames in every
@@ -63,7 +70,8 @@ Each spike is recorded in `research/findings/` with commands and results.
 ## Phase 5: the map overlay and its scale
 
 - Extract `MapPainter` from `MapView`, with no visible change. Add the scale bar and
-  `AttributionPainter`.
+  `AttributionPainter`. (Done early for Capture mode's side panel: `paint_map` and
+  `paint_attribution` in `gb_render`, which the map pane now draws with; no scale bar yet.)
 - Ground distance ↔ zoom conversion in `gb_geo`. The fixed scale, then the automatic scale curve
   in `gb_export`, with the activity presets, its summary in `--dry-run`, and `--contact-sheet`.
 - The tile stage: compute the tiles drawn, fetch missing ones through `TileFetcher` before

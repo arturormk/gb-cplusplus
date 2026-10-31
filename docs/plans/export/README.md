@@ -1,6 +1,7 @@
 # Export plan
 
-Status: Proposed (2026-10-31). Nothing here is implemented yet.
+Status: Proposed (2026-10-31). Capture mode in `gb-player`, with the shared renderer it needs, is
+implemented (ADR-0012); `gb-render` is not.
 
 This plan covers exporting stills and videos from GoPro recordings with **`gb-render`**, a
 command-line tool, which is also the headless renderer that BLUEPRINT M6 requires, and with a

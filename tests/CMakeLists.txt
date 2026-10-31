@@ -7,6 +7,9 @@ target_link_libraries(gb_image_tests PRIVATE gb::image gb_project_options)
 add_executable(gb_photo_tests unit/photo_test.cpp)
 target_link_libraries(gb_photo_tests PRIVATE gb::image gb_project_options)
 
+add_executable(gb_exif_writer_tests unit/exif_writer_test.cpp)
+target_link_libraries(gb_exif_writer_tests PRIVATE gb::image gb_project_options)
+
 add_executable(gb_metadata_tests unit/gpmf_test.cpp)
 target_link_libraries(gb_metadata_tests PRIVATE gb::metadata gb_project_options)
 
@@ -22,8 +25,18 @@ target_link_libraries(gb_media_tests PRIVATE gb::media gb_project_options)
 add_executable(gb_chapters_tests unit/chapters_test.cpp)
 target_link_libraries(gb_chapters_tests PRIVATE gb::media gb_project_options)
 
+add_executable(gb_position_tests unit/position_test.cpp)
+target_link_libraries(gb_position_tests PRIVATE gb::media gb_project_options)
+
 add_executable(gb_playback_tests unit/playback_test.cpp)
 target_link_libraries(gb_playback_tests PRIVATE gb::media gb_project_options)
+
+add_executable(gb_export_tests unit/export_test.cpp)
+target_link_libraries(gb_export_tests PRIVATE gb::exporting gb_project_options)
+
+find_package(Qt6 6.2 REQUIRED COMPONENTS Gui)
+add_executable(gb_render_tests unit/render_test.cpp)
+target_link_libraries(gb_render_tests PRIVATE gb::render Qt6::Gui gb_project_options)
 
 add_executable(gb_geo_tests unit/geo_test.cpp)
 target_link_libraries(gb_geo_tests PRIVATE gb::geo gb_project_options)
@@ -33,13 +46,22 @@ target_link_libraries(gb_tiles_tests PRIVATE gb::tiles gb_project_options)
 
 add_test(NAME gb_container_tests COMMAND gb_container_tests)
 add_test(NAME gb_geo_tests COMMAND gb_geo_tests)
+add_test(NAME gb_export_tests COMMAND gb_export_tests)
+# Needs an OpenGL 3.3 / ES 3.0 context (a GPU or Mesa llvmpipe); reported as skipped without one.
+add_test(NAME gb_render_tests COMMAND gb_render_tests)
+set_tests_properties(gb_render_tests PROPERTIES
+  ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+  SKIP_RETURN_CODE 77
+  TIMEOUT 60)
 add_test(NAME gb_tiles_tests COMMAND gb_tiles_tests)
 set_tests_properties(gb_tiles_tests PROPERTIES TIMEOUT 60)
 add_test(NAME gb_image_tests COMMAND gb_image_tests)
 add_test(NAME gb_photo_tests COMMAND gb_photo_tests)
+add_test(NAME gb_exif_writer_tests COMMAND gb_exif_writer_tests)
 add_test(NAME gb_metadata_tests COMMAND gb_metadata_tests)
 add_test(NAME gb_media_tests COMMAND gb_media_tests)
 add_test(NAME gb_chapters_tests COMMAND gb_chapters_tests)
+add_test(NAME gb_position_tests COMMAND gb_position_tests)
 add_test(NAME gb_inspect_help COMMAND gb_inspect --help)
 add_test(NAME gb_inspect_version COMMAND gb_inspect --version)
 add_test(NAME gb_metadata_help COMMAND gb_metadata_tool --help)
@@ -147,6 +169,31 @@ set_tests_properties(gb_player_playback_smoke PROPERTIES
   ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
   TIMEOUT 60
   PASS_REGULAR_EXPRESSION "gb-player smoke: layout=max_dual_eac streams=2 pts=[1-9][0-9]* telemetry=none audio=[a-z]+ map=none")
+
+# Capture mode on the fixture: enter it, shrink and move the rectangle, resize the window (the
+# rectangle must keep its place), capture through the offscreen renderer and print the settings.
+add_test(NAME gb_player_capture
+  COMMAND gb_player --smoke-test --capture-test "${GB_CLI_FIXTURE_DIR}/capture.png"
+    "${GB_CLI_FIXTURE_DIR}/playback.mp4")
+set_tests_properties(gb_player_capture PROPERTIES
+  FIXTURES_REQUIRED gb_playback_media
+  ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+  SKIP_RETURN_CODE 77
+  TIMEOUT 60
+  PASS_REGULAR_EXPRESSION "gb-player capture: 1920x1080 gps=no .*schema = gb.export/1.*\\[range\\].*start = 00:00:00.000.*\\[view\\].*mode   = rectilinear.*\\[frame\\].*aspect = 16:9.*width  = 1920")
+
+# The same with a right-hand panel. The fixture has no GPS: the panel has telemetry and no map
+# scale, and no tile is requested.
+add_test(NAME gb_player_capture_panel
+  COMMAND gb_player --smoke-test --map-no-network --capture-panel right
+    --capture-test "${GB_CLI_FIXTURE_DIR}/capture-panel.jpg" "${GB_CLI_FIXTURE_DIR}/playback.mp4")
+set_tests_properties(gb_player_capture_panel PROPERTIES
+  FIXTURES_REQUIRED gb_playback_media
+  ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+  SKIP_RETURN_CODE 77
+  TIMEOUT 60
+  PASS_REGULAR_EXPRESSION "gb-player capture: 1920x1080 gps=no .*\\[layout\\].*panel      = right.*\\[units\\].*\\[telemetry\\].*fields = utc, latitude, longitude, altitude, speed"
+  FAIL_REGULAR_EXPRESSION "\\[map\\]|map tile")
 
 add_test(NAME gb_frames_list_json
   COMMAND gb_frames --list --json "${GB_CLI_FIXTURE_DIR}/two-video.mp4")

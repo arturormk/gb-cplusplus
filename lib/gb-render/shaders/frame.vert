@@ -1,4 +1,5 @@
-// GLSL body; the renderer prepends a desktop or ES version header.
+// GLSL body; gb::render::FrameRenderer prepends a desktop or ES version header.
+// The quad covers 0..uSize, which uMatrix maps onto the target.
 layout(location = 0) in vec2 aPosition;
 out vec2 vUv;
 uniform mat4 uMatrix;

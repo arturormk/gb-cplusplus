@@ -16,6 +16,13 @@ First public release: a minimum usable product for GoPro MAX 2025 recordings on 
   keeps the fisheye-family image circle round. The height/speed graph is smoothed over a centred
   3-second window, with a toggle for the raw records. Video now stays in step with audio after a
   screen lock, and `GB_PLAYER_TRACE=1` prints a timing trace.
+- `gb-player` Capture mode: a Play | Capture selector, a frozen canvas, a capture rectangle at a
+  chosen aspect ratio with an optional side panel showing the route map and the telemetry at the
+  frame, stills of the displayed frame rendered
+  offscreen from the source as JPEG or PNG, opt-in GPS EXIF, and the framing shown as
+  `gb.export/1` settings to copy or save (ADR-0012). The clock shows the chapter of a chaptered
+  recording (`c2:00:05:31.400`). The player's shader moved into the new `gb_render` library, and
+  framing geometry and settings into the Qt-free `gb_export`.
 - `gb-inspect`: ISO BMFF container and content-based JPEG inspection.
 - `gb-metadata`: GPMF metadata inventory, sample decoding, and raw payload export.
 - `gb-telemetry`: timestamped GPS export to JSON, CSV, GPX, and GeoJSON.

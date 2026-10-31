@@ -1,9 +1,12 @@
 #include "benchmark.hpp"
+#include "capture_controller.hpp"
 #include "map_view.hpp"
+#include "panel_preview.hpp"
 #include "player_controller.hpp"
 #include "profile_view.hpp"
 #include "video_view.hpp"
 
+#include "gb/image/photo.hpp"
 #include "gb/media/playback.hpp"
 #include "gb/tiles/tile_fetcher.hpp"
 
@@ -14,6 +17,7 @@
 #include <QTimer>
 
 #include <QElapsedTimer>
+#include <QImage>
 
 #include <algorithm>
 #include <array>
@@ -41,6 +45,8 @@ struct Options {
   double stall{};
   std::uint32_t seed{1};
   QString screenshot;
+  QString capture_test;
+  QString capture_panel{"none"};
   bool smoke_test{};
   std::string map_provider{"osm"};
   bool map_network{true};
@@ -81,7 +87,9 @@ void help() {
          "  --help                show this help and exit\n"
          "  --version             show the program version and exit\n\n"
          "Keys: Space play/pause, Left/Right seek 5 s, ,/. step one frame, M mute,\n"
-         "F full screen, R reset view, S square view, 1-8 select view mode.\n\n"
+         "F full screen, R reset view, S square view, 1-8 select view mode.\n"
+         "Capture mode: drag the rectangle or its corners, arrows nudge it (Shift: by 10),\n"
+         "Ctrl+wheel scales it; dragging outside it aims the view.\n\n"
          "Audio plays only during stable playback. It is silent while paused, while the\n"
          "timeline is dragged, while a seek is decoding, and for 250 ms after each seek.\n\n"
          "Map: when a recording has GPS, the map requests the tiles covering the visible\n"
@@ -173,6 +181,12 @@ Options parse(const int argc, char **argv) {
       options.screenshot = QString::fromLocal8Bit(value().data());
     } else if (argument == "--smoke-test") {
       options.smoke_test = true;
+    } else if (argument == "--capture-test") {
+      // Developer check: enter Capture mode, halve the rectangle, capture to PATH and exit.
+      options.capture_test = QString::fromLocal8Bit(value().data());
+    } else if (argument == "--capture-panel") {
+      // With --capture-test: the side panel (none, left, right or bottom).
+      options.capture_panel = QString::fromLocal8Bit(value().data());
     } else if (!argument.empty() && argument.front() == '-') {
       throw std::runtime_error("unknown option: " + std::string(argument));
     } else if (options.path.isEmpty()) {
@@ -187,8 +201,10 @@ Options parse(const int argc, char **argv) {
     options.benchmark->stall_seconds = options.stall;
     options.benchmark->view_mode = options.view;
   }
-  if ((options.benchmark.has_value() || !options.screenshot.isEmpty()) && options.path.isEmpty()) {
-    throw std::runtime_error("--benchmark and --screenshot require an input file");
+  if ((options.benchmark.has_value() || !options.screenshot.isEmpty() ||
+       !options.capture_test.isEmpty()) &&
+      options.path.isEmpty()) {
+    throw std::runtime_error("--benchmark, --screenshot and --capture-test require an input file");
   }
   options.player.map_provider = *gb::geo::find_provider(options.map_provider);
   options.player.map_tiles =
@@ -259,14 +275,17 @@ int main(int argc, char **argv) {
   QCoreApplication::setOrganizationName(QStringLiteral("gb"));
   qmlRegisterType<VideoView>("Gb.Player", 1, 0, "VideoView");
   qmlRegisterType<MapView>("Gb.Player", 1, 0, "MapView");
+  qmlRegisterType<PanelPreview>("Gb.Player", 1, 0, "PanelPreview");
   qmlRegisterType<ProfileView>("Gb.Player", 1, 0, "ProfileView");
 
   // A benchmark measures one file; it must not run on into the next chapter.
   if (options.benchmark.has_value())
     options.player.continue_sequence = false;
   PlayerController controller(options.player);
+  CaptureController capture(controller, QStringLiteral(GB_PLAYER_VERSION));
   QQmlApplicationEngine engine;
   engine.rootContext()->setContextProperty(QStringLiteral("player"), &controller);
+  engine.rootContext()->setContextProperty(QStringLiteral("capture"), &capture);
   engine.rootContext()->setContextProperty(QStringLiteral("initialView"), options.view);
   engine.rootContext()->setContextProperty(QStringLiteral("initialSquare"), options.square);
   engine.load(QUrl(QStringLiteral("qrc:/qml/Main.qml")));
@@ -278,7 +297,8 @@ int main(int argc, char **argv) {
     const auto opened = controller.open(options.path, options.seconds);
     if (!opened) {
       std::cerr << "gb-player: " << controller.status().toStdString() << '\n';
-      if (options.smoke_test || options.benchmark || !options.screenshot.isEmpty())
+      if (options.smoke_test || options.benchmark || !options.screenshot.isEmpty() ||
+          !options.capture_test.isEmpty())
         return 1;
     } else if (options.play && !options.benchmark) {
       controller.play();
@@ -294,6 +314,67 @@ int main(int argc, char **argv) {
     benchmark = new BenchmarkRunner(controller, window, *options.benchmark, &application);
     QObject::connect(benchmark, &BenchmarkRunner::finished, &application, &QCoreApplication::exit);
     benchmark->start();
+  } else if (!options.capture_test.isEmpty()) {
+    whenFirstFrameReady(
+        controller, &application, [&application, window, &options, &capture](const bool ok) {
+          if (!ok || window == nullptr) {
+            std::cerr << "gb-player: no frame was displayed\n";
+            application.exit(1);
+            return;
+          }
+          QMetaObject::invokeMethod(window, "setCaptureMode", Q_ARG(QVariant, true));
+          capture.setPanelSide(options.capture_panel);
+          capture.scaleCrop(0.5);
+          capture.moveCrop(0.1, 0.0);
+          capture.setGpsExif(true);
+          const auto canvas = capture.canvasAspect();
+          const auto crop = capture.crop();
+          // The canvas is frozen: resizing the window must not move the rectangle on the picture.
+          window->resize(window->width() - 200, window->height() - 100);
+          QTimer::singleShot(
+              500, &application, [&application, window, &options, &capture, canvas, crop] {
+                if (capture.canvasAspect() != canvas || capture.crop() != crop) {
+                  std::cerr
+                      << "gb-player: the capture rectangle changed when the window was resized\n";
+                  application.exit(1);
+                  return;
+                }
+                // Through the same path as the Capture button: it waits for the panel's tiles.
+                QObject::connect(
+                    &capture, &CaptureController::captureFinished, &application,
+                    [&application, window, &options, &capture](
+                        const QString &path, const QStringList &warnings, const QString &error) {
+                      if (!error.isEmpty()) {
+                        std::cerr << "gb-player: capture failed: " << error.toStdString() << '\n';
+                        // No OpenGL for offscreen rendering: skipped, not failed.
+                        application.exit(error.contains(QStringLiteral("unavailable")) ? 77 : 1);
+                        return;
+                      }
+                      const QImage written(path);
+                      auto gps = std::string("no");
+                      if (gb::image::is_jpeg_file(path.toStdString()) &&
+                          gb::image::inspect_photo(path.toStdString()).gps)
+                        gps = "yes";
+                      std::cout << "gb-player capture: " << written.width() << "x"
+                                << written.height() << " gps=" << gps
+                                << " canvas=" << capture.canvasAspect()
+                                << " crop=" << capture.crop().x() << "," << capture.crop().y()
+                                << "," << capture.crop().width() << "," << capture.crop().height()
+                                << '\n';
+                      for (const auto &warning : warnings)
+                        std::cout << "warning: " << warning.toStdString() << '\n';
+                      std::cout << capture.settingsText().toStdString();
+                      if (!options.screenshot.isEmpty() &&
+                          !window->grabWindow().save(options.screenshot)) {
+                        std::cerr << "gb-player: cannot save screenshot\n";
+                        application.exit(1);
+                        return;
+                      }
+                      application.quit();
+                    });
+                capture.startCapture(options.capture_test);
+              });
+        });
   } else if (!options.screenshot.isEmpty()) {
     whenFirstFrameReady(controller, &application, [&application, window, &options](const bool ok) {
       if (!ok || window == nullptr) {

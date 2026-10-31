@@ -16,6 +16,7 @@ Architecture decisions are stored as individual records under [`adr/`](adr/):
 - [ADR-0008: Player audio output, audio-master clock and stable-playback gating](adr/0008-player-audio-and-stable-playback-gating.md)
 - [ADR-0009: Player map, tile providers and tile cache](adr/0009-player-map-tiles-and-route.md)
 - [ADR-0011: Photos in the player](adr/0011-player-photos.md)
+- [ADR-0012: Capture mode, the canvas and crop model, and the shared renderer](adr/0012-capture-mode.md)
 
 ## Current boundaries
 
@@ -32,6 +33,14 @@ Architecture decisions are stored as individual records under [`adr/`](adr/):
   YUV planes through the MAX face mapping to the view. Telemetry and GPMF panels follow the
   displayed frame. Since M5 a map pane above the panels shows the recorded GPS route and the
   current record from OpenStreetMap tiles, and a click on the route seeks there (ADR-0009).
+  Its Capture mode frames and captures stills of the displayed frame, and shows the framing as
+  `gb.export/1` settings (ADR-0012).
+- `gb_render` (Qt GUI) holds the player's shader and `FrameRenderer`, which `gb-player` draws
+  with on screen and `OffscreenRenderer` draws with into a framebuffer object for stills, and the
+  still writer, and the map and side-panel painters, which the map pane and stills share. It is
+  meant to be shared with the planned `gb-render` tool.
+- `gb_export` is dependency-free: framing geometry (aspect ratios, output sizes, side panels and
+  what goes where in them, the capture rectangle), the `gb.export/1` INI reader and the Capture settings writer.
 - `gb_geo` is dependency-free: Web Mercator and tile math, tile provider descriptions and their
   usage policy, the on-disk tile cache and its HTTP freshness rules, and route runs and
   click-to-seek candidates.
@@ -40,13 +49,15 @@ Architecture decisions are stored as individual records under [`adr/`](adr/):
 - `gb_container` performs bounded, read-only ISO BMFF structural inspection.
 - `gb_image` performs bounded, read-only JPEG marker and codestream inspection. It interprets
   EXIF (including GPS), XMP GPano crop geometry and the GoPro APP6 GPMF segment of photos, and
-  classifies their field of view from that evidence (ADR-0011).
+  classifies their field of view from that evidence (ADR-0011). Its only writer builds a GPS-only
+  EXIF segment for stills and splices it into a JPEG (ADR-0012).
 - `gb_metadata` performs bounded, loss-aware GPMF KLV parsing and normalization.
 - `gb_telemetry` assigns recorded GPS fields to checked presentation ticks, classifies fix
   validity, retains timing uncertainty, and exposes GPSU anchors without inventing positions.
 - `gb_media` owns FFmpeg demux/decode, the synchronized multi-stream playback reader with
   accurate seeking, playback layout selection, RGB conversion, still-image writing, the shared MAX
-  pseudo-EAC reference transform, and deterministic virtual-camera projections.
+  pseudo-EAC reference transform, deterministic virtual-camera projections, and chapter positions
+  (`c2:00:05:31.400`).
 - Existing ISO BMFF JSON uses `gb.inspect/v1`; JPEG uses `gb.inspect.jpeg/v1`.
 - Unknown structures remain visible where possible and are not assigned guessed semantics.
 

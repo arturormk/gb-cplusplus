@@ -90,6 +90,36 @@ network. It checks that:
 The `gb-player` smoke tests force the map offline with a memory-only cache. The playback smoke
 test expects `map=none` for the GPS-less fixture.
 
+Export and Capture mode (ADR-0012):
+
+- `gb_position_tests` parses and formats chapter positions (`c2:00:05:31.400`): the short forms,
+  the chapter file-name form, recording time without a chapter, rejected forms (chapter 0,
+  minutes or seconds of 60 under a larger field, exponents, non-finite values) and round trips.
+- `gb_exif_writer_tests` builds GPS EXIF and reads it back with `parse_exif`: latitude and
+  longitude in every hemisphere, altitude below sea level, speed, GPS date and time, and
+  `DateTimeOriginal`, with no camera fields. It splices the segment into a JPEG, replacing JFIF and
+  an old EXIF segment, and rejects a non-JPEG and an oversized segment.
+- `gb_export_tests` covers aspect ratios, even frame sizes, side and bottom panels, width presets,
+  crop fitting, moving and scaling inside the canvas, the resolution estimate, the INI syntax
+  (comments, CRLF, reopened sections, duplicate keys, long lines, NUL bytes, size limit, each with
+  its line number) and the Capture settings text, whose crop must keep the picture's aspect ratio
+  when read back, with the panel's map scale and telemetry fields. It also places the map and the
+  text in side and bottom panels, with margins that scale with the frame.
+- `gb_render_tests` renders synthetic frames offscreen with the player's shader. A flat picture
+  must come out the right way up, with the canvas, not the output, deciding its aspect ratio. A
+  crop must equal the same part of the whole canvas drawn at a size where the pixels line up,
+  within 2 levels, for a flat picture and for the MAX layout in rectilinear, fisheye, Little
+  Planet and panorama views. It also composes a frame with a black side panel and writes JPEG with
+  and without GPS EXIF, and PNG. Without OpenGL, it formats the panel's telemetry (local time with
+  its offset, hemispheres, units, "—" without a fix) and paints a panel with tiles, the route, the
+  attribution and the text, counting missing tiles and checking the map's ground width. It needs an OpenGL 3.3 or ES 3.0 context, from a GPU or Mesa's
+  llvmpipe, and is reported as skipped without one.
+- `gb_player_capture` runs `gb-player --capture-test` on the playback fixture. It enters Capture
+  mode, shrinks and moves the rectangle, resizes the window (the canvas and rectangle must not
+  change), captures a 1920×1080 still through the offscreen renderer and prints the settings.
+  `gb_player_capture_panel` does the same with a right-hand panel, through the asynchronous
+  capture path; the fixture has no GPS, so the settings must have the telemetry and no map.
+
 GPU rendering, real-time smoothness, and seek latency need a display and real media. They are
 measured with `gb-player --benchmark` and recorded under `research/findings/`, not in CTest.
 The benchmark also checks map alignment. It compares the marker the map actually painted with

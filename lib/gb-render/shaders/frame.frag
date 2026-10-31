@@ -1,4 +1,4 @@
-// GLSL body; the renderer prepends a desktop or ES version header.
+// GLSL body; gb::render::FrameRenderer prepends a desktop or ES version header.
 //
 // One pass from decoded planar YUV to the displayed view. For the MAX layout this ports the
 // gb_media CPU reference: face-specific EAC lookup, wrapped side-face overlap blending, and the
@@ -13,8 +13,9 @@ uniform sampler2D uY1;
 uniform sampler2D uU1;
 uniform sampler2D uV1;
 uniform vec2 uSource;      // luma size of the first stream, pixels
-uniform vec2 uSize;        // view size, logical pixels
-uniform int uMode;         // see VideoView::Mode
+uniform vec2 uSize;        // canvas size; only its aspect ratio matters
+uniform vec4 uViewCrop;    // part of the canvas drawn (x, y, w, h), canvas units; whole: 0, 0, 1, 1
+uniform int uMode;         // see gb::render::ViewMode
 uniform int uLayout;       // 0 flat, 1 MAX dual-stream EAC, 2 equirectangular
 uniform vec4 uCrop;        // equirectangular: image rectangle within the full canvas (x, y, w, h), 0..1
 uniform int uHasFrame;
@@ -30,6 +31,8 @@ uniform float uKb;
 uniform int uFullRange;
 
 const float PI = 3.14159265358979323846;
+// Where this fragment lies on the canvas, 0..1 from the top left; set first thing in main().
+vec2 canvasUv;
 const vec3 BACKGROUND = vec3(0.035, 0.05, 0.065);
 
 const int FACE_LEFT = 0;
@@ -147,10 +150,11 @@ vec2 fitted(float contentAspect) {
     float viewAspect = uSize.x / max(uSize.y, 1.0);
     vec2 scale = viewAspect > contentAspect ? vec2(viewAspect / contentAspect, 1.0)
                                             : vec2(1.0, contentAspect / viewAspect);
-    return (vUv - 0.5) * scale / uZoom + uPan + 0.5;
+    return (canvasUv - 0.5) * scale / uZoom + uPan + 0.5;
 }
 
 void main() {
+    canvasUv = uViewCrop.xy + vUv * uViewCrop.zw;
     if (uHasFrame == 0) {
         fragColor = vec4(BACKGROUND, 1.0);
         return;
@@ -175,7 +179,7 @@ void main() {
         fragColor = vec4(sphereColor(direction), 1.0);
         return;
     }
-    vec2 point = vec2(vUv.x * 2.0 - 1.0, 1.0 - vUv.y * 2.0);
+    vec2 point = vec2(canvasUv.x * 2.0 - 1.0, 1.0 - canvasUv.y * 2.0);
     vec3 ray;
     if (mode == 0) {
         float tangent = tan(uFieldOfView * 0.5);

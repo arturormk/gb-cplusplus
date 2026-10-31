@@ -6,6 +6,7 @@
 #include "gb/media/audio.hpp"
 #include "gb/media/chapters.hpp"
 #include "gb/media/playback.hpp"
+#include "gb/media/position.hpp"
 #include "gb/metadata/gpmf.hpp"
 #include "gb/telemetry/export.hpp"
 #include "gb/telemetry/telemetry.hpp"
@@ -80,18 +81,7 @@ long double seconds(const std::int64_t ticks, const gb::media::Rational base) {
 }
 
 QString clockText(const long double total_seconds) {
-  if (!std::isfinite(total_seconds) || total_seconds < 0.0L)
-    return QStringLiteral("--:--:--.---");
-  const auto milliseconds = static_cast<std::int64_t>(std::floor(total_seconds * 1000.0L));
-  const auto hours = milliseconds / 3600000;
-  const auto minutes = (milliseconds / 60000) % 60;
-  const auto secs = (milliseconds / 1000) % 60;
-  const auto millis = milliseconds % 1000;
-  return QStringLiteral("%1:%2:%3.%4")
-      .arg(hours, 2, 10, QLatin1Char('0'))
-      .arg(minutes, 2, 10, QLatin1Char('0'))
-      .arg(secs, 2, 10, QLatin1Char('0'))
-      .arg(millis, 3, 10, QLatin1Char('0'));
+  return QString::fromStdString(gb::media::format_clock(total_seconds));
 }
 
 QString fixName(const std::optional<std::uint32_t> fix) {
@@ -328,7 +318,27 @@ double PlayerController::position() const {
              : 0.0;
 }
 
-QString PlayerController::positionText() const { return clockText(position()); }
+QString PlayerController::positionText() const {
+  if (!engine_.isOpen())
+    return clockText(0.0L);
+  return QString::fromStdString(
+      gb::media::format_position(chapterNumber(), positionMilliseconds()));
+}
+
+std::optional<int> PlayerController::chapterNumber() const {
+  if (sequence_paths_.size() < 2)
+    return std::nullopt;
+  return sequence_index_ + 1;
+}
+
+std::int64_t PlayerController::positionMilliseconds() const {
+  if (!engine_.isOpen())
+    return 0;
+  const auto value = seconds(engine_.positionTicks(), engine_.timeBase());
+  return std::isfinite(value) && value > 0.0L
+             ? static_cast<std::int64_t>(std::floor(value * 1000.0L))
+             : 0;
+}
 
 QString PlayerController::ptsText() const {
   if (!engine_.isOpen() || engine_.isStill())
@@ -402,6 +412,7 @@ bool PlayerController::open(const QString &path, const double start_seconds) {
     }
     audio_description_ = QString::fromStdString(audio.description);
     photo_rows_ = {};
+    photo_gps_.reset();
     panorama_crop_ = QRectF(0.0, 0.0, 1.0, 1.0);
     engine_.open(source, layout, options_.decoder_threads, options_.queue_capacity, start,
                  audio.stream, displayName().toStdString());
@@ -622,6 +633,7 @@ bool PlayerController::openPhoto(const QString &path) {
   }
 
   // Telemetry: the single position recorded with the photo, if any.
+  photo_gps_ = photo.gps;
   telemetry_state_ = QStringLiteral("photo");
   telemetry_rows_ = {};
   map_route_.clear();

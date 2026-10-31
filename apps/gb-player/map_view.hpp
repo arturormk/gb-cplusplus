@@ -2,6 +2,7 @@
 
 #include "gb/geo/mercator.hpp"
 #include "gb/geo/tiles.hpp"
+#include "gb/render/map_painter.hpp"
 
 #include <QCache>
 #include <QElapsedTimer>
@@ -46,11 +47,16 @@ public:
   [[nodiscard]] bool follow() const { return follow_; }
   void setFollow(bool follow);
   [[nodiscard]] QString tileStatus() const { return tile_status_; }
+  [[nodiscard]] gb::geo::WorldPoint center() const { return center_; }
   [[nodiscard]] bool hasRoute() const { return !route_.empty(); }
   // GPS record index of the marker in the most recent paint, or -1 when none was drawn. Used by
   // the benchmark to check that the drawn map follows the displayed frame.
   [[nodiscard]] long long paintedRecord() const { return painted_record_.load(); }
   [[nodiscard]] std::uint64_t paintCount() const { return paint_count_.load(); }
+
+  // The map as this pane draws it now, at scale 1, with tiles from the pane's cache. Capture mode
+  // draws stills' panels from it.
+  [[nodiscard]] gb::render::MapScene scene() const;
 
   Q_INVOKABLE void fitRoute();
   Q_INVOKABLE void zoomBy(double steps);
@@ -83,7 +89,7 @@ private:
   };
 
   [[nodiscard]] Viewport viewport() const;
-  [[nodiscard]] std::vector<gb::geo::TileKey> visibleTiles(const Viewport &view) const;
+  [[nodiscard]] std::vector<gb::geo::TileKey> visibleTiles() const;
   void onRouteChanged();
   void onPositionChanged();
   void onTileReady(int zoom, int x, int y, const QByteArray &data);

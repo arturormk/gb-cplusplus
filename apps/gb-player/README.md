@@ -48,7 +48,7 @@ gb-player --view panorama GS__0033.JPG           # a 360° photo
 | Input | Action |
 |---|---|
 | Space, double-click | play / pause |
-| Left / Right | seek −5 s / +5 s |
+| Left / Right | seek −5 s / +5 s (in Capture mode they move the capture rectangle) |
 | `,` / `.` or `Ctrl+←` / `Ctrl+→` | step one frame back / forward (pauses) |
 | Drag, wheel | look around and change FOV (spherical modes); pan and zoom (2D modes) |
 | 1–8 | rectilinear, fisheye, stereographic, Little Planet, panorama, raw 1, raw 2, original |
@@ -61,8 +61,59 @@ gb-player --view panorama GS__0033.JPG           # a 360° photo
 | Map: click on the route | seek there; if the route passes several times, choose the time |
 | Map: `⤢` / `◎` | fit the whole route / follow the current position |
 
+For a recording split into chapters, the clock shows the chapter in front of the time within
+that chapter's file: `c2:00:05:31.400` is chapter 2 at 5 min 31.4 s.
+
 Seeking is accurate. The displayed frame is the latest frame whose presentation time is not after
 the requested time. Frame stepping and the timeline both use the first stream's integer ticks.
+
+## Capture mode
+
+The toolbar's **Play | Capture** selector switches to Capture mode, for framing and capturing
+stills from photos and video frames. Aim the view in Play mode first; aiming still works in
+Capture mode.
+
+- **The canvas** is the view as the player draws it. Its aspect ratio is frozen when Capture mode
+  is first entered, and the view is letterboxed to it, so resizing the window never changes what
+  is in it. With Square on, the canvas is square.
+- **The capture rectangle** selects part of the canvas, at the frame's aspect ratio: 16:9, 4:3,
+  1:1, 9:16 or a free W:H. Outside it the view is dimmed. Drag inside it to move it and its
+  corner handles to resize it; its aspect ratio stays locked. Dragging outside it aims the view,
+  and the wheel changes the field of view (or zooms), as in Play mode.
+- **Panel**: none, left, right or bottom, with its size as a percentage of the frame height. It
+  takes part of the output frame, so the rectangle gets the aspect ratio of what is left. It is
+  black and shows, with the **Map** and **Telemetry** checkboxes, the route map (at the map pane's
+  zoom, centred on the position, north up, with the attribution) and the date and time (local,
+  from GPS), latitude, longitude, altitude and speed at the frame, or "—" without a valid fix
+  near it. The preview next to the rectangle is drawn as the still will be. Before writing, the
+  map's missing tiles are requested through the map's rate-limited fetcher; Capture waits up to
+  five seconds, and tiles that do not arrive are drawn as placeholders and reported.
+- **Capture** renders the displayed frame (pausing playback first) at the chosen size, from the
+  source, as JPEG or PNG. Every output pixel is computed by the player's shader, not scaled up
+  from the screen. The name is suggested from the recording, position and view, for example
+  `GH020073_c2-05m31s400_rectilinear.jpg`, in the capture folder; an existing file is never
+  replaced. Shift+click asks for a name. The status line reports the file and any warning, such as
+  an output with more pixels than the source can resolve.
+- **Include GPS position (EXIF)**, off by default, writes the position into a JPEG: for a video
+  frame, the nearest recorded GPS record, only if it has a valid fix within one record interval of
+  the frame; for a photo, its own position. It is disabled, with the reason, when there is none.
+  Without it a still carries no EXIF at all.
+- **Range**: the current position as a chapter position (`c2:00:05:31.400`), and *Set start* /
+  *Set end*, which only go into the settings.
+- **Settings**: the framing as `gb.export/1` INI text (`[range]`, `[view]`, `[frame]`, and with a
+  panel `[layout]`, `[units]`, `[map] scale` and `[telemetry]`), updated live, with **Copy** and **Save as…**. They are meant for a `gb-render`
+  video export (see [`docs/plans/export/`](../../docs/plans/export/README.md); `gb-render` itself
+  is not implemented yet).
+
+| Input (Capture mode) | Action |
+|---|---|
+| Drag inside the rectangle / its corners | move / resize it |
+| Arrow keys, Shift+arrow keys | nudge it by one / ten screen pixels |
+| Ctrl+wheel | scale it about its centre |
+| Shift+click Capture | choose the file name |
+
+Switching back to Play restores the map and panels. The view, the aspect ratio and the rectangle
+are kept for the session. See ADR-0012.
 
 ## Panels
 
@@ -205,6 +256,8 @@ for diagnosing playback that falls behind its audio; see
 - Audio: the first mono or stereo stream plays through SDL2 (`--no-audio` disables it). The MAX
   four-channel spatial track is not rendered. Hardware decoding (VA-API), edit lists,
   a joined timeline across chapters, and video export are not implemented.
+- Capture mode needs an OpenGL 3.3 (or OpenGL ES 3.0) context for offscreen rendering. Captures
+  have no overlays; those are for `gb-render`.
 - Photos: only the first JPEG codestream is shown; other MPF entries are ignored. The APP6
   camera orientation is listed but not applied to the view. Linear and narrow lens
   classification is unverified (ADR-0011).

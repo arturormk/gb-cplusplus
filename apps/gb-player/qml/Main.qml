@@ -53,9 +53,31 @@ ApplicationWindow {
         }
     }
 
+    // Capture mode (docs/plans/export/capture.md). The canvas aspect ratio is frozen on entry.
+    function setCaptureMode(enabled) {
+        if (enabled)
+            capture.freezeCanvas((videoArea.width - 2) / Math.max(1, videoArea.height - 2))
+        capture.active = enabled
+    }
+    // Nudges the capture rectangle by screen pixels.
+    function nudge(dx, dy) {
+        capture.moveCrop(dx / Math.max(1, view.width), dy / Math.max(1, view.height))
+    }
+    Binding { target: capture; property: "view"; value: view }
+    Binding { target: capture; property: "square"; value: view.square }
+    Binding { target: capture; property: "mapView"; value: mapPanel.map }
+
     Shortcut { sequence: "Space"; onActivated: player.togglePlay() }
-    Shortcut { sequence: "Left"; onActivated: player.seekSeconds(player.position - 5) }
-    Shortcut { sequence: "Right"; onActivated: player.seekSeconds(player.position + 5) }
+    Shortcut { sequence: "Left"; enabled: !capture.active; onActivated: player.seekSeconds(player.position - 5) }
+    Shortcut { sequence: "Right"; enabled: !capture.active; onActivated: player.seekSeconds(player.position + 5) }
+    Shortcut { sequence: "Left"; enabled: capture.active; onActivated: window.nudge(-1, 0) }
+    Shortcut { sequence: "Right"; enabled: capture.active; onActivated: window.nudge(1, 0) }
+    Shortcut { sequence: "Up"; enabled: capture.active; onActivated: window.nudge(0, -1) }
+    Shortcut { sequence: "Down"; enabled: capture.active; onActivated: window.nudge(0, 1) }
+    Shortcut { sequence: "Shift+Left"; enabled: capture.active; onActivated: window.nudge(-10, 0) }
+    Shortcut { sequence: "Shift+Right"; enabled: capture.active; onActivated: window.nudge(10, 0) }
+    Shortcut { sequence: "Shift+Up"; enabled: capture.active; onActivated: window.nudge(0, -10) }
+    Shortcut { sequence: "Shift+Down"; enabled: capture.active; onActivated: window.nudge(0, 10) }
     Shortcut { sequence: ","; onActivated: player.stepFrames(-1) }
     Shortcut { sequence: "."; onActivated: player.stepFrames(1) }
     Shortcut { sequence: "Ctrl+Left"; onActivated: player.stepFrames(-1) }
@@ -82,6 +104,28 @@ ApplicationWindow {
             spacing: 8
 
             DarkButton { text: "Open…"; onClicked: player.openDialog() }
+            // Play | Capture
+            Row {
+                spacing: 2
+                ToggleButton {
+                    text: "Play"
+                    selected: !capture.active
+                    implicitWidth: 72
+                    implicitHeight: 34
+                    onClicked: window.setCaptureMode(false)
+                }
+                ToggleButton {
+                    text: "Capture"
+                    selected: capture.active
+                    enabled: player.hasMedia || capture.active
+                    implicitWidth: 80
+                    implicitHeight: 34
+                    ToolTip.visible: hovered
+                    ToolTip.delay: 400
+                    ToolTip.text: "Frame and capture stills, and get the framing as gb-render settings"
+                    onClicked: window.setCaptureMode(true)
+                }
+            }
             Label {
                 visible: player.sequenceNames.length < 2
                 text: player.inputName.length ? player.inputName : "No file"
@@ -140,6 +184,7 @@ ApplicationWindow {
         spacing: 6
 
         Rectangle {
+            id: videoArea
             Layout.fillWidth: true
             Layout.fillHeight: true
             color: "#090d11"
@@ -150,9 +195,17 @@ ApplicationWindow {
             VideoView {
                 id: view
                 readonly property bool square: window.squareView && window.circular
+                readonly property real availableWidth: parent.width - 2
+                readonly property real availableHeight: parent.height - 2
+                // Capture mode letterboxes the view to the frozen canvas, so resizing the window
+                // scales the canvas but never changes what is in it.
+                readonly property real captureWidth: availableWidth / Math.max(1, availableHeight) > capture.canvasAspect
+                                                     ? availableHeight * capture.canvasAspect : availableWidth
                 anchors.centerIn: parent
-                width: square ? Math.min(parent.width, parent.height) - 2 : parent.width - 2
-                height: square ? width : parent.height - 2
+                width: capture.active ? captureWidth
+                       : square ? Math.min(parent.width, parent.height) - 2 : availableWidth
+                height: capture.active ? captureWidth / capture.canvasAspect
+                        : square ? width : availableHeight
                 engine: player.engine
                 sourceLayout: player.sourceLayout
                 overlap: player.overlap
@@ -184,7 +237,9 @@ ApplicationWindow {
                 onDoubleClicked: player.togglePlay()
                 onWheel: function(wheel) {
                     var steps = wheel.angleDelta.y / 120
-                    if (window.spherical) {
+                    if (capture.active && (wheel.modifiers & Qt.ControlModifier)) {
+                        capture.scaleCrop(Math.pow(1.1, steps))
+                    } else if (window.spherical) {
                         var maximum = view.mode === 0 ? 150 : 330
                         view.fieldOfView = Math.max(20, Math.min(maximum, view.fieldOfView - steps * 5))
                     } else {
@@ -193,6 +248,14 @@ ApplicationWindow {
                     }
                     wheel.accepted = true
                 }
+            }
+
+            CaptureOverlay {
+                visible: capture.active && player.hasMedia
+                x: view.x
+                y: view.y
+                width: view.width
+                height: view.height
             }
 
             Rectangle {
@@ -236,7 +299,15 @@ ApplicationWindow {
             }
         }
 
+        CapturePanel {
+            visible: capture.active
+            Layout.preferredWidth: 440
+            Layout.fillHeight: true
+        }
+
+        // Hidden, not destroyed, in Capture mode, so the map and graphs keep their state.
         SplitView {
+            visible: !capture.active
             Layout.preferredWidth: 440
             Layout.fillHeight: true
             orientation: Qt.Vertical

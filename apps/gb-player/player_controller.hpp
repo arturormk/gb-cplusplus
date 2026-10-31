@@ -4,6 +4,7 @@
 #include "process_usage.hpp"
 
 #include "gb/geo/route.hpp"
+#include "gb/image/photo.hpp"
 #include "gb/telemetry/telemetry.hpp"
 #include "gb/tiles/tile_fetcher.hpp"
 
@@ -104,7 +105,13 @@ public:
   [[nodiscard]] QString durationText() const;
   [[nodiscard]] bool playing() const { return engine_.playing(); }
   [[nodiscard]] double position() const;
+  // The clock: "c2:00:05:31.400" for a chaptered recording (the chapter is 1-based, in
+  // chapter_sequence order), "00:05:31.400" otherwise.
   [[nodiscard]] QString positionText() const;
+  // The chapter of the open file when the recording has several, else nothing.
+  [[nodiscard]] std::optional<int> chapterNumber() const;
+  // The displayed frame's time within the open file, floored to the millisecond.
+  [[nodiscard]] std::int64_t positionMilliseconds() const;
   [[nodiscard]] QString ptsText() const;
   [[nodiscard]] QString status() const { return status_; }
   [[nodiscard]] bool statusIsError() const { return status_is_error_; }
@@ -124,6 +131,10 @@ public:
   [[nodiscard]] QString audioState() const { return engine_.audioState(); }
   [[nodiscard]] QString audioDescription() const { return audio_description_; }
   [[nodiscard]] bool metadataLoading() const { return loader_.joinable() && !metadata_loaded_; }
+  // The position an open photo records in its EXIF GPS IFD.
+  [[nodiscard]] const std::optional<gb::image::PhotoGps> &photoGps() const { return photo_gps_; }
+  // Shows a message in the status line.
+  void reportStatus(const QString &message, bool error = false) { setStatus(message, error); }
 
   // Map: one route point per GPS record (same indices as the telemetry), the record nearest to
   // the displayed frame, and its state: "nomedia", "loading", "none" (no GPS), "valid",
@@ -221,6 +232,7 @@ private:
   QVariantList file_rows_;
   QVariantList photo_rows_;
   QRectF panorama_crop_{0.0, 0.0, 1.0, 1.0};
+  std::optional<gb::image::PhotoGps> photo_gps_;
   QVariantList track_rows_;
   QString gpmf_title_;
   QVariantList gpmf_rows_;
