@@ -17,3 +17,15 @@ are distributed uniformly over their containing GPMF sample and carry a one-reco
 uncertainty. `GPSU` is a recorded UTC anchor; later UTC values in the same payload are derived.
 No position is interpolated or extrapolated. Current extraction supports the verified `GPS5`
 layout; `GPS9` and sensor-series export are not yet interpreted.
+
+The writers live in the `gb::telemetry` library (`gb/telemetry/export.hpp`), which `gb-player`
+also uses to export the GPS track of every chapter of a recording as one file. Output for a single
+file is exactly what `gb-telemetry` prints. For several chapters, in chapter order:
+
+- JSON: schema `gb.telemetry.sequence/v1`, with a `sources` array of `gb.telemetry/v1` objects.
+- CSV: a leading `source_file` column names the chapter file of each row.
+- GPX: one track named after the first and last chapter, with one `trkseg` per chapter whose
+  extensions carry `<gb:source>` with the chapter file name.
+- GeoJSON: each feature gains a `source_file` property.
+
+Media times stay relative to each chapter file.

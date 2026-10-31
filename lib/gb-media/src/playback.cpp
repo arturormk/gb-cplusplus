@@ -38,6 +38,7 @@ std::string source_layout_name(const SourceLayout layout) {
   switch (layout) {
   case SourceLayout::flat: return "flat";
   case SourceLayout::max_dual_eac: return "max_dual_eac";
+  case SourceLayout::equirectangular: return "equirectangular";
   }
   return "unknown";
 }
@@ -149,13 +150,26 @@ struct SynchronizedReader::Impl {
 
   PlanarPicture picture(Decoder &decoder, FramePtr frame) {
     if (!planar_420(frame->format)) {
+      // Deprecated YUVJ formats are plain YUV at full range; naming the range explicitly keeps
+      // swscale quiet and the conversion range-preserving.
+      auto source_format = static_cast<AVPixelFormat>(frame->format);
+      const auto full_range = frame->color_range == AVCOL_RANGE_JPEG || source_format == AV_PIX_FMT_YUVJ422P ||
+                              source_format == AV_PIX_FMT_YUVJ444P || source_format == AV_PIX_FMT_YUVJ440P ||
+                              source_format == AV_PIX_FMT_YUVJ411P;
+      if (source_format == AV_PIX_FMT_YUVJ422P) source_format = AV_PIX_FMT_YUV422P;
+      else if (source_format == AV_PIX_FMT_YUVJ444P) source_format = AV_PIX_FMT_YUV444P;
+      else if (source_format == AV_PIX_FMT_YUVJ440P) source_format = AV_PIX_FMT_YUV440P;
+      else if (source_format == AV_PIX_FMT_YUVJ411P) source_format = AV_PIX_FMT_YUV411P;
       decoder.converter.reset(sws_getCachedContext(
-          decoder.converter.release(), frame->width, frame->height,
-          static_cast<AVPixelFormat>(frame->format), frame->width, frame->height,
-          AV_PIX_FMT_YUV420P, SWS_BILINEAR, nullptr, nullptr, nullptr));
+          decoder.converter.release(), frame->width, frame->height, source_format, frame->width,
+          frame->height, AV_PIX_FMT_YUV420P, SWS_BILINEAR, nullptr, nullptr, nullptr));
       if (!decoder.converter) {
         throw MediaError(ErrorKind::unsupported, "cannot convert decoded pixel format");
       }
+      // FFmpeg reports failure for YUV-to-YUV here although it records both ranges; ignore it.
+      const auto *coefficients = sws_getCoefficients(SWS_CS_DEFAULT);
+      static_cast<void>(sws_setColorspaceDetails(decoder.converter.get(), coefficients, full_range ? 1 : 0,
+                                                 coefficients, full_range ? 1 : 0, 0, 1 << 16, 1 << 16));
       FramePtr converted(av_frame_alloc());
       if (!converted) throw MediaError(ErrorKind::io, "cannot allocate conversion frame");
       converted->format = AV_PIX_FMT_YUV420P;
@@ -168,12 +182,7 @@ struct SynchronizedReader::Impl {
       const auto rows = sws_scale(decoder.converter.get(), frame->data, frame->linesize, 0,
                                   frame->height, converted->data, converted->linesize);
       if (rows != frame->height) throw MediaError(ErrorKind::corrupt, "incomplete pixel conversion");
-      // swscale expands deprecated full-range YUVJ inputs to limited-range YUV420P output.
-      const auto source_format = static_cast<AVPixelFormat>(frame->format);
-      if (source_format == AV_PIX_FMT_YUVJ422P || source_format == AV_PIX_FMT_YUVJ444P ||
-          source_format == AV_PIX_FMT_YUVJ440P || source_format == AV_PIX_FMT_YUVJ411P) {
-        converted->color_range = AVCOL_RANGE_MPEG;
-      }
+      converted->color_range = full_range ? AVCOL_RANGE_JPEG : AVCOL_RANGE_MPEG;
       // Keep the decoder's own pixel-format description for diagnostics.
       auto color = color_metadata(*frame);
       auto result = picture(decoder, std::move(converted));
@@ -357,6 +366,15 @@ void SynchronizedReader::seek(const std::int64_t presentation_ticks) {
   impl_->input_finished = false;
   impl_->pending.reset();
   impl_->seek_target = presentation_ticks;
+}
+
+FrameSet decode_still(const std::filesystem::path &path) {
+  const auto streams = video_streams(path);
+  if (streams.empty()) throw MediaError(ErrorKind::unsupported, "no image stream found");
+  SynchronizedReader reader(path, {streams.front().index}, 1);
+  auto set = reader.next();
+  if (!set.has_value()) throw MediaError(ErrorKind::corrupt, "the image could not be decoded");
+  return std::move(*set);
 }
 
 std::optional<FrameSet> SynchronizedReader::next() {

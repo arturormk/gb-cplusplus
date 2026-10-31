@@ -17,8 +17,14 @@ ApplicationWindow {
     readonly property var modeNames: ["Rectilinear", "Fisheye", "Stereographic", "Little Planet",
                                       "Panorama (equirectangular)", "Raw track 1", "Raw track 2",
                                       "Original"]
-    readonly property var availableModes: player.sourceLayout === 1 ? [0, 1, 2, 3, 4, 5, 6] : [7]
+    // MAX dual-stream video, equirectangular photo, anything else flat.
+    readonly property var availableModes: player.sourceLayout === 1 ? [0, 1, 2, 3, 4, 5, 6]
+                                        : player.sourceLayout === 2 ? [0, 1, 2, 3, 4, 7] : [7]
     readonly property bool spherical: view.mode <= 3
+    // Fisheye, stereographic and Little Planet normalize each axis separately; a square view
+    // makes their image circle round.
+    readonly property bool circular: view.mode >= 1 && view.mode <= 3
+    property bool squareView: initialSquare
     property int requestedMode: initialView
 
     function selectMode(mode) {
@@ -58,6 +64,7 @@ ApplicationWindow {
     Shortcut { sequence: "F"; onActivated: window.visibility = window.visibility === Window.FullScreen ? Window.Windowed : Window.FullScreen }
     Shortcut { sequence: "Escape"; onActivated: if (window.visibility === Window.FullScreen) window.visibility = Window.Windowed }
     Shortcut { sequence: "R"; onActivated: window.resetView() }
+    Shortcut { sequence: "S"; onActivated: window.squareView = !window.squareView }
     Shortcut { sequence: "Ctrl+O"; onActivated: player.openDialog() }
     Repeater {
         model: 8
@@ -108,6 +115,17 @@ ApplicationWindow {
                 Layout.preferredWidth: 230
                 onActivated: function(index) { window.selectMode(window.availableModes[index]) }
             }
+            DarkButton {
+                text: "Square"
+                visible: window.circular
+                checkable: true
+                checked: window.squareView
+                enabled: player.hasMedia
+                implicitWidth: 76
+                ToolTip.visible: hovered
+                ToolTip.text: "Square view, so the image circle is round (S)"
+                onToggled: window.squareView = checked
+            }
             DarkButton { text: "Reset view"; enabled: player.hasMedia; onClicked: window.resetView() }
             DarkButton {
                 text: window.visibility === Window.FullScreen ? "Exit full screen" : "Full screen"
@@ -131,11 +149,14 @@ ApplicationWindow {
 
             VideoView {
                 id: view
-                anchors.fill: parent
-                anchors.margins: 1
+                readonly property bool square: window.squareView && window.circular
+                anchors.centerIn: parent
+                width: square ? Math.min(parent.width, parent.height) - 2 : parent.width - 2
+                height: square ? width : parent.height - 2
                 engine: player.engine
                 sourceLayout: player.sourceLayout
                 overlap: player.overlap
+                panoramaCrop: player.panoramaCrop
                 Component.onCompleted: window.selectMode(initialView)
             }
 
@@ -203,7 +224,7 @@ ApplicationWindow {
                 Label {
                     anchors.horizontalCenter: parent.horizontalCenter
                     text: !view.gpuAvailable ? "GPU view unavailable: OpenGL 3.3 is required"
-                                             : "Open a GoPro .360 or MP4 recording (Ctrl+O)"
+                                             : "Open a GoPro .360 or MP4 recording, or a JPG photo (Ctrl+O)"
                     color: "#8193a1"
                     font.pixelSize: 16
                 }
@@ -282,13 +303,29 @@ ApplicationWindow {
                                 width: telemetryScroll.width
                                 spacing: 8
                                 Label {
-                                    text: "Synchronized to the displayed frame. Values are the nearest recorded "
-                                          + "GPS5 record; nothing is interpolated."
+                                    text: player.isPhoto
+                                          ? "The position recorded in the photo's EXIF GPS fields. A photo has "
+                                            + "one position and no track."
+                                          : "Synchronized to the displayed frame. Values are the nearest recorded "
+                                            + "GPS5 record; nothing is interpolated."
                                     color: "#7f919f"
                                     wrapMode: Text.Wrap
                                     Layout.fillWidth: true
                                 }
                                 InfoTable { rows: player.telemetryRows; Layout.fillWidth: true }
+                                // Photo capture settings from EXIF and the GoPro APP6 segment.
+                                Label {
+                                    visible: player.isPhoto
+                                    text: "Camera"
+                                    color: "#61dc97"
+                                    font.bold: true
+                                }
+                                InfoTable {
+                                    visible: player.isPhoto
+                                    rows: player.photoRows
+                                    labelWidth: 150
+                                    Layout.fillWidth: true
+                                }
                             }
                             // GPS profile over the whole recording; press or drag to seek. It takes
                             // the height the text leaves, down to a minimum; below that the tab scrolls.
@@ -302,38 +339,149 @@ ApplicationWindow {
                                 ColumnLayout {
                                     anchors.fill: parent
                                     spacing: -1  // the selected tab overlaps the frame's top border
-                                    TabBar {
-                                        id: profileTabs
+                                    RowLayout {
+                                        Layout.fillWidth: true
                                         z: 1
-                                        spacing: 2
-                                        background: Item {}
-                                        Repeater {
-                                            model: ["Height", "Speed"]
-                                            TabButton {
-                                                readonly property bool selected: profileTabs.currentIndex === index
-                                                text: modelData
-                                                width: 80
-                                                implicitHeight: 26
-                                                contentItem: Text {
-                                                    text: parent.text
-                                                    color: parent.selected ? "#61dc97" : "#9fb0bd"
-                                                    font.bold: parent.selected
-                                                    horizontalAlignment: Text.AlignHCenter
-                                                    verticalAlignment: Text.AlignVCenter
+                                        spacing: 6
+                                        TabBar {
+                                            id: profileTabs
+                                            spacing: 2
+                                            background: Item {}
+                                            Repeater {
+                                                model: ["Height", "Speed"]
+                                                TabButton {
+                                                    readonly property bool selected: profileTabs.currentIndex === index
+                                                    text: modelData
+                                                    width: 80
+                                                    implicitHeight: 26
+                                                    contentItem: Text {
+                                                        text: parent.text
+                                                        color: parent.selected ? "#61dc97" : "#9fb0bd"
+                                                        font.bold: parent.selected
+                                                        horizontalAlignment: Text.AlignHCenter
+                                                        verticalAlignment: Text.AlignVCenter
+                                                    }
+                                                    background: Rectangle {
+                                                        color: parent.selected ? "#121a21" : "#0d1419"
+                                                        border.color: "#26343f"
+                                                        // Open towards the graph: hide the bottom border when selected.
+                                                        Rectangle {
+                                                            visible: parent.parent.selected
+                                                            anchors.left: parent.left
+                                                            anchors.right: parent.right
+                                                            anchors.bottom: parent.bottom
+                                                            anchors.margins: 1
+                                                            anchors.bottomMargin: 0
+                                                            height: 1
+                                                            color: parent.color
+                                                        }
+                                                    }
                                                 }
-                                                background: Rectangle {
-                                                    color: parent.selected ? "#121a21" : "#0d1419"
-                                                    border.color: "#26343f"
-                                                    // Open towards the graph: hide the bottom border when selected.
-                                                    Rectangle {
-                                                        visible: parent.parent.selected
-                                                        anchors.left: parent.left
-                                                        anchors.right: parent.right
-                                                        anchors.bottom: parent.bottom
-                                                        anchors.margins: 1
-                                                        anchors.bottomMargin: 0
-                                                        height: 1
-                                                        color: parent.color
+                                            }
+                                        }
+                                        Item { Layout.fillWidth: true }
+                                        // The graphs are smoothed with a 3 s sliding mean; this shows the raw records instead.
+                                        Button {
+                                            id: rawButton
+                                            checkable: true
+                                            implicitWidth: 24
+                                            implicitHeight: 24
+                                            padding: 0
+                                            Layout.bottomMargin: 3
+                                            hoverEnabled: true
+                                            ToolTip.visible: hovered
+                                            ToolTip.delay: 400
+                                            ToolTip.text: checked ? "Show smoothed height and speed (3 s mean)" : "Show raw GPS records"
+                                            background: Rectangle {
+                                                radius: 3
+                                                color: rawButton.down ? "#174b6b" : rawButton.checked ? "#16323f"
+                                                       : rawButton.hovered ? "#1b2833" : "#0d1419"
+                                                border.color: rawButton.hovered || rawButton.checked ? "#4b94ba" : "#26343f"
+                                            }
+                                            // A jagged, noisy trace, drawn so it needs no icon font.
+                                            contentItem: Canvas {
+                                                readonly property color ink: rawButton.checked || rawButton.hovered ? "#61dc97" : "#9fb0bd"
+                                                onInkChanged: requestPaint()
+                                                onPaint: {
+                                                    var context = getContext("2d")
+                                                    context.reset()
+                                                    context.strokeStyle = ink
+                                                    context.lineWidth = 1.25
+                                                    context.lineCap = "round"
+                                                    context.lineJoin = "round"
+                                                    context.beginPath()
+                                                    context.moveTo(4, 14); context.lineTo(6, 9); context.lineTo(8, 16)
+                                                    context.lineTo(10, 6); context.lineTo(12, 15); context.lineTo(14, 8)
+                                                    context.lineTo(16, 17); context.lineTo(18, 10); context.lineTo(20, 13)
+                                                    context.stroke()
+                                                }
+                                            }
+                                        }
+                                        // Export the GPS track of the whole recording (every chapter).
+                                        Button {
+                                            id: exportButton
+                                            enabled: !player.exportingTrack
+                                            implicitWidth: 24
+                                            implicitHeight: 24
+                                            padding: 0
+                                            Layout.bottomMargin: 3
+                                            hoverEnabled: true
+                                            ToolTip.visible: hovered
+                                            ToolTip.delay: 400
+                                            ToolTip.text: player.exportingTrack ? "Exporting GPS track…"
+                                                          : player.sequenceNames.length > 1
+                                                            ? "Export GPS track of all " + player.sequenceNames.length + " chapters…"
+                                                            : "Export GPS track…"
+                                            onClicked: player.exportTrackDialog()
+                                            background: Rectangle {
+                                                radius: 3
+                                                color: exportButton.down ? "#174b6b" : exportButton.hovered ? "#1b2833" : "#0d1419"
+                                                border.color: exportButton.hovered ? "#4b94ba" : "#26343f"
+                                            }
+                                            contentItem: Item {
+                                                // Arrow into a tray, drawn so it needs no icon font.
+                                                Canvas {
+                                                    anchors.fill: parent
+                                                    visible: !player.exportingTrack
+                                                    readonly property color ink: exportButton.hovered ? "#61dc97" : "#9fb0bd"
+                                                    onInkChanged: requestPaint()
+                                                    onPaint: {
+                                                        var context = getContext("2d")
+                                                        context.reset()
+                                                        context.strokeStyle = ink
+                                                        context.lineWidth = 1.5
+                                                        context.lineCap = "round"
+                                                        context.lineJoin = "round"
+                                                        var cx = width / 2
+                                                        context.beginPath()
+                                                        context.moveTo(cx, 5); context.lineTo(cx, 14)
+                                                        context.moveTo(cx - 4, 10); context.lineTo(cx, 14); context.lineTo(cx + 4, 10)
+                                                        context.moveTo(cx - 7, 15); context.lineTo(cx - 7, 18)
+                                                        context.lineTo(cx + 7, 18); context.lineTo(cx + 7, 15)
+                                                        context.stroke()
+                                                    }
+                                                }
+                                                // Spinner while the export runs: a three-quarter arc turning once a second.
+                                                Canvas {
+                                                    id: exportSpinner
+                                                    anchors.fill: parent
+                                                    visible: player.exportingTrack
+                                                    onPaint: {
+                                                        var context = getContext("2d")
+                                                        context.reset()
+                                                        context.strokeStyle = "#61dc97"
+                                                        context.lineWidth = 2
+                                                        context.lineCap = "round"
+                                                        context.beginPath()
+                                                        context.arc(width / 2, height / 2, 6.5, 0, 1.5 * Math.PI)
+                                                        context.stroke()
+                                                    }
+                                                    RotationAnimator on rotation {
+                                                        running: exportSpinner.visible
+                                                        from: 0
+                                                        to: 360
+                                                        duration: 1000
+                                                        loops: Animation.Infinite
                                                     }
                                                 }
                                             }
@@ -349,6 +497,7 @@ ApplicationWindow {
                                             anchors.margins: 1
                                             controller: player
                                             quantity: profileTabs.currentIndex === 0 ? ProfileView.Height : ProfileView.Speed
+                                            smoothed: !rawButton.checked
                                         }
                                     }
                                 }
@@ -363,7 +512,7 @@ ApplicationWindow {
                                 spacing: 8
                                 Label { text: "File"; color: "#61dc97"; font.bold: true }
                                 InfoTable { rows: player.fileRows; Layout.fillWidth: true }
-                                Label { text: "Tracks"; color: "#61dc97"; font.bold: true }
+                                Label { visible: !player.isPhoto; text: "Tracks"; color: "#61dc97"; font.bold: true }
                                 Repeater {
                                     model: tabs.currentIndex === 1 ? player.trackRows : []
                                     Text {
@@ -378,7 +527,11 @@ ApplicationWindow {
                                               + (modelData.geometry.length ? ", " + modelData.geometry : "")
                                     }
                                 }
-                                Label { text: "GPMF at playback time"; color: "#61dc97"; font.bold: true }
+                                Label {
+                                    text: player.isPhoto ? "GoPro metadata (GPMF)" : "GPMF at playback time"
+                                    color: "#61dc97"
+                                    font.bold: true
+                                }
                                 Label {
                                     text: player.gpmfTitle
                                     color: "#9fb0bd"
@@ -437,8 +590,10 @@ ApplicationWindow {
             anchors.leftMargin: 10
             anchors.rightMargin: 10
             spacing: 2
+            // A photo has no time: no transport, timeline or audio.
             RowLayout {
                 Layout.fillWidth: true
+                visible: !player.isPhoto
                 spacing: 8
                 DarkButton { text: "◀|"; implicitWidth: 44; enabled: player.hasMedia; onClicked: player.stepFrames(-1) }
                 DarkButton {

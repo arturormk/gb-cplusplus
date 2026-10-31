@@ -15,12 +15,14 @@ class PlayerController;
 // The time axis shows a window of the video: the whole of it at first, down to 30 seconds with the
 // wheel, which keeps the time under the pointer fixed; dragging with the middle button pans. The
 // window never extends past the start or end of the video. Pressing the left button seeks to the
-// time under the pointer; dragging scrubs. The plot is drawn once per data, size or window change
-// and cached; the cursor is painted over the cached image.
+// time under the pointer; dragging scrubs. With smoothed set, each value is the mean over a centred
+// time window, within the stretch of joined records it belongs to. The plot is drawn once per
+// data, size or window change and cached; the cursor is painted over the cached image.
 class ProfileView : public QQuickPaintedItem {
   Q_OBJECT
   Q_PROPERTY(QObject *controller READ controller WRITE setController NOTIFY controllerChanged)
   Q_PROPERTY(Quantity quantity READ quantity WRITE setQuantity NOTIFY quantityChanged)
+  Q_PROPERTY(bool smoothed READ smoothed WRITE setSmoothed NOTIFY smoothedChanged)
 
 public:
   enum Quantity { Height, Speed };
@@ -32,12 +34,15 @@ public:
   void setController(QObject *controller);
   [[nodiscard]] Quantity quantity() const { return quantity_; }
   void setQuantity(Quantity quantity);
+  [[nodiscard]] bool smoothed() const { return smoothed_; }
+  void setSmoothed(bool smoothed);
 
   void paint(QPainter *painter) override;
 
 signals:
   void controllerChanged();
   void quantityChanged();
+  void smoothedChanged();
 
 protected:
   void geometryChange(const QRectF &new_geometry, const QRectF &old_geometry) override;
@@ -52,10 +57,13 @@ private:
     double seconds{};
     double height{};  // WGS 84 altitude, metres
     double speed{};   // 2D speed, km/h
+    double smooth_height{};
+    double smooth_speed{};
     bool usable{};
   };
 
   void onDataChanged();
+  void smoothSamples();
   void onPositionChanged();
   void seekTo(double x);
   // Sets the visible time window, clamped to the video and to the zoom limits.
@@ -70,6 +78,7 @@ private:
 
   QPointer<PlayerController> player_;
   Quantity quantity_{Height};
+  bool smoothed_{true};
   std::vector<Sample> samples_;
   double duration_{};
   double window_start_{};  // visible time window, seconds

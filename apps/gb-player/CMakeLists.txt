@@ -43,7 +43,7 @@ qt_add_resources(gb_player "gb_player_resources"
     shaders/player.vert)
 
 target_link_libraries(gb_player PRIVATE
-  gb::media gb::telemetry gb::container gb::metadata gb::geo gb::tiles gb_project_options
+  gb::media gb::telemetry gb::container gb::image gb::metadata gb::geo gb::tiles gb_project_options
   Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::Widgets PkgConfig::GB_SDL2)
 target_compile_definitions(gb_player PRIVATE
   GB_PLAYER_VERSION="${PROJECT_VERSION}"

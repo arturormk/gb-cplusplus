@@ -12,7 +12,7 @@
 
 namespace gb::media {
 
-enum class SourceLayout { flat, max_dual_eac };
+enum class SourceLayout { flat, max_dual_eac, equirectangular };
 
 struct PlaybackLayout {
   SourceLayout layout{SourceLayout::flat};
@@ -46,6 +46,10 @@ struct FrameSet {
 
 [[nodiscard]] PlaybackLayout select_playback_layout(const std::vector<VideoStream> &streams);
 [[nodiscard]] std::string source_layout_name(SourceLayout layout);
+// Decodes the first picture of a single-image file (a JPEG photo) as one frame set. Still images
+// are not seekable, so this reads from the start without seeking.
+[[nodiscard]] FrameSet decode_still(const std::filesystem::path &path);
+
 [[nodiscard]] std::int64_t rescale_ticks(std::int64_t ticks, Rational from, Rational to);
 
 // Demuxes a file once and decodes the selected video streams in lockstep. Frames from all

@@ -15,7 +15,8 @@ uniform sampler2D uV1;
 uniform vec2 uSource;      // luma size of the first stream, pixels
 uniform vec2 uSize;        // view size, logical pixels
 uniform int uMode;         // see VideoView::Mode
-uniform int uLayout;       // 0 flat, 1 MAX dual-stream EAC
+uniform int uLayout;       // 0 flat, 1 MAX dual-stream EAC, 2 equirectangular
+uniform vec4 uCrop;        // equirectangular: image rectangle within the full canvas (x, y, w, h), 0..1
 uniform int uHasFrame;
 uniform float uOverlap;
 uniform float uYaw;
@@ -57,6 +58,10 @@ vec3 sampleStream(int stream, vec2 uv) {
 // Pixel-centre coordinates, as used by the CPU reference sampler.
 vec3 samplePixel(int stream, vec2 pixel) {
     return sampleStream(stream, (pixel + 0.5) / uSource);
+}
+
+bool outside(vec2 uv) {
+    return uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0;
 }
 
 float equalAngle(float value) {
@@ -109,6 +114,22 @@ vec3 packedFaceColor(vec3 direction) {
     return mix(first, second, alpha);
 }
 
+// Equirectangular image that covers uCrop of the full 360x180 degree canvas (GPano crop). The
+// canvas centre looks forward; directions outside the image show the background.
+vec3 equirectangularColor(vec3 direction) {
+    float longitude = atan(direction.x, direction.y);
+    float latitude = asin(clamp(direction.z, -1.0, 1.0));
+    vec2 canvas = vec2(longitude / (2.0 * PI) + 0.5, 0.5 - latitude / PI);
+    vec2 uv = (canvas - uCrop.xy) / uCrop.zw;
+    if (uCrop.z >= 1.0) uv.x = fract(uv.x);
+    if (outside(uv)) return BACKGROUND;
+    return sampleStream(0, uv);
+}
+
+vec3 sphereColor(vec3 direction) {
+    return uLayout == 2 ? equirectangularColor(direction) : packedFaceColor(direction);
+}
+
 vec3 rotateView(vec3 value, float pitch) {
     float cr = cos(uRoll);
     float sr = sin(uRoll);
@@ -127,10 +148,6 @@ vec2 fitted(float contentAspect) {
     vec2 scale = viewAspect > contentAspect ? vec2(viewAspect / contentAspect, 1.0)
                                             : vec2(1.0, contentAspect / viewAspect);
     return (vUv - 0.5) * scale / uZoom + uPan + 0.5;
-}
-
-bool outside(vec2 uv) {
-    return uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0;
 }
 
 void main() {
@@ -155,7 +172,7 @@ void main() {
         float latitude = 0.5 * PI - uv.y * PI;
         vec3 direction = vec3(cos(latitude) * sin(longitude), cos(latitude) * cos(longitude),
                               sin(latitude));
-        fragColor = vec4(packedFaceColor(direction), 1.0);
+        fragColor = vec4(sphereColor(direction), 1.0);
         return;
     }
     vec2 point = vec2(vUv.x * 2.0 - 1.0, 1.0 - vUv.y * 2.0);
@@ -179,5 +196,5 @@ void main() {
     }
     vec3 view = normalize(rotateView(ray, uPitch - (mode == 3 ? PI * 0.5 : 0.0)));
     // Camera frame (x right, y up, z forward) to cube frame (x right, y forward, z up).
-    fragColor = vec4(packedFaceColor(vec3(view.x, view.z, view.y)), 1.0);
+    fragColor = vec4(sphereColor(vec3(view.x, view.z, view.y)), 1.0);
 }

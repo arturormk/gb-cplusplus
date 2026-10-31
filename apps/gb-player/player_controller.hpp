@@ -9,6 +9,7 @@
 
 #include <QElapsedTimer>
 #include <QObject>
+#include <QRectF>
 #include <QString>
 #include <QStringList>
 #include <QTimer>
@@ -41,6 +42,9 @@ class PlayerController final : public QObject {
   Q_PROPERTY(QStringList sequenceNames READ sequenceNames NOTIFY fileChanged)
   Q_PROPERTY(int sequenceIndex READ sequenceIndex NOTIFY fileChanged)
   Q_PROPERTY(bool hasMedia READ hasMedia NOTIFY fileChanged)
+  Q_PROPERTY(bool isPhoto READ isPhoto NOTIFY fileChanged)
+  Q_PROPERTY(QRectF panoramaCrop READ panoramaCrop NOTIFY fileChanged)
+  Q_PROPERTY(QVariantList photoRows READ photoRows NOTIFY fileChanged)
   Q_PROPERTY(int sourceLayout READ sourceLayout NOTIFY fileChanged)
   Q_PROPERTY(QString layoutDescription READ layoutDescription NOTIFY fileChanged)
   Q_PROPERTY(int overlap READ overlap NOTIFY fileChanged)
@@ -70,6 +74,7 @@ class PlayerController final : public QObject {
   Q_PROPERTY(QString mapAttribution READ mapAttribution CONSTANT)
   Q_PROPERTY(QString mapAttributionUrl READ mapAttributionUrl CONSTANT)
   Q_PROPERTY(QString mapProviderName READ mapProviderName CONSTANT)
+  Q_PROPERTY(bool exportingTrack READ exportingTrack NOTIFY trackExportChanged)
 
 public:
   explicit PlayerController(PlayerOptions options, QObject *parent = nullptr);
@@ -86,6 +91,11 @@ public:
   [[nodiscard]] QStringList sequenceNames() const;
   [[nodiscard]] int sequenceIndex() const { return sequence_index_; }
   [[nodiscard]] bool hasMedia() const { return engine_.isOpen(); }
+  // A JPEG photo is shown as a still: no transport, one GPS position at most, no track.
+  [[nodiscard]] bool isPhoto() const { return engine_.isStill(); }
+  [[nodiscard]] QRectF panoramaCrop() const { return panorama_crop_; }
+  // Capture settings of an open photo: classification, exposure and GoPro settings.
+  [[nodiscard]] QVariantList photoRows() const { return photo_rows_; }
   [[nodiscard]] int sourceLayout() const;
   [[nodiscard]] QString layoutDescription() const;
   [[nodiscard]] int overlap() const;
@@ -128,6 +138,7 @@ public:
   [[nodiscard]] QString mapAttribution() const;
   [[nodiscard]] QString mapAttributionUrl() const;
   [[nodiscard]] QString mapProviderName() const;
+  [[nodiscard]] bool exportingTrack() const { return exporter_.joinable(); }
 
   Q_INVOKABLE void openDialog();
   Q_INVOKABLE bool open(const QString &path, double start_seconds = 0.0);
@@ -146,6 +157,9 @@ public:
   // each {ticks, timeText, distanceMetres, record, nearestToNow}. ticks are video ticks.
   Q_INVOKABLE QVariantList routeCandidates(double latitude, double longitude, double toleranceMetres) const;
   Q_INVOKABLE void seekTicks(double ticks);
+  // Asks for a format and file, then writes the GPS track of every chapter of the open recording,
+  // in chapter order, in the background. The result is reported in the status line.
+  Q_INVOKABLE void exportTrackDialog();
 
 signals:
   void fileChanged();
@@ -161,12 +175,15 @@ signals:
   void audioChanged();
   void mapRouteChanged();
   void mapPositionChanged();
+  void trackExportChanged();
 
 private:
   struct LoadedMetadata;
   struct Source;
 
+  bool openPhoto(const QString &path);
   void setStatus(const QString &message, bool error = false);
+  void finishTrackExport(const QString &message, bool error);
   void onEndReached();
   void startMetadataLoad(const std::string &path);
   void applyMetadata(std::uint64_t generation, std::shared_ptr<LoadedMetadata> loaded);
@@ -200,6 +217,8 @@ private:
   QVariantList timeline_gaps_;
   QVariantMap gps_coverage_;
   QVariantList file_rows_;
+  QVariantList photo_rows_;
+  QRectF panorama_crop_{0.0, 0.0, 1.0, 1.0};
   QVariantList track_rows_;
   QString gpmf_title_;
   QVariantList gpmf_rows_;
@@ -217,4 +236,8 @@ private:
   std::optional<double> map_course_;
   QString map_state_{QStringLiteral("nomedia")};
   QString map_message_{QStringLiteral("Open a recording to see its GPS route")};
+
+  std::thread exporter_;
+  QString export_directory_;
+  QString export_filter_;
 };

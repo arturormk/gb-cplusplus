@@ -2,20 +2,28 @@
 
 #include "audio_output.hpp"
 #include "gb/container/iso_bmff.hpp"
+#include "gb/image/photo.hpp"
 #include "gb/media/audio.hpp"
 #include "gb/media/chapters.hpp"
 #include "gb/media/playback.hpp"
 #include "gb/metadata/gpmf.hpp"
+#include "gb/telemetry/export.hpp"
 #include "gb/telemetry/telemetry.hpp"
 
+#include <QDir>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QSaveFile>
 #include <QThread>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <exception>
+#include <filesystem>
 #include <limits>
+#include <sstream>
+#include <stdexcept>
 #include <utility>
 
 #ifndef GB_PLAYER_DISPLAY_NAME
@@ -137,6 +145,65 @@ void flatten(const std::vector<gb::metadata::GpmfElement> &elements, const int d
   }
 }
 
+struct TrackFormat {
+  const char *filter;
+  gb::telemetry::ExportFormat format;
+};
+
+// Save-dialog choices, most widely used first.
+constexpr std::array kTrackFormats{
+    TrackFormat{"GPX track (*.gpx)", gb::telemetry::ExportFormat::gpx},
+    TrackFormat{"GeoJSON points (*.geojson)", gb::telemetry::ExportFormat::geojson},
+    TrackFormat{"CSV records (*.csv)", gb::telemetry::ExportFormat::csv},
+    TrackFormat{"gb-telemetry JSON (*.json)", gb::telemetry::ExportFormat::json}};
+
+QString trackExtension(const gb::telemetry::ExportFormat format) {
+  const auto extension = gb::telemetry::export_format_extension(format);
+  return QString::fromLatin1(extension.data(), static_cast<qsizetype>(extension.size()));
+}
+
+const gb::metadata::GpmfElement *findGpmf(const std::vector<gb::metadata::GpmfElement> &elements,
+                                          const std::string &key) {
+  for (const auto &element : elements) {
+    if (element.key == key) return &element;
+    if (const auto *found = findGpmf(element.children, key); found != nullptr) return found;
+  }
+  return nullptr;
+}
+
+std::optional<QString> gpmfValue(const std::vector<gb::metadata::GpmfElement> &elements, const std::string &key) {
+  const auto *element = findGpmf(elements, key);
+  if (element == nullptr || element->values.empty()) return std::nullopt;
+  return QString::fromStdString(element->values.front());
+}
+
+QString exposureTimeText(const gb::image::ExifRational value) {
+  const auto secs = static_cast<double>(value.numerator) / value.denominator;
+  if (secs > 0.0 && secs < 1.0) return QStringLiteral("1/%1 s").arg(std::llround(1.0 / secs));
+  return QStringLiteral("%1 s").arg(secs, 0, 'g', 4);
+}
+
+QString exposureProgramName(const std::uint16_t value) {
+  static constexpr std::array kNames{"not defined", "manual", "program AE", "aperture priority",
+                                     "shutter priority", "creative", "action", "portrait", "landscape"};
+  return value < kNames.size() ? QLatin1String(kNames[value]) : QStringLiteral("recorded value %1").arg(value);
+}
+
+QString meteringModeName(const std::uint16_t value) {
+  static constexpr std::array kNames{"unknown", "average", "centre-weighted average", "spot", "multi-spot",
+                                     "multi-segment", "partial"};
+  return value < kNames.size() ? QLatin1String(kNames[value]) : QStringLiteral("recorded value %1").arg(value);
+}
+
+QString cameraTimeText(QString text) {
+  // EXIF "YYYY:MM:DD HH:MM:SS": the camera's local clock, with no time zone.
+  if (text.size() >= 10) {
+    text[4] = QLatin1Char('-');
+    text[7] = QLatin1Char('-');
+  }
+  return text + QStringLiteral("  (camera clock)");
+}
+
 double percentile(std::vector<double> values, const double fraction) {
   if (values.empty()) return 0.0;
   std::sort(values.begin(), values.end());
@@ -148,7 +215,7 @@ double percentile(std::vector<double> values, const double fraction) {
 
 PlayerController::PlayerController(PlayerOptions options, QObject *parent)
     : QObject(parent), options_(options), source_(std::make_unique<Source>()) {
-  status_ = QStringLiteral("Open a GoPro video to begin");
+  status_ = QStringLiteral("Open a GoPro video or photo to begin");
   connect(&engine_, &PlaybackEngine::frameChanged, this, &PlayerController::onFrameChanged);
   connect(&engine_, &PlaybackEngine::playingChanged, this, &PlayerController::playingChanged);
   connect(&engine_, &PlaybackEngine::audioChanged, this, &PlayerController::audioChanged);
@@ -167,6 +234,7 @@ PlayerController::PlayerController(PlayerOptions options, QObject *parent)
 PlayerController::~PlayerController() {
   engine_.close();
   if (loader_.joinable()) loader_.join();
+  if (exporter_.joinable()) exporter_.join();
 }
 
 QString PlayerController::displayName() const { return QStringLiteral(GB_PLAYER_DISPLAY_NAME); }
@@ -189,7 +257,13 @@ QStringList PlayerController::sequenceNames() const {
 int PlayerController::overlap() const { return source_->layout.overlap; }
 
 int PlayerController::sourceLayout() const {
-  return engine_.isOpen() && source_->layout.layout == gb::media::SourceLayout::max_dual_eac ? 1 : 0;
+  if (!engine_.isOpen()) return 0;
+  switch (source_->layout.layout) {
+  case gb::media::SourceLayout::max_dual_eac: return 1;
+  case gb::media::SourceLayout::equirectangular: return 2;
+  case gb::media::SourceLayout::flat: return 0;
+  }
+  return 0;
 }
 
 QString PlayerController::layoutDescription() const {
@@ -209,7 +283,7 @@ double PlayerController::position() const {
 QString PlayerController::positionText() const { return clockText(position()); }
 
 QString PlayerController::ptsText() const {
-  if (!engine_.isOpen()) return {};
+  if (!engine_.isOpen() || engine_.isStill()) return {};
   const auto base = engine_.timeBase();
   return QStringLiteral("PTS %1 @ %2/%3").arg(engine_.positionTicks()).arg(base.numerator).arg(base.denominator);
 }
@@ -227,12 +301,16 @@ void PlayerController::setStatus(const QString &message, const bool error) {
 void PlayerController::openDialog() {
   const auto selected = QFileDialog::getOpenFileName(
       nullptr, QStringLiteral("Open GoPro media"), QFileInfo(input_path_).absolutePath(),
-      QStringLiteral("GoPro video (*.360 *.MP4 *.mp4 *.MOV *.mov);;All files (*)"));
+      QStringLiteral("GoPro media (*.360 *.MP4 *.mp4 *.MOV *.mov *.JPG *.jpg *.JPEG *.jpeg);;"
+                     "GoPro video (*.360 *.MP4 *.mp4 *.MOV *.mov);;GoPro photo (*.JPG *.jpg *.JPEG *.jpeg);;"
+                     "All files (*)"));
   if (!selected.isEmpty()) open(selected);
 }
 
 bool PlayerController::open(const QString &path, const double start_seconds) {
   const auto source = path.toStdString();
+  // Photos are recognised by their content, not their extension (ADR-0002).
+  if (gb::image::is_jpeg_file(source)) return openPhoto(path);
   try {
     const auto streams = gb::media::video_streams(source);
     const auto layout = gb::media::select_playback_layout(streams);
@@ -265,6 +343,8 @@ bool PlayerController::open(const QString &path, const double start_seconds) {
       audio.stream.reset();
     }
     audio_description_ = QString::fromStdString(audio.description);
+    photo_rows_ = {};
+    panorama_crop_ = QRectF(0.0, 0.0, 1.0, 1.0);
     engine_.open(source, layout, options_.decoder_threads, options_.queue_capacity, start, audio.stream,
                  displayName().toStdString());
   } catch (const std::exception &error) {
@@ -300,14 +380,214 @@ bool PlayerController::open(const QString &path, const double start_seconds) {
   return true;
 }
 
+bool PlayerController::openPhoto(const QString &path) {
+  const auto source = path.toStdString();
+  gb::image::PhotoInspection photo;
+  std::shared_ptr<const gb::media::FrameSet> frames;
+  try {
+    photo = gb::image::inspect_photo(source);
+    frames = std::make_shared<const gb::media::FrameSet>(gb::media::decode_still(source));
+  } catch (const std::exception &error) {
+    setStatus(QStringLiteral("Cannot open %1: %2").arg(QFileInfo(path).fileName(), QString::fromUtf8(error.what())), true);
+    return false;
+  }
+  ++load_generation_;
+  if (loader_.joinable()) loader_.join();
+  metadata_.reset();
+  metadata_loaded_ = true;
+  input_path_ = QFileInfo(path).absoluteFilePath();
+  sequence_paths_.clear();
+  sequence_index_ = 0;
+  audio_description_ = QStringLiteral("a photo has no audio");
+  // Closing the previous media updates the panels for it, so show the photo before filling them.
+  engine_.openStill(std::move(frames));
+
+  const auto &classification = photo.classification;
+  const auto kind = QString::fromStdString(gb::image::field_of_view_name(classification.field_of_view));
+  const auto equirectangular = photo.panorama.has_value() && photo.panorama->projection == "equirectangular";
+  source_->streams.clear();
+  source_->layout = {};
+  source_->layout.layout = equirectangular ? gb::media::SourceLayout::equirectangular : gb::media::SourceLayout::flat;
+  source_->layout.streams = {0};
+  source_->layout.description = QStringLiteral("%1 photo, %2×%3%4")
+                                    .arg(kind)
+                                    .arg(photo.width)
+                                    .arg(photo.height)
+                                    .arg(equirectangular ? QStringLiteral(", equirectangular") : QString())
+                                    .toStdString();
+  panorama_crop_ = QRectF(0.0, 0.0, 1.0, 1.0);
+  if (equirectangular) {
+    const auto &panorama = *photo.panorama;
+    const auto width = static_cast<double>(panorama.full_width);
+    const auto height = static_cast<double>(panorama.full_height);
+    panorama_crop_ = QRectF(panorama.crop_left / width, panorama.crop_top / height, panorama.crop_width / width,
+                            panorama.crop_height / height);
+  }
+
+  // Capture: what kind of photo, and how it was exposed.
+  photo_rows_ = {};
+  const auto missing = [this](const QString &label) {
+    photo_rows_.push_back(row(label, QStringLiteral("not recorded"), QStringLiteral("unavailable")));
+  };
+  photo_rows_.push_back(row(QStringLiteral("Field of view"),
+                            kind + (classification.horizontal_degrees.has_value()
+                                        ? QStringLiteral(" (%1° horizontal)").arg(*classification.horizontal_degrees, 0, 'f', 0)
+                                        : QString()),
+                            classification.field_of_view == gb::image::PhotoFieldOfView::unknown ? QStringLiteral("unavailable")
+                                                                                                 : QStringLiteral("ok")));
+  photo_rows_.push_back(row(QStringLiteral("Evidence"), QString::fromStdString(classification.evidence)));
+  photo_rows_.push_back(row(QStringLiteral("Image size"), QStringLiteral("%1×%2 (%3 MP)")
+                                                              .arg(photo.width)
+                                                              .arg(photo.height)
+                                                              .arg(photo.width * static_cast<double>(photo.height) / 1.0e6, 0, 'f', 1)));
+  if (photo.exif.has_value()) {
+    const auto &exif = *photo.exif;
+    if (exif.date_time_original) photo_rows_.push_back(row(QStringLiteral("Taken"), cameraTimeText(QString::fromStdString(*exif.date_time_original))));
+    else missing(QStringLiteral("Taken"));
+    QStringList camera;
+    if (exif.make) camera << QString::fromStdString(*exif.make);
+    if (exif.model) camera << QString::fromStdString(*exif.model);
+    if (exif.software) camera << QStringLiteral("firmware ") + QString::fromStdString(*exif.software);
+    if (!camera.isEmpty()) photo_rows_.push_back(row(QStringLiteral("Camera"), camera.join(QStringLiteral(", "))));
+    if (exif.exposure_time) photo_rows_.push_back(row(QStringLiteral("Shutter speed"), exposureTimeText(*exif.exposure_time)));
+    else missing(QStringLiteral("Shutter speed"));
+    if (exif.f_number) {
+      photo_rows_.push_back(row(QStringLiteral("Aperture"),
+                                QStringLiteral("f/%1").arg(static_cast<double>(exif.f_number->numerator) / exif.f_number->denominator, 0, 'f', 1)));
+    } else {
+      missing(QStringLiteral("Aperture"));
+    }
+    if (exif.iso) photo_rows_.push_back(row(QStringLiteral("ISO"), QString::number(*exif.iso)));
+    else missing(QStringLiteral("ISO"));
+    if (exif.exposure_bias_ev) {
+      photo_rows_.push_back(row(QStringLiteral("Exposure bias"), QStringLiteral("%1%2 EV")
+                                                                     .arg(*exif.exposure_bias_ev > 0.0 ? QStringLiteral("+") : QString())
+                                                                     .arg(*exif.exposure_bias_ev, 0, 'f', 1)));
+    }
+    if (exif.exposure_program) photo_rows_.push_back(row(QStringLiteral("Exposure program"), exposureProgramName(*exif.exposure_program)));
+    if (exif.metering_mode) photo_rows_.push_back(row(QStringLiteral("Metering"), meteringModeName(*exif.metering_mode)));
+    if (exif.white_balance) {
+      photo_rows_.push_back(row(QStringLiteral("White balance"),
+                                *exif.white_balance == 0U ? QStringLiteral("auto") : QStringLiteral("manual")));
+    }
+    if (exif.focal_length_mm) {
+      photo_rows_.push_back(row(QStringLiteral("Focal length"),
+                                QStringLiteral("%1 mm%2")
+                                    .arg(*exif.focal_length_mm, 0, 'f', 1)
+                                    .arg(exif.focal_length_35mm ? QStringLiteral("  (%1 mm in 35 mm terms)").arg(*exif.focal_length_35mm)
+                                                                : QString())));
+    }
+  } else {
+    photo_rows_.push_back(row(QStringLiteral("EXIF"), photo.exif_error.empty() ? QStringLiteral("not present")
+                                                                               : QString::fromStdString(photo.exif_error),
+                              QStringLiteral("unavailable")));
+  }
+  if (photo.gopro.has_value()) {
+    const auto &gopro = *photo.gopro;
+    const auto &elements = gopro.elements;
+    if (gopro.resolution) photo_rows_.push_back(row(QStringLiteral("GoPro resolution"), QString::fromStdString(*gopro.resolution)));
+    if (gopro.projection) photo_rows_.push_back(row(QStringLiteral("GoPro projection"), QString::fromStdString(*gopro.projection)));
+    if (gopro.field_of_view) {
+      photo_rows_.push_back(row(QStringLiteral("GoPro field of view"), QStringLiteral("%1°").arg(*gopro.field_of_view, 0, 'f', 1)));
+    }
+    if (gopro.stabilization) photo_rows_.push_back(row(QStringLiteral("Stabilization"), QString::fromStdString(*gopro.stabilization)));
+    const auto iso_min = gpmfValue(elements, "PIMN");
+    const auto iso_max = gpmfValue(elements, "PIMX");
+    if (iso_min && iso_max) photo_rows_.push_back(row(QStringLiteral("Auto ISO range"), *iso_min + QStringLiteral("–") + *iso_max));
+    static constexpr std::array<std::pair<const char *, const char *>, 7> kSettings{{
+        {"PRTN", "Protune"},
+        {"PTWB", "Protune white balance"},
+        {"PTCL", "Protune colour"},
+        {"PTSH", "Protune sharpness"},
+        {"PTEV", "Protune EV"},
+        {"EXPT", "Shutter limit"},
+        {"PHDR", "HDR"}}};
+    for (const auto &[key, label] : kSettings) {
+      if (const auto value = gpmfValue(elements, key); value.has_value()) {
+        photo_rows_.push_back(row(QLatin1String(label), *value));
+      }
+    }
+    if (!gopro.parse_error.empty()) {
+      photo_rows_.push_back(row(QStringLiteral("GoPro metadata"), QString::fromStdString(gopro.parse_error), QStringLiteral("invalid")));
+    }
+  }
+
+  // Telemetry: the single position recorded with the photo, if any.
+  telemetry_state_ = QStringLiteral("photo");
+  telemetry_rows_ = {};
+  map_route_.clear();
+  if (photo.gps.has_value()) {
+    const auto &gps = *photo.gps;
+    telemetry_rows_.push_back(gps.utc ? row(QStringLiteral("GPS UTC"), QString::fromStdString(*gps.utc))
+                                      : row(QStringLiteral("GPS UTC"), unavailable(), QStringLiteral("unavailable")));
+    telemetry_rows_.push_back(row(QStringLiteral("Latitude"), number(gps.latitude, 7) + QStringLiteral("°")));
+    telemetry_rows_.push_back(row(QStringLiteral("Longitude"), number(gps.longitude, 7) + QStringLiteral("°")));
+    telemetry_rows_.push_back(gps.altitude ? row(QStringLiteral("Altitude"), number(*gps.altitude, 3) + QStringLiteral(" m"))
+                                           : row(QStringLiteral("Altitude"), unavailable(), QStringLiteral("unavailable")));
+    if (gps.dop) telemetry_rows_.push_back(row(QStringLiteral("DOP"), number(*gps.dop, 2)));
+    if (gps.speed_mps) telemetry_rows_.push_back(row(QStringLiteral("Speed"), speedText(*gps.speed_mps)));
+    map_route_.push_back({{gps.latitude, gps.longitude}, 0, true});
+  } else {
+    telemetry_rows_.push_back(row(QStringLiteral("GPS"), unavailable() + QStringLiteral(" — the photo records no position"),
+                                  QStringLiteral("unavailable")));
+  }
+  timeline_samples_ = {};
+  timeline_gaps_ = {};
+  gps_coverage_ = {};
+  track_rows_ = {};
+  gpmf_sample_.reset();
+  gpmf_rows_ = {};
+  if (photo.gopro.has_value()) {
+    flatten(photo.gopro->elements, 0, gpmf_rows_);
+    gpmf_title_ = QStringLiteral("GoPro APP6 segment, %1 entries").arg(gpmf_rows_.size());
+  } else {
+    gpmf_title_ = QStringLiteral("No GoPro APP6 metadata");
+  }
+
+  buildFileRows();
+  file_rows_.push_back(row(QStringLiteral("JPEG codestreams"),
+                           QStringLiteral("%1 (the first is shown; later ones are previews)").arg(photo.jpeg.images.size())));
+  if (photo.exif) file_rows_.push_back(row(QStringLiteral("EXIF byte order"), QString::fromStdString(photo.exif->byte_order)));
+  if (photo.panorama) {
+    const auto &panorama = *photo.panorama;
+    file_rows_.push_back(row(QStringLiteral("GPano"), QStringLiteral("%1, crop %2×%3 at (%4, %5) of %6×%7%8")
+                                                          .arg(QString::fromStdString(panorama.projection))
+                                                          .arg(panorama.crop_width)
+                                                          .arg(panorama.crop_height)
+                                                          .arg(panorama.crop_left)
+                                                          .arg(panorama.crop_top)
+                                                          .arg(panorama.full_width)
+                                                          .arg(panorama.full_height)
+                                                          .arg(panorama.source_photos
+                                                                   ? QStringLiteral(", %1 source photos").arg(*panorama.source_photos)
+                                                                   : QString())));
+  }
+  diagnostics_timer_.start();
+  emit fileChanged();
+  emit audioChanged();
+  emit telemetryChanged();
+  emit timelineChanged();
+  emit metadataChanged();
+  emit gpmfChanged();
+  emit positionChanged();
+  emit mapRouteChanged();
+  if (photo.gps.has_value()) setMapPosition(QStringLiteral("valid"), QString(), std::size_t{0}, std::nullopt);
+  else setMapPosition(QStringLiteral("none"), QStringLiteral("No GPS position in this photo"), std::nullopt, std::nullopt);
+  setStatus(QString::fromStdString(source_->layout.description));
+  return true;
+}
+
 void PlayerController::buildFileRows() {
   file_rows_ = {};
   const QFileInfo info(input_path_);
   file_rows_.push_back(row(QStringLiteral("File"), info.fileName()));
   file_rows_.push_back(row(QStringLiteral("Size"), QStringLiteral("%L1 bytes").arg(info.size())));
   file_rows_.push_back(row(QStringLiteral("Access"), QStringLiteral("read-only")));
-  file_rows_.push_back(row(QStringLiteral("Playback layout"), QString::fromStdString(source_->layout.description)));
-  if (engine_.hasAudio()) {
+  file_rows_.push_back(row(engine_.isStill() ? QStringLiteral("Photo") : QStringLiteral("Playback layout"),
+                           QString::fromStdString(source_->layout.description)));
+  if (engine_.isStill()) {
+    // A photo has no audio.
+  } else if (engine_.hasAudio()) {
     file_rows_.push_back(row(QStringLiteral("Audio"), audio_description_));
   } else {
     auto reason = audio_description_;
@@ -439,6 +719,8 @@ void PlayerController::applyMetadata(const std::uint64_t generation, std::shared
 
 void PlayerController::onFrameChanged() {
   emit positionChanged();
+  // A photo's rows are built once when it opens.
+  if (engine_.isStill()) return;
   updateTelemetry();
   updateGpmfSample();
 }
@@ -544,7 +826,7 @@ QVariantList PlayerController::routeCandidates(const double latitude, const doub
   QVariantList result;
   const auto *telemetry = metadata_ && metadata_->telemetry ? &*metadata_->telemetry : nullptr;
   const auto telemetry_base = telemetry != nullptr ? mediaRational(telemetry->time_base) : std::nullopt;
-  if (!engine_.isOpen() || !telemetry_base.has_value()) return result;
+  if (!engine_.isOpen() || engine_.isStill() || !telemetry_base.has_value()) return result;
   const auto candidates = gb::geo::route_candidates(map_route_, {latitude, longitude}, tolerance_metres);
   const auto now = engine_.positionTicks();
   const auto last = std::max<std::int64_t>(0, engine_.durationTicks() - 1);
@@ -575,6 +857,101 @@ void PlayerController::seekTicks(const double ticks) {
   if (!engine_.isOpen() || !std::isfinite(ticks)) return;
   const auto last = std::max<std::int64_t>(0, engine_.durationTicks() - 1);
   engine_.seek(std::clamp<std::int64_t>(std::llround(ticks), 0, last));
+}
+
+void PlayerController::exportTrackDialog() {
+  if (exportingTrack() || input_path_.isEmpty() || engine_.isStill()) return;
+  const auto chapters = sequence_paths_.isEmpty() ? QStringList{input_path_} : sequence_paths_;
+  QStringList filters;
+  for (const auto &choice : kTrackFormats) filters.push_back(QString::fromLatin1(choice.filter));
+  const auto chosenFormat = [&filters](const QString &filter) {
+    return kTrackFormats[static_cast<std::size_t>(std::max<qsizetype>(0, filters.indexOf(filter)))].format;
+  };
+  if (!filters.contains(export_filter_)) export_filter_ = filters.front();
+
+  const QFileInfo first(chapters.front());
+  QFileDialog dialog(nullptr, chapters.size() > 1
+                                  ? QStringLiteral("Export GPS track of %1 chapters").arg(chapters.size())
+                                  : QStringLiteral("Export GPS track"));
+  dialog.setAcceptMode(QFileDialog::AcceptSave);
+  dialog.setFileMode(QFileDialog::AnyFile);
+  dialog.setNameFilters(filters);
+  dialog.selectNameFilter(export_filter_);
+  dialog.setDefaultSuffix(trackExtension(chosenFormat(export_filter_)));
+  dialog.setDirectory(export_directory_.isEmpty() ? first.absolutePath() : export_directory_);
+  dialog.selectFile(first.completeBaseName() + QLatin1Char('.') + trackExtension(chosenFormat(export_filter_)));
+  connect(&dialog, &QFileDialog::filterSelected, &dialog,
+          [&dialog, &chosenFormat](const QString &filter) {
+            dialog.setDefaultSuffix(trackExtension(chosenFormat(filter)));
+          });
+  if (dialog.exec() != QDialog::Accepted || dialog.selectedFiles().isEmpty()) return;
+
+  const auto target = QFileInfo(dialog.selectedFiles().front()).absoluteFilePath();
+  export_filter_ = dialog.selectedNameFilter();
+  export_directory_ = QFileInfo(target).absolutePath();
+  // A typed known extension decides the format; otherwise the chosen file type does.
+  auto format = gb::telemetry::parse_export_format(QFileInfo(target).suffix().toLower().toStdString());
+  if (!format.has_value()) format = chosenFormat(export_filter_);
+  for (const auto &chapter : chapters) {
+    if (QFileInfo(chapter).canonicalFilePath() == QFileInfo(target).canonicalFilePath()) {
+      setStatus(QStringLiteral("Refusing to overwrite the recording %1").arg(QFileInfo(chapter).fileName()), true);
+      return;
+    }
+  }
+
+  // The open chapter's GPS records are already extracted; the others are read in the background.
+  std::optional<gb::telemetry::Extraction> loaded;
+  if (metadata_ && metadata_->telemetry.has_value()) loaded = metadata_->telemetry;
+  std::vector<std::filesystem::path> paths;
+  for (const auto &chapter : chapters) paths.emplace_back(chapter.toStdString());
+  const auto loaded_path = input_path_.toStdString();
+  setStatus(QStringLiteral("Exporting GPS track to %1…").arg(QDir::toNativeSeparators(target)));
+  exporter_ = std::thread([this, paths, loaded = std::move(loaded), loaded_path, target, format = *format] {
+    QThread::currentThread()->setPriority(QThread::LowPriority);
+    QString message;
+    auto error = false;
+    std::vector<gb::telemetry::ExportSource> sources;
+    std::size_t records{};
+    const auto keeps_invalid = format == gb::telemetry::ExportFormat::json || format == gb::telemetry::ExportFormat::csv;
+    try {
+      for (const auto &path : paths) {
+        try {
+          auto extraction = loaded.has_value() && path == loaded_path ? *loaded : gb::telemetry::extract(path);
+          for (const auto &point : extraction.gps) {
+            if (keeps_invalid || point.validity == gb::telemetry::Validity::valid) ++records;
+          }
+          sources.push_back({path, std::move(extraction)});
+        } catch (const std::exception &failure) {
+          throw std::runtime_error(path.filename().string() + ": " + failure.what());
+        }
+      }
+      std::ostringstream document;
+      gb::telemetry::write_export(document, sources, {format, false});
+      const auto bytes = std::move(document).str();
+      QSaveFile file(target);
+      if (!file.open(QIODevice::WriteOnly) ||
+          file.write(bytes.data(), static_cast<qint64>(bytes.size())) != static_cast<qint64>(bytes.size()) ||
+          !file.commit()) {
+        throw std::runtime_error(file.errorString().toStdString());
+      }
+      message = QStringLiteral("Exported %L1 GPS records%2 to %3")
+                    .arg(records)
+                    .arg(paths.size() > 1U ? QStringLiteral(" from %1 chapters").arg(paths.size()) : QString())
+                    .arg(QDir::toNativeSeparators(target));
+    } catch (const std::exception &failure) {
+      message = QStringLiteral("GPS track export failed: %1").arg(QString::fromUtf8(failure.what()));
+      error = true;
+    }
+    QMetaObject::invokeMethod(this, [this, message, error] { finishTrackExport(message, error); },
+                              Qt::QueuedConnection);
+  });
+  emit trackExportChanged();
+}
+
+void PlayerController::finishTrackExport(const QString &message, const bool error) {
+  if (exporter_.joinable()) exporter_.join();
+  setStatus(message, error);
+  emit trackExportChanged();
 }
 
 void PlayerController::updateGpmfSample() {
@@ -763,12 +1140,13 @@ void PlayerController::togglePlay() {
 }
 
 void PlayerController::play() {
-  if (!engine_.isOpen()) return;
+  if (!engine_.isOpen() || engine_.isStill()) return;
   engine_.play();
   setStatus(QStringLiteral("Playing — %1").arg(QString::fromStdString(source_->layout.description)));
 }
 
 void PlayerController::pause() {
+  if (engine_.isStill()) return;
   engine_.pause();
   if (engine_.isOpen()) setStatus(QStringLiteral("Paused at %1").arg(positionText()));
 }
@@ -786,7 +1164,7 @@ void PlayerController::beginScrub() { engine_.setScrubbing(true); }
 void PlayerController::endScrub() { engine_.setScrubbing(false); }
 
 void PlayerController::stepFrames(const int frames) {
-  if (!engine_.isOpen()) return;
+  if (!engine_.isOpen() || engine_.isStill()) return;
   engine_.pause();
   engine_.seek(engine_.positionTicks() + static_cast<std::int64_t>(frames) * engine_.frameDurationTicks());
 }

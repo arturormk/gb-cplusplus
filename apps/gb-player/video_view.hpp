@@ -2,6 +2,7 @@
 
 #include <QPointer>
 #include <QQuickItem>
+#include <QRectF>
 
 class PlaybackEngine;
 
@@ -13,6 +14,8 @@ class VideoView : public QQuickItem {
   Q_PROPERTY(int mode READ mode WRITE setMode NOTIFY viewChanged)
   Q_PROPERTY(int sourceLayout READ sourceLayout WRITE setSourceLayout NOTIFY viewChanged)
   Q_PROPERTY(int overlap READ overlap WRITE setOverlap NOTIFY viewChanged)
+  // Equirectangular layout: where the image lies in the full 360×180° canvas, in canvas units.
+  Q_PROPERTY(QRectF panoramaCrop READ panoramaCrop WRITE setPanoramaCrop NOTIFY viewChanged)
   Q_PROPERTY(double yaw READ yaw WRITE setYaw NOTIFY viewChanged)
   Q_PROPERTY(double pitch READ pitch WRITE setPitch NOTIFY viewChanged)
   Q_PROPERTY(double roll READ roll WRITE setRoll NOTIFY viewChanged)
@@ -45,6 +48,8 @@ public:
   void setSourceLayout(int value);
   [[nodiscard]] int overlap() const { return overlap_; }
   void setOverlap(int value);
+  [[nodiscard]] QRectF panoramaCrop() const { return panorama_crop_; }
+  void setPanoramaCrop(const QRectF &value);
   [[nodiscard]] double yaw() const { return yaw_; }
   void setYaw(double value);
   [[nodiscard]] double pitch() const { return pitch_; }
@@ -78,6 +83,7 @@ private:
   int mode_{Rectilinear};
   int source_layout_{};
   int overlap_{};
+  QRectF panorama_crop_{0.0, 0.0, 1.0, 1.0};
   double yaw_{};
   double pitch_{};
   double roll_{};

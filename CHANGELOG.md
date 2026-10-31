@@ -11,6 +11,11 @@ First public release: a minimum usable product for GoPro MAX 2025 recordings on 
 - `gb-player`: plays original MAX `.360` files directly with GPU spherical viewing, accurate
   seeking, synchronized telemetry and metadata panels, and audio that plays only during stable
   playback. It shows a live OpenStreetMap route map with click-to-seek and has a benchmark mode.
+  It opens MAX JPEG photos, recognised by content, with spherical views for 360° and superwide
+  photos, their EXIF position on the map, and their capture settings (ADR-0011). A Square toggle
+  keeps the fisheye-family image circle round. The height/speed graph is smoothed over a centred
+  3-second window, with a toggle for the raw records. Video now stays in step with audio after a
+  screen lock, and `GB_PLAYER_TRACE=1` prints a timing trace.
 - `gb-inspect`: ISO BMFF container and content-based JPEG inspection.
 - `gb-metadata`: GPMF metadata inventory, sample decoding, and raw payload export.
 - `gb-telemetry`: timestamped GPS export to JSON, CSV, GPX, and GeoJSON.

@@ -15,6 +15,7 @@ Architecture decisions are stored as individual records under [`adr/`](adr/):
 - [ADR-0007: Native player playback architecture](adr/0007-native-player-playback-architecture.md)
 - [ADR-0008: Player audio output, audio-master clock and stable-playback gating](adr/0008-player-audio-and-stable-playback-gating.md)
 - [ADR-0009: Player map, tile providers and tile cache](adr/0009-player-map-tiles-and-route.md)
+- [ADR-0011: Photos in the player](adr/0011-player-photos.md)
 
 ## Current boundaries
 
@@ -37,7 +38,9 @@ Architecture decisions are stored as individual records under [`adr/`](adr/):
 - `gb_tiles` (Qt Core and Network) fetches tiles for an interactive view through the `gb_geo`
   cache. It sends conditional requests, limits concurrency, and never prefetches.
 - `gb_container` performs bounded, read-only ISO BMFF structural inspection.
-- `gb_image` performs bounded, read-only JPEG marker and codestream inspection.
+- `gb_image` performs bounded, read-only JPEG marker and codestream inspection. It interprets
+  EXIF (including GPS), XMP GPano crop geometry and the GoPro APP6 GPMF segment of photos, and
+  classifies their field of view from that evidence (ADR-0011).
 - `gb_metadata` performs bounded, loss-aware GPMF KLV parsing and normalization.
 - `gb_telemetry` assigns recorded GPS fields to checked presentation ticks, classifies fix
   validity, retains timing uncertainty, and exposes GPSU anchors without inventing positions.
@@ -54,8 +57,8 @@ Architecture decisions are stored as individual records under [`adr/`](adr/):
 - The current parsers require seekable regular files; pipes and remote inputs are out of scope.
 - Some ISO BMFF boxes contain internal headers or counted records and intentionally remain opaque
   until dedicated parsers and fixtures are available.
-- JPEG metadata payloads are identified structurally but EXIF, XMP, MPF, and APP6 fields are not
-  yet interpreted by the project libraries.
+- Only selected EXIF fields and the XMP GPano crop are interpreted; MPF entries are not. Linear and
+  narrow photo classification is mapped by analogy and unverified (ADR-0011).
 - GPMF complex and compressed values are raw-preserved but not interpreted. GPS5 is mapped to
   GPSU UTC anchors, but sensor capture time, TimeWarp cadence, GPS9, and edit lists remain open.
 - The project license remains unresolved. FFmpeg and Qt 6 are now required; enabled codec/build

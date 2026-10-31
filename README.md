@@ -17,7 +17,8 @@ have met their gates. `gb-frames` provides exact native frame extraction and det
 original MAX `.360` recordings directly, with GPU spherical viewing, accurate seeking, synchronized
 telemetry and metadata panels, synchronized audio that plays only during stable playback (never
 while scrubbing or seeking), a live OpenStreetMap route map with click-to-seek, and performance
-diagnostics.
+diagnostics. It also opens MAX JPEG photos, with spherical viewing for 360° and superwide photos,
+their EXIF position on the map, and their capture settings.
 
 ![gb-player playing a GoPro recording of a dirt track, with the OpenStreetMap route map and the
 synchronized GPS telemetry panel on the right](docs/screenshots/gb-player.jpg)

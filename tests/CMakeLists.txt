@@ -4,6 +4,9 @@ target_link_libraries(gb_container_tests PRIVATE gb::container gb_project_option
 add_executable(gb_image_tests unit/jpeg_test.cpp)
 target_link_libraries(gb_image_tests PRIVATE gb::image gb_project_options)
 
+add_executable(gb_photo_tests unit/photo_test.cpp)
+target_link_libraries(gb_photo_tests PRIVATE gb::image gb_project_options)
+
 add_executable(gb_metadata_tests unit/gpmf_test.cpp)
 target_link_libraries(gb_metadata_tests PRIVATE gb::metadata gb_project_options)
 
@@ -33,6 +36,7 @@ add_test(NAME gb_geo_tests COMMAND gb_geo_tests)
 add_test(NAME gb_tiles_tests COMMAND gb_tiles_tests)
 set_tests_properties(gb_tiles_tests PROPERTIES TIMEOUT 60)
 add_test(NAME gb_image_tests COMMAND gb_image_tests)
+add_test(NAME gb_photo_tests COMMAND gb_photo_tests)
 add_test(NAME gb_metadata_tests COMMAND gb_metadata_tests)
 add_test(NAME gb_media_tests COMMAND gb_media_tests)
 add_test(NAME gb_chapters_tests COMMAND gb_chapters_tests)

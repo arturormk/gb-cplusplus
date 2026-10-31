@@ -1,7 +1,10 @@
+#include "gb/telemetry/export.hpp"
 #include "gb/telemetry/telemetry.hpp"
 
 #include <cmath>
 #include <iostream>
+#include <sstream>
+#include <string>
 #include <vector>
 
 int main(const int argc, char **argv) {
@@ -77,6 +80,62 @@ int main(const int argc, char **argv) {
         nearest(301) != 400 || nearest(10000) != 400 ||
         gb::telemetry::nearest_point(gb::telemetry::Extraction{}, 0) != nullptr) {
       std::cerr << "unexpected nearest GPS record policy\n";
+      return 1;
+    }
+
+    // Chapters export in the given order as one document; each keeps its own media times.
+    auto second = result;
+    second.gps.front().latitude = 41.5L;
+    second.gps.push_back(second.gps.front());
+    second.gps.back().validity = gb::telemetry::Validity::invalid;
+    const std::vector<gb::telemetry::ExportSource> chapters{{"/media/GS010047.360", result},
+                                                            {"/media/GS020047.360", second}};
+    const auto render = [](const std::vector<gb::telemetry::ExportSource> &sources,
+                           const gb::telemetry::ExportFormat format) {
+      std::ostringstream output;
+      gb::telemetry::write_export(output, sources, {format, false});
+      return output.str();
+    };
+    const auto count = [](const std::string &text, const std::string &needle) {
+      std::size_t found{};
+      for (auto at = text.find(needle); at != std::string::npos; at = text.find(needle, at + 1U)) ++found;
+      return found;
+    };
+    const auto ordered = [](const std::string &text, const std::string &before, const std::string &after) {
+      const auto first = text.find(before);
+      return first != std::string::npos && text.find(after, first) != std::string::npos;
+    };
+    const auto sequence_gpx = render(chapters, gb::telemetry::ExportFormat::gpx);
+    const auto sequence_json = render(chapters, gb::telemetry::ExportFormat::json);
+    const auto sequence_csv = render(chapters, gb::telemetry::ExportFormat::csv);
+    const auto sequence_geojson = render(chapters, gb::telemetry::ExportFormat::geojson);
+    const auto single_gpx = render({chapters.front()}, gb::telemetry::ExportFormat::gpx);
+    if (count(sequence_gpx, "<trkseg>") != 2U || count(sequence_gpx, "<trkpt") != 2U ||
+        !ordered(sequence_gpx, "lat=\"40.1234567\"", "lat=\"41.5\"") ||
+        !ordered(sequence_gpx, "<gb:source>GS010047.360</gb:source>", "<gb:source>GS020047.360</gb:source>") ||
+        sequence_gpx.find("<name>GS010047.360 to GS020047.360</name>") == std::string::npos ||
+        count(single_gpx, "<trkseg>") != 1U || single_gpx.find("gb:source") != std::string::npos ||
+        sequence_json.find("\"schema\": \"gb.telemetry.sequence/v1\"") == std::string::npos ||
+        count(sequence_json, "\"schema\": \"gb.telemetry/v1\"") != 2U ||
+        !ordered(sequence_json, "GS010047.360", "GS020047.360") ||
+        count(sequence_json, "\"value_status\"") != 3U ||
+        sequence_csv.rfind("source_file,media_time_ticks,", 0) != 0U ||
+        count(sequence_csv, "\nGS020047.360,") != 2U || count(sequence_csv, "\nGS010047.360,") != 1U ||
+        count(sequence_geojson, "\"type\":\"Feature\"") != 2U ||
+        !ordered(sequence_geojson, "\"source_file\":\"GS010047.360\"", "\"source_file\":\"GS020047.360\"")) {
+      std::cerr << "unexpected chapter sequence export\n";
+      return 1;
+    }
+    auto threw = false;
+    try {
+      std::ostringstream ignored;
+      gb::telemetry::write_export(ignored, {}, {});
+    } catch (const std::invalid_argument &) {
+      threw = true;
+    }
+    if (!threw || gb::telemetry::parse_export_format("kml").has_value() ||
+        gb::telemetry::parse_export_format("geojson") != gb::telemetry::ExportFormat::geojson) {
+      std::cerr << "unexpected export argument handling\n";
       return 1;
     }
     return 0;

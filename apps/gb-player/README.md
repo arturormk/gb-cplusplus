@@ -23,7 +23,14 @@ recordings read-only and plays them without conversion:
   When the opened file is one of several chapters in its folder, the toolbar's file name becomes a
   drop-down listing them in order; choosing one opens it from the start, playing if playback was
   running. When playback reaches the end of a chapter, the next one opens and plays. Each chapter
-  stays a separate file: timeline, telemetry and map cover only the open one.
+  stays a separate file: timeline, telemetry and map cover only the open one (GPS track export
+  covers them all).
+- **Photos**: MAX JPEG photos open as a still image, recognised by content rather than file
+  name. Equirectangular photos, which carry an XMP GPano crop, get the spherical views: the 360°
+  `GS__nnnn.JPG` and the superwide `GP__nnnn.JPG`, which is a 270°×90° crop of the 360° canvas.
+  Outside the crop the view shows the background. Other photos, such as the single-lens wide
+  `GP__nnnn.JPG`, are shown flat with zoom and pan. There is no transport, timeline, height/speed
+  graph or audio. See [Photos](#photos) and ADR-0011.
 
 ## Use
 
@@ -35,6 +42,7 @@ gb-player --benchmark 60 --seeks 20 --time 60 recording.360 > benchmark.json
 gb-player --screenshot view.png --time 5 recording.360
 gb-player --map-no-network recording.360        # cached map tiles only
 gb-player --map-cache /tmp/tiles recording.360  # use another tile cache
+gb-player --view panorama GS__0033.JPG           # a 360° photo
 ```
 
 | Input | Action |
@@ -47,6 +55,7 @@ gb-player --map-cache /tmp/tiles recording.360  # use another tile cache
 | Timeline press and drag | scrub: frames follow the pointer, clock held, audio silent until release + 250 ms |
 | M | mute / unmute (the audio clock keeps running) |
 | R / F / Ctrl+O | reset view / full screen / open file |
+| S, toolbar Square | square view, so the fisheye-family image circle is round |
 | Toolbar chapter drop-down | open another chapter of the recording |
 | Map: drag, wheel, `+` / `−` | pan (stops following), zoom |
 | Map: click on the route | seek there; if the route passes several times, choose the time |
@@ -71,6 +80,16 @@ the requested time. Frame stepping and the timeline both use the first stream's 
   them. Click or drag on the graph to seek. The mouse wheel zooms the time axis around the
   pointer, from the whole recording down to 30 seconds, and dragging with the middle button pans;
   the view never extends past the start or end of the video.
+  Both graphs are smoothed: each value is the mean of the records within a centred 3-second
+  window, never reaching across a break in the line. The jagged-line button left of the export
+  button shows the raw records instead. The value axis stays the same, so the raw and smoothed
+  curves can be compared.
+  The square button at the right of the Height/Speed tabs exports the GPS track as GPX, GeoJSON,
+  CSV or JSON, the formats of `gb-telemetry`: pick the file type and name in the save dialog. For
+  a chaptered recording the export always covers every chapter, in chapter order, in one file; see
+  [`gb-telemetry`](../../tools/gb-telemetry/README.md) for how chapters are represented. GPX and
+  GeoJSON omit records without a valid fix. The export runs in the background and its result is
+  shown in the status line.
 - **Metadata**: file and stream properties, the ISO BMFF track table, and the GPMF tree of the
   `gpmd` sample covering the playback time. Unknown keys are flagged.
 - **Performance**: displayed, presented and decoded rates, dropped frames (late or not drawn),
@@ -80,6 +99,30 @@ the requested time. Frame stepping and the timeline both use the first stream's 
   latency estimate, audio underruns, and alignment counters.
 
 The timeline marks `gpmd` sample positions, GPS coverage, and reported telemetry gaps.
+
+## Photos
+
+For a photo, the panels show what the file records about its capture:
+
+- **Telemetry**: the EXIF GPS position (UTC, latitude, longitude, altitude, and DOP and speed
+  when present). It is a single position, with no track. Then **Camera**: the field-of-view class
+  and the evidence for it, image size, capture time from the camera clock (EXIF has no time
+  zone), camera and firmware, shutter speed, aperture, ISO, exposure bias, program, metering, white
+  balance and focal length. GoPro settings from the APP6 segment follow: resolution, projection,
+  field of view, stabilization, auto-ISO range and Protune. A value the photo does not record is
+  marked "not recorded". MAX superwide and 360 photos, for example, carry no EXIF shutter speed
+  or ISO.
+- **Metadata**: file properties, JPEG codestream count (the second is the camera's preview),
+  EXIF byte order, the GPano crop, and the full GoPro APP6 GPMF tree.
+- **Map**: the photo's position as a single marker, without route, start, end or direction. A
+  photo without EXIF GPS shows a message.
+
+The field of view is classified as follows. A GPano equirectangular crop covering the whole
+canvas is **360°**; a narrower crop is **superwide**, with its horizontal angle. Otherwise the
+GoPro projection (`PRJT`: `ERP0` 360°, `PANO` superwide) decides, and failing that the lens letter
+ending the GoPro resolution (`PRES`, for example `5.5MP_W`): **wide**, **linear** or **narrow**.
+The MAX's "normal" photo mode records the wide lens. Only `W` has been seen in a real file; `L`
+and `N` are inferred.
 
 ## Map
 
@@ -137,16 +180,34 @@ seek it must match exactly. The section also gives tile cache and request counts
 contains no telemetry values. A benchmark never continues into the next chapter. Results describe
 the machine they were measured on; see `research/findings/` for recorded runs.
 
+## Timing trace
+
+Set `GB_PLAYER_TRACE=1` to print one line a second to standard error while a recording is open:
+
+```sh
+GB_PLAYER_TRACE=1 gb-player --play recording.360 2> trace.log
+```
+
+Each line shows whether playback and audio are active, how often the GUI thread ran
+(`frame_ticks` from the scene graph, `timer_ticks` from the engine timer, `max_gap_ms` for the
+longest wait between them), the frame sets presented and dropped as late, the decode queue depth,
+and how far the presented picture is behind the playback clock (`video_behind_ms`). It is meant
+for diagnosing playback that falls behind its audio; see
+`docs/incidents/2026-10-31-video-lag-after-screen-lock.md`.
+
 ## Requirements and limitations
 
 - Requires an OpenGL 3.3 (or OpenGL ES 3.0) Qt Quick scene graph for the picture. With the
   software backend, decoding, presentation and telemetry still work, but no image is shown.
 - Audio: the first mono or stereo stream plays through SDL2 (`--no-audio` disables it). The MAX
   four-channel spatial track is not rendered. Hardware decoding (VA-API), edit lists,
-  a joined timeline across chapters, photos, and export are not implemented.
+  a joined timeline across chapters, and video export are not implemented.
+- Photos: only the first JPEG codestream is shown; other MPF entries are ignored. The APP6
+  camera orientation is listed but not applied to the view. Linear and narrow lens
+  classification is unverified (ADR-0011).
 - The map is raster only, and tiles can look soft on HiDPI screens. Routes crossing the
   antimeridian are not drawn across it. The tile cache is never pruned automatically.
 - MAX reconstruction requires the verified two-stream geometry. The near-black `BACK` face of the
   fingerprinted sample is shown as recorded.
 - Fisheye-family views keep the shared reference convention of normalizing each axis separately,
-  so non-square views are elliptical.
+  so non-square views are elliptical unless the Square toggle is on.

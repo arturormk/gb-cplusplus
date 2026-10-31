@@ -211,6 +211,24 @@ the structural presence of EXIF, XMP, MPF, and APP6 without exposing their priva
 Measured warm-cache runs took approximately 0.02–0.05 seconds per photo with about 3.6–3.8 MiB
 maximum RSS. This measurement describes these samples and development hardware only.
 
+### Photo metadata follow-up (2026-10-30)
+
+The `gb_image` photo parser (ADR-0011) reproduces ExifTool's EXIF, GPS presence, GPano and APP6
+values for all three photos. The GoPro APP6 segment is `GoPro\0` followed by GPMF. Its
+"Global Settings" device records the field of view directly:
+
+| Photo | `PRJT` | `PRES` | `ZFOV` | `MTYP` |
+|---|---|---|---|---:|
+| Normal `GP__0011.JPG` | `GPRO` | `5.5MP_W` | 148.4° | 11 |
+| Superwide `GP__0026.JPG` | `PANO` | `6.2MP_P` | 360° | 11 |
+| 360 `GS__0033.JPG` | `ERP0` | `16.6MP_S` | 360° | 21 |
+
+The `GP` prefix covers both single-lens photos, normal and superwide; only the 360 photo uses
+`GS`. The "normal" mode is the camera's wide lens. EXIF exposure time and ISO are present only in
+the normal photo. The 360 photo's EXIF GPS time stamp is two hours behind its `DateTimeOriginal`,
+consistent with a camera clock set to UTC+2. That offset is not used. The meaning of `MTYP` is
+not established.
+
 ## Reproduction commands
 
 Run from the repository root. Full ExifTool output contains private serial and location values;

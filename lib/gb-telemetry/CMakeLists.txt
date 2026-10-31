@@ -1,4 +1,5 @@
 add_library(gb_telemetry
+  src/export.cpp
   src/telemetry.cpp
 )
 

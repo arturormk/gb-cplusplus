@@ -55,6 +55,7 @@ struct PlaybackStatistics {
 };
 
 // Owns a decode worker and presents frame sets against a monotonic clock. Late frames are skipped
+// (by the decode worker too, so a stalled GUI thread cannot hold the decoder back)
 // rather than slowing the timeline. Audio is heard only during stable playback: playing, not
 // scrubbing, no seek in flight, and settled for a short hold after the last seek. While audio is
 // heard, its device position is the master clock; otherwise the wall clock continues from it.
@@ -68,6 +69,8 @@ public:
   void open(const std::string &path, const gb::media::PlaybackLayout &layout,
             int decoder_threads, std::size_t queue_capacity, std::int64_t start_ticks,
             std::optional<int> audio_stream, const std::string &application_name);
+  // Shows one decoded picture (a photo) with no decoder, clock, audio or seeking.
+  void openStill(std::shared_ptr<const gb::media::FrameSet> frames);
   void close();
   void play();
   void pause();
@@ -77,6 +80,7 @@ public:
   void setAudioMuted(bool muted);
 
   [[nodiscard]] bool isOpen() const noexcept;
+  [[nodiscard]] bool isStill() const noexcept { return still_; }
   [[nodiscard]] bool playing() const noexcept;
   [[nodiscard]] bool seeking() const;
   [[nodiscard]] bool scrubbing() const noexcept { return scrubbing_; }
@@ -101,7 +105,8 @@ public:
 
   // When frame-driven, playback presentation happens from advanceFrame(), called once per
   // scene-graph frame, so every presented frame is synchronized for drawing. The internal timer
-  // still completes seeks and detects the end of the stream.
+  // still completes seeks and detects the end of the stream, and takes over presentation when
+  // scene-graph frames stop arriving (window hidden, screen locked) so video keeps pace with audio.
   void setFrameDriven(bool enabled);
   void advanceFrame();
 
@@ -125,12 +130,18 @@ private:
   void present(QueuedSet item);
   [[nodiscard]] std::int64_t clockTicks() const;
   void rebaseClock(std::int64_t ticks, std::chrono::steady_clock::time_point at);
+  // Copies the clock state for the decode worker; call after any change to it.
+  void publishClock();
+  [[nodiscard]] std::optional<std::int64_t> sharedClockTicks() const;
+  // With mutex_ held: drops queued sets that presentation would skip anyway.
+  void dropStaleLocked();
   void syncClockToAudio();
   void updateAudio(bool seek_pending);
   void disengageAudio();
   void stopWorker();
 
   std::unique_ptr<gb::media::SynchronizedReader> reader_;
+  bool still_{};
   std::int32_t time_base_numerator_{1};
   std::int32_t time_base_denominator_{1};
   std::int64_t duration_ticks_{};
@@ -155,12 +166,31 @@ private:
   bool playing_{};
   bool scrubbing_{};
 
+  // The clock as last published by the GUI thread, for the decode worker. Lock order: mutex_,
+  // then clock_mutex_.
+  mutable std::mutex clock_mutex_;
+  bool shared_clock_running_{};
+  std::int64_t shared_clock_base_ticks_{};
+  std::chrono::steady_clock::time_point shared_clock_origin_;
+
   std::unique_ptr<AudioOutput> audio_;
   QString audio_error_;
   bool audio_engaged_{};
   bool audio_muted_{};
   std::chrono::steady_clock::time_point audio_hold_until_;
   bool frame_driven_{};
+  std::chrono::steady_clock::time_point last_frame_tick_;
+
+  // GB_PLAYER_TRACE=1: once a second, print how the GUI thread and presentation kept up.
+  void traceTick(bool from_frame);
+  bool trace_{};
+  std::chrono::steady_clock::time_point trace_window_start_;
+  std::chrono::steady_clock::time_point trace_last_tick_;
+  double trace_max_gap_ms_{};
+  int trace_timer_ticks_{};
+  int trace_frame_ticks_{};
+  std::uint64_t trace_presented_{};
+  std::uint64_t trace_late_drops_{};
   bool awaiting_seek_{};
   bool in_underrun_{};
   std::chrono::steady_clock::time_point seek_started_;
