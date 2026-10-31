@@ -171,7 +171,10 @@ exits non-zero if any seek shows a frame that does not cover its target, or if t
 aligned. Between playback and the
 seeks it checks audio gating: audio must be heard while playing and must resume afterwards. No
 audible frame is allowed during a timeline scrub, during a burst of seeks while playing, or while
-paused; any violation also makes the run fail. Seek latency runs from
+paused; any violation also makes the run fail. With `--stall SECONDS`, it then plays from the
+start and blocks the GUI thread for that long, as a throttled buffer swap does. The `stall` section
+reports how many frame sets the decode worker decoded and dropped meanwhile, and the run fails if
+it decoded fewer than 80% of the sets due. Seek latency runs from
 the request to the first drawn frame. CPU is process CPU time over wall time. GPU time measures
 texture upload plus drawing on the GPU. The `map` section reports how the drawn map marker
 compares with the GPS record nearest to the displayed PTS. The record is sampled about every

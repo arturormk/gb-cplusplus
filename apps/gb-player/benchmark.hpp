@@ -25,10 +25,13 @@ struct BenchmarkOptions {
   int seeks{10};
   std::uint32_t seed{1};
   int view_mode{};
+  // When positive, block the GUI thread for this long while playing (see startStall()).
+  double stall_seconds{};
 };
 
 // Drives the real player through continuous playback, an audio gating check (timeline scrubbing
 // and a burst of seeks while playing must stay silent, and audio must resume afterwards), and
+// optionally a GUI-thread stall (the decode worker must keep pace with the clock on its own), and
 // random paused seeks, then prints a schema-versioned JSON report (gb.player.benchmark/v1).
 // Throughout, it checks that the marker the map actually painted is the GPS record nearest to the
 // displayed frame, computed independently from the frame's PTS.
@@ -48,6 +51,8 @@ private:
   void startPlayback();
   void finishPlayback();
   void checkAudioGating();
+  void startStall();
+  void stallGuiThread();
   void startSeeks();
   void runSteps();
   [[nodiscard]] std::uint64_t audibleFrames() const;
@@ -77,6 +82,8 @@ private:
   QJsonObject playback_;
   QJsonObject audio_;
   bool audio_ok_{true};
+  QJsonObject stall_;
+  bool stall_ok_{true};
   std::vector<std::pair<int, std::function<void()>>> steps_;
   std::size_t step_{};
   QJsonArray seeks_;
