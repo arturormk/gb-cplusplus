@@ -4,6 +4,9 @@
 #include "gb/media/playback.hpp"
 
 #include <algorithm>
+#include <cstdio>
+#include <cstdlib>
+#include <ctime>
 #include <exception>
 #include <utility>
 
@@ -20,6 +23,12 @@ constexpr auto kAudioSettle = std::chrono::milliseconds(250);
 // stalls on a full queue while audio runs on, and video has to race to catch up when drawing resumes.
 constexpr auto kFrameStall = std::chrono::milliseconds(100);
 
+// While its queue is full, the decode worker wakes this often to drop sets that have become stale.
+// When the GUI thread is starved (on GNOME/X11, a locked screen throttles the window's buffer
+// swaps, and with them the whole GUI thread, to about one per second), this keeps the decoder in
+// step with the clock instead of blocked behind sets nobody will show.
+constexpr auto kWorkerPoll = std::chrono::milliseconds(10);
+
 double millisecondsSince(const std::chrono::steady_clock::time_point start) {
   return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
 }
@@ -27,6 +36,8 @@ double millisecondsSince(const std::chrono::steady_clock::time_point start) {
 } // namespace
 
 PlaybackEngine::PlaybackEngine(QObject *parent) : QObject(parent) {
+  const auto *trace = std::getenv("GB_PLAYER_TRACE");
+  trace_ = trace != nullptr && *trace != '\0' && *trace != '0';
   timer_.setTimerType(Qt::PreciseTimer);
   timer_.setInterval(4);
   connect(&timer_, &QTimer::timeout, this, [this] { tick(); });
@@ -113,6 +124,7 @@ void PlaybackEngine::close() {
     current_ = {};
   }
   const auto was_playing = std::exchange(playing_, false);
+  publishClock();
   duration_ticks_ = 0;
   if (was_playing) emit playingChanged();
   emit frameChanged();
@@ -166,6 +178,7 @@ void PlaybackEngine::pause() {
   disengageAudio();
   playing_ = false;
   clock_base_ticks_ = positionTicks();
+  publishClock();
   emit playingChanged();
 }
 
@@ -176,6 +189,7 @@ void PlaybackEngine::setScrubbing(const bool scrubbing) {
     disengageAudio();
     clock_base_ticks_ = clockTicks();
     scrubbing_ = true;
+    publishClock();
   } else {
     scrubbing_ = false;
     rebaseClock(clock_base_ticks_, now);
@@ -221,6 +235,38 @@ std::int64_t PlaybackEngine::clockTicks() const {
 void PlaybackEngine::rebaseClock(const std::int64_t ticks, const SteadyClock::time_point at) {
   clock_base_ticks_ = ticks;
   clock_origin_ = at;
+  publishClock();
+}
+
+void PlaybackEngine::publishClock() {
+  const std::lock_guard lock(clock_mutex_);
+  shared_clock_running_ = playing_ && !scrubbing_;
+  shared_clock_base_ticks_ = clock_base_ticks_;
+  shared_clock_origin_ = clock_origin_;
+}
+
+std::optional<std::int64_t> PlaybackEngine::sharedClockTicks() const {
+  const std::lock_guard lock(clock_mutex_);
+  if (!shared_clock_running_) return std::nullopt;
+  const auto elapsed =
+      std::chrono::duration_cast<std::chrono::nanoseconds>(SteadyClock::now() - shared_clock_origin_);
+  return shared_clock_base_ticks_ + gb::media::rescale_ticks(elapsed.count(), {1, 1000000000}, timeBase());
+}
+
+// The same rule tick() applies when presenting: a set is skipped once the set after it is due. The
+// first set after a seek is never dropped, because the clock is rebased on it.
+void PlaybackEngine::dropStaleLocked() {
+  if (awaiting_seek_ || queue_.size() < 2U) return;
+  const auto now = sharedClockTicks();
+  if (!now.has_value()) return;
+  std::uint64_t dropped{};
+  while (queue_.size() >= 2U && queue_[1].frames->pts <= *now) {
+    queue_.pop_front();
+    ++dropped;
+  }
+  if (dropped == 0U) return;
+  const std::lock_guard statistics_lock(statistics_mutex_);
+  statistics_.late_drops += dropped;
 }
 
 // While audio is heard, its position drives the clock. Rebasing the wall clock on every tick
@@ -278,10 +324,14 @@ AudioStatistics PlaybackEngine::audioStatistics() const { return audio_ ? audio_
 void PlaybackEngine::worker() {
   std::unique_lock lock(mutex_);
   while (true) {
-    condition_.wait(lock, [this] {
-      return stop_ || seek_request_.has_value() ||
-             (!end_of_stream_ && !worker_error_.has_value() && queue_.size() < capacity_);
-    });
+    while (true) {
+      dropStaleLocked();
+      if (stop_ || seek_request_.has_value() ||
+          (!end_of_stream_ && !worker_error_.has_value() && queue_.size() < capacity_)) {
+        break;
+      }
+      condition_.wait_for(lock, kWorkerPoll);
+    }
     if (stop_) return;
     const auto target = std::exchange(seek_request_, std::nullopt);
     const auto generation = generation_;
@@ -337,7 +387,47 @@ void PlaybackEngine::advanceFrame() {
   tick(true);
 }
 
+void PlaybackEngine::traceTick(const bool from_frame) {
+  const auto now = SteadyClock::now();
+  if (trace_last_tick_ != SteadyClock::time_point{}) {
+    trace_max_gap_ms_ = std::max(trace_max_gap_ms_,
+                                 std::chrono::duration<double, std::milli>(now - trace_last_tick_).count());
+  } else {
+    trace_window_start_ = now;
+  }
+  trace_last_tick_ = now;
+  ++(from_frame ? trace_frame_ticks_ : trace_timer_ticks_);
+  if (now - trace_window_start_ < std::chrono::seconds(1)) return;
+
+  std::size_t depth{};
+  {
+    const std::lock_guard lock(mutex_);
+    depth = queue_.size();
+  }
+  const auto statistics = this->statistics();
+  const auto lag_ticks = playing_ ? clockTicks() - positionTicks() : 0;
+  const auto lag_ms = gb::media::rescale_ticks(lag_ticks, timeBase(), {1, 1000});
+  const auto wall = std::time(nullptr);
+  char stamp[16]{};
+  std::strftime(stamp, sizeof stamp, "%H:%M:%S", std::localtime(&wall));
+  std::fprintf(stderr,
+               "gb-player trace %s playing=%d audio=%d frame_ticks=%d timer_ticks=%d max_gap_ms=%.0f "
+               "presented=%llu late_drops=%llu queue=%zu video_behind_ms=%lld\n",
+               stamp, playing_ ? 1 : 0, audio_engaged_ ? 1 : 0, trace_frame_ticks_, trace_timer_ticks_,
+               trace_max_gap_ms_,
+               static_cast<unsigned long long>(statistics.presented_frames - trace_presented_),
+               static_cast<unsigned long long>(statistics.late_drops - trace_late_drops_), depth,
+               static_cast<long long>(lag_ms));
+  trace_window_start_ = now;
+  trace_max_gap_ms_ = 0;
+  trace_timer_ticks_ = 0;
+  trace_frame_ticks_ = 0;
+  trace_presented_ = statistics.presented_frames;
+  trace_late_drops_ = statistics.late_drops;
+}
+
 void PlaybackEngine::tick(const bool from_frame) {
+  if (trace_) traceTick(from_frame);
   bool changed{};
   bool ended{};
   bool seek_pending{};
@@ -384,6 +474,7 @@ void PlaybackEngine::tick(const bool from_frame) {
           if (now >= frame_end) {
             playing_ = false;
             clock_base_ticks_ = current.frames ? current.frames->pts : 0;
+            publishClock();
             ended = true;
           }
         } else if (now >= frame_end && !in_underrun_) {

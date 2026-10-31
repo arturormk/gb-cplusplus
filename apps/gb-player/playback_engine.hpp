@@ -55,6 +55,7 @@ struct PlaybackStatistics {
 };
 
 // Owns a decode worker and presents frame sets against a monotonic clock. Late frames are skipped
+// (by the decode worker too, so a stalled GUI thread cannot hold the decoder back)
 // rather than slowing the timeline. Audio is heard only during stable playback: playing, not
 // scrubbing, no seek in flight, and settled for a short hold after the last seek. While audio is
 // heard, its device position is the master clock; otherwise the wall clock continues from it.
@@ -129,6 +130,11 @@ private:
   void present(QueuedSet item);
   [[nodiscard]] std::int64_t clockTicks() const;
   void rebaseClock(std::int64_t ticks, std::chrono::steady_clock::time_point at);
+  // Copies the clock state for the decode worker; call after any change to it.
+  void publishClock();
+  [[nodiscard]] std::optional<std::int64_t> sharedClockTicks() const;
+  // With mutex_ held: drops queued sets that presentation would skip anyway.
+  void dropStaleLocked();
   void syncClockToAudio();
   void updateAudio(bool seek_pending);
   void disengageAudio();
@@ -160,6 +166,13 @@ private:
   bool playing_{};
   bool scrubbing_{};
 
+  // The clock as last published by the GUI thread, for the decode worker. Lock order: mutex_,
+  // then clock_mutex_.
+  mutable std::mutex clock_mutex_;
+  bool shared_clock_running_{};
+  std::int64_t shared_clock_base_ticks_{};
+  std::chrono::steady_clock::time_point shared_clock_origin_;
+
   std::unique_ptr<AudioOutput> audio_;
   QString audio_error_;
   bool audio_engaged_{};
@@ -167,6 +180,17 @@ private:
   std::chrono::steady_clock::time_point audio_hold_until_;
   bool frame_driven_{};
   std::chrono::steady_clock::time_point last_frame_tick_;
+
+  // GB_PLAYER_TRACE=1: once a second, print how the GUI thread and presentation kept up.
+  void traceTick(bool from_frame);
+  bool trace_{};
+  std::chrono::steady_clock::time_point trace_window_start_;
+  std::chrono::steady_clock::time_point trace_last_tick_;
+  double trace_max_gap_ms_{};
+  int trace_timer_ticks_{};
+  int trace_frame_ticks_{};
+  std::uint64_t trace_presented_{};
+  std::uint64_t trace_late_drops_{};
   bool awaiting_seek_{};
   bool in_underrun_{};
   std::chrono::steady_clock::time_point seek_started_;

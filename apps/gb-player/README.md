@@ -180,6 +180,21 @@ seek it must match exactly. The section also gives tile cache and request counts
 contains no telemetry values. A benchmark never continues into the next chapter. Results describe
 the machine they were measured on; see `research/findings/` for recorded runs.
 
+## Timing trace
+
+Set `GB_PLAYER_TRACE=1` to print one line a second to standard error while a recording is open:
+
+```sh
+GB_PLAYER_TRACE=1 gb-player --play recording.360 2> trace.log
+```
+
+Each line shows whether playback and audio are active, how often the GUI thread ran
+(`frame_ticks` from the scene graph, `timer_ticks` from the engine timer, `max_gap_ms` for the
+longest wait between them), the frame sets presented and dropped as late, the decode queue depth,
+and how far the presented picture is behind the playback clock (`video_behind_ms`). It is meant
+for diagnosing playback that falls behind its audio; see
+`docs/incidents/2026-10-31-video-lag-after-screen-lock.md`.
+
 ## Requirements and limitations
 
 - Requires an OpenGL 3.3 (or OpenGL ES 3.0) Qt Quick scene graph for the picture. With the
