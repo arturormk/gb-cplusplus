@@ -192,70 +192,125 @@ ApplicationWindow {
             radius: 3
             clip: true
 
-            VideoView {
-                id: view
-                readonly property bool square: window.squareView && window.circular
-                readonly property real availableWidth: parent.width - 2
-                readonly property real availableHeight: parent.height - 2
-                // Capture mode letterboxes the view to the frozen canvas, so resizing the window
-                // scales the canvas but never changes what is in it.
-                readonly property real captureWidth: availableWidth / Math.max(1, availableHeight) > capture.canvasAspect
-                                                     ? availableHeight * capture.canvasAspect : availableWidth
-                anchors.centerIn: parent
-                width: capture.active ? captureWidth
-                       : square ? Math.min(parent.width, parent.height) - 2 : availableWidth
-                height: capture.active ? captureWidth / capture.canvasAspect
-                        : square ? width : availableHeight
-                engine: player.engine
-                sourceLayout: player.sourceLayout
-                overlap: player.overlap
-                panoramaCrop: player.panoramaCrop
-                Component.onCompleted: window.selectMode(initialView)
-            }
+            // Capture mode only: room beyond the area on the panel's side, so the panel preview next
+            // to the capture rectangle can be scrolled into view when the window is not wide (or
+            // tall) enough. The room is what the panel can take at most for its side and size,
+            // wherever the rectangle is, so dragging the rectangle never moves the content. Drags
+            // and the wheel keep aiming the view; the edge scroll bars appear on hover.
+            Flickable {
+                id: canvasScroll
+                readonly property bool panel: capture.active && player.hasMedia && capture.panelSide !== "none"
+                readonly property bool across: capture.panelSide === "top" || capture.panelSide === "bottom"
+                // A side panel is a fraction of the picture's height; a top or bottom one of the
+                // taller frame.
+                readonly property real reach: !panel ? 0
+                    : across ? view.height * capture.panelSize / (1 - capture.panelSize)
+                             : view.height * capture.panelSize
+                readonly property real freeX: (width - view.width) / 2
+                readonly property real freeY: (height - view.height) / 2
+                readonly property real margin: 6
+                function room(side, free) {
+                    return capture.panelSide === side && reach > free ? reach - free + margin : 0
+                }
+                readonly property real padLeft: room("left", freeX)
+                readonly property real padRight: room("right", freeX)
+                readonly property real padTop: room("top", freeY)
+                readonly property real padBottom: room("bottom", freeY)
+                // How far the scroll bars have moved the content from where the view is in place.
+                // Only the bars set it; everything else keeps the view where it is on screen.
+                property real offsetX: 0
+                property real offsetY: 0
+                // A new side (or none, or leaving Capture mode) starts with the view in place.
+                readonly property string side: panel ? capture.panelSide : ""
+                onSideChanged: { offsetX = 0; offsetY = 0; Qt.callLater(settle) }
+                function settle() {
+                    contentX = Math.max(0, Math.min(contentWidth - width, padLeft + offsetX))
+                    contentY = Math.max(0, Math.min(contentHeight - height, padTop + offsetY))
+                }
+                onPadLeftChanged: Qt.callLater(settle)
+                onPadTopChanged: Qt.callLater(settle)
+                onContentWidthChanged: Qt.callLater(settle)
+                onContentHeightChanged: Qt.callLater(settle)
+                onContentXChanged: if (horizontalBar.hovered || horizontalBar.pressed) offsetX = contentX - padLeft
+                onContentYChanged: if (verticalBar.hovered || verticalBar.pressed) offsetY = contentY - padTop
 
-            MouseArea {
                 anchors.fill: parent
-                enabled: player.hasMedia
-                acceptedButtons: Qt.LeftButton
-                property real lastX: 0
-                property real lastY: 0
-                onPressed: function(mouse) { lastX = mouse.x; lastY = mouse.y }
-                onPositionChanged: function(mouse) {
-                    var dx = mouse.x - lastX
-                    var dy = mouse.y - lastY
-                    lastX = mouse.x
-                    lastY = mouse.y
-                    if (window.spherical) {
-                        var degreesPerPixel = view.fieldOfView / Math.max(1, view.width)
-                        view.yaw = ((view.yaw - dx * degreesPerPixel + 540) % 360) - 180
-                        view.pitch = Math.max(-90, Math.min(90, view.pitch + dy * degreesPerPixel))
-                    } else {
-                        view.panX -= dx / Math.max(1, view.width) / view.zoom
-                        view.panY -= dy / Math.max(1, view.height) / view.zoom
-                    }
-                }
-                onDoubleClicked: player.togglePlay()
-                onWheel: function(wheel) {
-                    var steps = wheel.angleDelta.y / 120
-                    if (capture.active && (wheel.modifiers & Qt.ControlModifier)) {
-                        capture.scaleCrop(Math.pow(1.1, steps))
-                    } else if (window.spherical) {
-                        var maximum = view.mode === 0 ? 150 : 330
-                        view.fieldOfView = Math.max(20, Math.min(maximum, view.fieldOfView - steps * 5))
-                    } else {
-                        view.zoom = Math.max(1, Math.min(16, view.zoom * Math.pow(1.15, steps)))
-                        if (view.zoom === 1) { view.panX = 0; view.panY = 0 }
-                    }
-                    wheel.accepted = true
-                }
-            }
+                anchors.margins: 1
+                clip: true
+                interactive: false
+                boundsBehavior: Flickable.StopAtBounds
+                contentWidth: width + padLeft + padRight
+                contentHeight: height + padTop + padBottom
+                ScrollBar.horizontal: EdgeScrollBar { id: horizontalBar }
+                ScrollBar.vertical: EdgeScrollBar { id: verticalBar }
 
-            CaptureOverlay {
-                visible: capture.active && player.hasMedia
-                x: view.x
-                y: view.y
-                width: view.width
-                height: view.height
+                VideoView {
+                    id: view
+                    readonly property bool square: window.squareView && window.circular
+                    readonly property real availableWidth: canvasScroll.width
+                    readonly property real availableHeight: canvasScroll.height
+                    // Capture mode letterboxes the view to the frozen canvas, so resizing the window
+                    // scales the canvas but never changes what is in it.
+                    readonly property real captureWidth: availableWidth / Math.max(1, availableHeight) > capture.canvasAspect
+                                                         ? availableHeight * capture.canvasAspect : availableWidth
+                    x: canvasScroll.padLeft + (availableWidth - width) / 2
+                    y: canvasScroll.padTop + (availableHeight - height) / 2
+                    width: capture.active ? captureWidth
+                           : square ? Math.min(availableWidth, availableHeight) : availableWidth
+                    height: capture.active ? captureWidth / capture.canvasAspect
+                            : square ? width : availableHeight
+                    engine: player.engine
+                    sourceLayout: player.sourceLayout
+                    overlap: player.overlap
+                    panoramaCrop: player.panoramaCrop
+                    Component.onCompleted: window.selectMode(initialView)
+                }
+
+                MouseArea {
+                    width: canvasScroll.contentWidth
+                    height: canvasScroll.contentHeight
+                    enabled: player.hasMedia
+                    acceptedButtons: Qt.LeftButton
+                    property real lastX: 0
+                    property real lastY: 0
+                    onPressed: function(mouse) { lastX = mouse.x; lastY = mouse.y }
+                    onPositionChanged: function(mouse) {
+                        var dx = mouse.x - lastX
+                        var dy = mouse.y - lastY
+                        lastX = mouse.x
+                        lastY = mouse.y
+                        if (window.spherical) {
+                            var degreesPerPixel = view.fieldOfView / Math.max(1, view.width)
+                            view.yaw = ((view.yaw - dx * degreesPerPixel + 540) % 360) - 180
+                            view.pitch = Math.max(-90, Math.min(90, view.pitch + dy * degreesPerPixel))
+                        } else {
+                            view.panX -= dx / Math.max(1, view.width) / view.zoom
+                            view.panY -= dy / Math.max(1, view.height) / view.zoom
+                        }
+                    }
+                    onDoubleClicked: player.togglePlay()
+                    onWheel: function(wheel) {
+                        var steps = wheel.angleDelta.y / 120
+                        if (capture.active && (wheel.modifiers & Qt.ControlModifier)) {
+                            capture.scaleCrop(Math.pow(1.1, steps))
+                        } else if (window.spherical) {
+                            var maximum = view.mode === 0 ? 150 : 330
+                            view.fieldOfView = Math.max(20, Math.min(maximum, view.fieldOfView - steps * 5))
+                        } else {
+                            view.zoom = Math.max(1, Math.min(16, view.zoom * Math.pow(1.15, steps)))
+                            if (view.zoom === 1) { view.panX = 0; view.panY = 0 }
+                        }
+                        wheel.accepted = true
+                    }
+                }
+
+                CaptureOverlay {
+                    visible: capture.active && player.hasMedia
+                    x: view.x
+                    y: view.y
+                    width: view.width
+                    height: view.height
+                }
             }
 
             Rectangle {

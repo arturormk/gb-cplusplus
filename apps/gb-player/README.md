@@ -86,8 +86,10 @@ Capture mode.
   the attribution; the **Track** checkbox draws the route with its start and end, or only the
   position — for stills only, not in the gb-render settings) and the date and time (local,
   from GPS), latitude, longitude, altitude and speed at the frame, or "—" without a valid fix
-  near it. The preview next to the rectangle is drawn as the still will be. Before writing, the
-  map's missing tiles are requested through the map's rate-limited fetcher; Capture waits up to
+  near it. The preview next to the rectangle is drawn as the still will be. When the window is
+  not wide (or tall) enough for it, the canvas gets room on the panel's side and scroll bars,
+  which appear when the pointer is over the bottom or right edge. Before writing, the map's
+  missing tiles are requested through the map's rate-limited fetcher; Capture waits up to
   five seconds, and tiles that do not arrive are drawn as placeholders and reported.
 - **Capture** renders the displayed frame (pausing playback first) at the chosen size, from the
   source, as JPEG or PNG. Every output pixel is computed by the player's shader, not scaled up

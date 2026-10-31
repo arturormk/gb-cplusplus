@@ -39,6 +39,7 @@ qt_add_resources(gb_player "gb_player_resources"
     qml/CapturePanel.qml
     qml/DarkButton.qml
     qml/DarkComboBox.qml
+    qml/EdgeScrollBar.qml
     qml/InfoTable.qml
     qml/Main.qml
     qml/MapPanel.qml
