@@ -94,6 +94,11 @@ double map_ground_width_metres(const double width, const MapScene &scene) {
   return (width / scene.scale) * gb::geo::metres_per_world_unit(latitude) / world_pixels;
 }
 
+double map_zoom_for_width(const double width, const double scale, const double metres,
+                          const double latitude) {
+  return std::log2((width / scale) * gb::geo::metres_per_world_unit(latitude) / (256.0 * metres));
+}
+
 MapPaintResult paint_map(QPainter &painter, const QSizeF size, const MapScene &scene) {
   MapPaintResult result;
   if (size.width() <= 0.0 || size.height() <= 0.0 || !(scene.scale > 0.0))
@@ -181,8 +186,10 @@ MapPaintResult paint_map(QPainter &painter, const QSizeF size, const MapScene &s
         path, QPen(QColor(255, 255, 255, 220), 6.0, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
     painter.strokePath(path, QPen(color, 3.5, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
   };
-  stroke(remaining, kRemaining);
-  stroke(travelled, kTravelled);
+  if (scene.track) {
+    stroke(remaining, kRemaining);
+    stroke(travelled, kTravelled);
+  }
 
   // Start and end of the recorded route. A single position (a photo) has neither.
   const auto usable = [&points](const std::size_t index) { return points[index].usable; };
@@ -195,7 +202,7 @@ MapPaintResult paint_map(QPainter &painter, const QSizeF size, const MapScene &s
       last_usable = index;
     }
   }
-  if (route.size() > 1U && first_usable) {
+  if (scene.track && route.size() > 1U && first_usable) {
     painter.setPen(QPen(Qt::white, 2.0));
     painter.setBrush(QColor(0x2f, 0x9e, 0x44));
     painter.drawEllipse(screen(route[*first_usable]), 5.5, 5.5);

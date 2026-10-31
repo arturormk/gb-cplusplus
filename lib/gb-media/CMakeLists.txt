@@ -10,7 +10,9 @@ add_library(gb_media
   src/media.cpp
   src/playback.cpp
   src/position.cpp
-  src/projection.cpp)
+  src/projection.cpp
+  src/timeline.cpp
+  src/writer.cpp)
 add_library(gb::media ALIAS gb_media)
 
 target_include_directories(gb_media PUBLIC include)

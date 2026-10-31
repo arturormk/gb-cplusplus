@@ -65,7 +65,7 @@ Pane {
                 Label { text: "Panel" }
                 DarkComboBox {
                     id: panelBox
-                    model: ["none", "left", "right", "bottom"]
+                    model: ["none", "left", "right", "top", "bottom"]
                     currentIndex: Math.max(0, model.indexOf(capture.panelSide))
                     onActivated: function(index) { capture.panelSide = model[index] }
                     Layout.preferredWidth: 120

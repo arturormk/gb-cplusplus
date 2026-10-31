@@ -54,12 +54,20 @@ renderer with itself (a crop against the whole canvas), not with `project_equire
 
 ## Phase 3: video, one chapter
 
+**Done (2026-10-31)** (ADR-0013): `VideoWriter`, the export loop, `.partial` and rename,
+`--overwrite`, Ctrl+C, `--start`/`--end`/`--duration`, `--no-audio`, `--draft`, `--dry-run`, and
+settings validation, combining and `--print-settings`. No separate encoder thread yet.
+
 - `VideoWriter` in `gb_media` (H.264 or HEVC, AAC, MP4 or MKV), the export job with its encoder
   thread, progress on stderr, Ctrl+C, `.partial` and rename, `--overwrite`.
 - `--start`, `--end`, `--duration` within one chapter, `--no-audio`, `--draft`, `--dry-run`.
 - Result: a framed clip with or without sound, no overlays.
 
 ## Phase 4: text and graph overlays
+
+**Text done (2026-10-31)** (ADR-0013): fields with labels, anchors, sizes, two colours and an
+outline, over the picture or on a left, right, top or bottom panel; units and time zone. Graphs
+and `--show-layout` remain.
 
 - Extract `ProfilePainter` from `ProfileView`, with no visible change. Add
   `TelemetryTextPainter`.
@@ -68,6 +76,10 @@ renderer with itself (a crop against the whole canvas), not with `project_equire
 - Units and time zone.
 
 ## Phase 5: the map overlay and its scale
+
+**Fixed scale done (2026-10-31)** (ADR-0013): `[map] width`, `track`, `shape = square | circle`,
+the tile stage with `--max-tiles`, `--map-no-network` and `--require-tiles`. The automatic scale,
+the scale bar, `--contact-sheet` and tile directories remain.
 
 - Extract `MapPainter` from `MapView`, with no visible change. Add the scale bar and
   `AttributionPainter`. (Done early for Capture mode's side panel: `paint_map` and
@@ -84,6 +96,10 @@ renderer with itself (a crop against the whole canvas), not with `project_equire
   others as they are added. Record the values chosen and why in `research/findings/`.
 
 ## Phase 6: ranges across chapters
+
+**Done for video, audio and telemetry (2026-10-31)** (ADR-0013): `RecordingTimeline` joins the
+chapters one reader at a time; the consistency checks of chapter audio and `gpmd` durations are not
+implemented yet.
 
 - `RecordingTimeline`, `SequenceReader`, `SequenceAudioReader` and rebased telemetry, built on the
   rule measured in spike 3, with the consistency checks and warnings.

@@ -23,6 +23,11 @@ First public release: a minimum usable product for GoPro MAX 2025 recordings on 
   `gb.export/1` settings to copy or save (ADR-0012). The clock shows the chapter of a chaptered
   recording (`c2:00:05:31.400`). The player's shader moved into the new `gb_render` library, and
   framing geometry and settings into the Qt-free `gb_export`.
+- `gb-render`: video export from settings files (ADR-0013). Placement none, overlay, or a black
+  panel left, right, top or bottom; telemetry fields with custom labels, anchors and sizes, two
+  text colours and an outline; a fixed-width map, square or round, with the route over the whole
+  range; ranges across chapters; H.264/HEVC with AAC in MP4 or MKV, with no source metadata; map
+  tiles fetched before rendering up to `--max-tiles`. Capture mode gains a top panel.
 - `gb-inspect`: ISO BMFF container and content-based JPEG inspection.
 - `gb-metadata`: GPMF metadata inventory, sample decoding, and raw payload export.
 - `gb-telemetry`: timestamped GPS export to JSON, CSV, GPX, and GeoJSON.

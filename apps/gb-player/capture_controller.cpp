@@ -37,8 +37,9 @@ namespace ex = gb::exporting;
 
 constexpr std::array<std::pair<int, int>, 4> kAspects{{{16, 9}, {4, 3}, {1, 1}, {9, 16}}};
 constexpr int kFreeAspect = static_cast<int>(kAspects.size());
-constexpr std::array<ex::PanelSide, 4> kPanelSides{ex::PanelSide::none, ex::PanelSide::left,
-                                                   ex::PanelSide::right, ex::PanelSide::bottom};
+constexpr std::array<ex::PanelSide, 5> kPanelSides{ex::PanelSide::none, ex::PanelSide::left,
+                                                   ex::PanelSide::right, ex::PanelSide::top,
+                                                   ex::PanelSide::bottom};
 // The smallest rectangle, in canvas heights.
 constexpr double kMinimumCropHeight = 0.05;
 // Above this many output pixels per source pixel, a capture is reported as softer than it looks.

@@ -41,6 +41,8 @@ struct MapScene {
   std::optional<std::size_t> record;
   MapMarker marker{MapMarker::none};
   std::optional<double> course; // degrees clockwise from north
+  // Whether the route and its start and end are drawn; without it only the current position is.
+  bool track{true};
   // A decoded tile, or nullptr when it is not available.
   std::function<const QImage *(gb::geo::TileKey)> tile;
 };
@@ -53,6 +55,11 @@ struct MapScene {
 
 // Ground distance across a map of `width` target pixels at the centre's latitude, in metres.
 [[nodiscard]] double map_ground_width_metres(double width, const MapScene &scene);
+
+// The fractional zoom at which a map of `width` target pixels, drawn at `scale` target pixels per
+// map pixel, shows `metres` of ground across at `latitude`: the inverse of
+// map_ground_width_metres.
+[[nodiscard]] double map_zoom_for_width(double width, double scale, double metres, double latitude);
 
 struct MapPaintResult {
   int missing_tiles{}; // tiles drawn from an ancestor or as a placeholder

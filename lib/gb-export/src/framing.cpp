@@ -55,6 +55,8 @@ std::string panel_side_name(const PanelSide side) {
     return "left";
   case PanelSide::right:
     return "right";
+  case PanelSide::top:
+    return "top";
   case PanelSide::bottom:
     return "bottom";
   case PanelSide::none:
@@ -64,7 +66,8 @@ std::string panel_side_name(const PanelSide side) {
 }
 
 std::optional<PanelSide> parse_panel_side(const std::string &text) {
-  for (const auto side : {PanelSide::none, PanelSide::left, PanelSide::right, PanelSide::bottom}) {
+  for (const auto side :
+       {PanelSide::none, PanelSide::left, PanelSide::right, PanelSide::top, PanelSide::bottom}) {
     if (panel_side_name(side) == text)
       return side;
   }
@@ -78,7 +81,7 @@ std::optional<double> picture_aspect(const AspectRatio frame, const PanelSide pa
     return aspect;
   if (!(panel_size >= kMinimumPanelSize && panel_size <= kMaximumPanelSize))
     return std::nullopt;
-  if (panel == PanelSide::bottom)
+  if (panel == PanelSide::top || panel == PanelSide::bottom)
     return panel_size < 0.95 ? std::optional<double>(aspect / (1.0 - panel_size)) : std::nullopt;
   const auto width = aspect - panel_size;
   // Keep at least a tenth of the frame for the picture.
@@ -102,10 +105,15 @@ FrameLayout frame_layout(const AspectRatio frame, const int width, const PanelSi
   if (panel == PanelSide::none)
     return layout;
   const auto size = std::lround(panel_size * layout.height);
-  if (panel == PanelSide::bottom) {
+  if (panel == PanelSide::top || panel == PanelSide::bottom) {
     const auto picture_height = even(layout.height - static_cast<double>(size));
     layout.picture.height = picture_height;
-    layout.panel = PixelRect{0, picture_height, layout.width, layout.height - picture_height};
+    if (panel == PanelSide::top) {
+      layout.panel = PixelRect{0, 0, layout.width, layout.height - picture_height};
+      layout.picture.y = layout.height - picture_height;
+    } else {
+      layout.panel = PixelRect{0, picture_height, layout.width, layout.height - picture_height};
+    }
     return layout;
   }
   const auto picture_width = even(layout.width - static_cast<double>(size));
@@ -135,7 +143,7 @@ PanelRegions panel_regions(const FrameLayout &layout, const PanelSide side, cons
     regions.text = inner;
     return regions;
   }
-  if (side == PanelSide::bottom) {
+  if (side == PanelSide::top || side == PanelSide::bottom) {
     const auto size = text ? std::min(inner.height, inner.width / 2) : inner.height;
     regions.map = PixelRect{inner.x, inner.y, size, size};
     if (text && inner.width - size - margin > 0) {

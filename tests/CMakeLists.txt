@@ -78,6 +78,8 @@ add_test(NAME gb_project_qml_smoke COMMAND gb_project --smoke-test)
 set_tests_properties(gb_project_qml_smoke PROPERTIES
   ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
+add_test(NAME gb_render_help COMMAND gb_render_tool --help)
+add_test(NAME gb_render_version COMMAND gb_render_tool --version)
 add_test(NAME gb_player_help COMMAND gb_player --help)
 add_test(NAME gb_player_version COMMAND gb_player --version)
 add_test(NAME gb_player_qml_smoke COMMAND gb_player --smoke-test)
@@ -90,7 +92,7 @@ set_tests_properties(gb_player_qml_smoke PROPERTIES
 
 # Every executable reports the version derived by cmake/GbVersion.cmake (ADR-0010).
 string(REPLACE "." "\\." gb_version_regex "${GB_VERSION}")
-foreach(gb_tool IN ITEMS inspect metadata telemetry time frames project player)
+foreach(gb_tool IN ITEMS inspect metadata telemetry time frames project player render)
   set_tests_properties(gb_${gb_tool}_version PROPERTIES
     PASS_REGULAR_EXPRESSION "^gb-${gb_tool} ${gb_version_regex}\n$")
 endforeach()
@@ -192,7 +194,7 @@ set_tests_properties(gb_player_capture_panel PROPERTIES
   ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
   SKIP_RETURN_CODE 77
   TIMEOUT 60
-  PASS_REGULAR_EXPRESSION "gb-player capture: 1920x1080 gps=no .*\\[layout\\].*panel      = right.*\\[units\\].*\\[telemetry\\].*fields = utc, latitude, longitude, altitude, speed"
+  PASS_REGULAR_EXPRESSION "gb-player capture: 1920x1080 gps=no .*\\[layout\\].*placement  = right.*\\[units\\].*\\[telemetry\\].*fields = utc, latitude, longitude, altitude, speed"
   FAIL_REGULAR_EXPRESSION "\\[map\\]|map tile")
 
 add_test(NAME gb_frames_list_json
@@ -385,3 +387,52 @@ add_test(NAME gb_time_no_metadata
 set_tests_properties(gb_time_no_metadata PROPERTIES
   FIXTURES_REQUIRED gb_cli_media
   PASS_REGULAR_EXPRESSION "\"tracks\": \[\].*\"track_id\": null.*\"anchors\": \[\]")
+
+# gb-render: settings, error paths and a short export of a generated recording.
+add_test(NAME gb_render_example_settings
+  COMMAND gb_render_tool --example-settings --print-settings)
+set_tests_properties(gb_render_example_settings PROPERTIES
+  PASS_REGULAR_EXPRESSION "schema = gb.export/1.*\\[map\\].*shape   = circle")
+add_test(NAME gb_render_settings_file
+  COMMAND sh -c "\"$<TARGET_FILE:gb_render_tool>\" --example-settings > \"${GB_CLI_FIXTURE_DIR}/example.ini\" && \"$<TARGET_FILE:gb_render_tool>\" --settings \"${GB_CLI_FIXTURE_DIR}/example.ini\" --set map.width=2km --placement top --print-settings")
+set_tests_properties(gb_render_settings_file PROPERTIES
+  FIXTURES_REQUIRED gb_cli_media
+  PASS_REGULAR_EXPRESSION "placement  = top.*\\[field-speed\\].*width   = 2000m")
+add_test(NAME gb_render_rejects_unknown_key
+  COMMAND gb_render_tool --set map.widht=2km --print-settings)
+set_tests_properties(gb_render_rejects_unknown_key PROPERTIES
+  PASS_REGULAR_EXPRESSION "\\[map\\] widht: unknown key")
+add_test(NAME gb_render_rejects_unknown_key_status
+  COMMAND gb_render_tool --set map.widht=2km --print-settings)
+set_tests_properties(gb_render_rejects_unknown_key_status PROPERTIES WILL_FAIL TRUE)
+
+add_test(NAME gb_render_export
+  COMMAND gb_render_tool "${GB_CLI_FIXTURE_DIR}/audio-gating.mp4" --start 1 --duration 2
+    --width 320 --placement bottom --set telemetry.fields=speed,time --map-width 1km
+    --map-no-network --encoder-preset ultrafast --overwrite -o "${GB_CLI_FIXTURE_DIR}/export.mp4")
+set_tests_properties(gb_render_export PROPERTIES
+  FIXTURES_REQUIRED gb_audio_gating_media
+  FIXTURES_SETUP gb_render_output
+  ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+  TIMEOUT 120
+  SKIP_REGULAR_EXPRESSION "offscreen rendering is unavailable"
+  PASS_REGULAR_EXPRESSION "wrote .*export.mp4 .*50 frames, libx264 320.+180, aac 48000 Hz, mp4")
+# The export is read back: 50 frames at 25 fps from 0, two seconds of audio, no source metadata.
+add_test(NAME gb_render_export_readback
+  COMMAND gb_frames --list --json "${GB_CLI_FIXTURE_DIR}/export.mp4")
+set_tests_properties(gb_render_export_readback PROPERTIES
+  FIXTURES_REQUIRED gb_render_output
+  PASS_REGULAR_EXPRESSION "\"width\": 320.*\"height\": 180")
+add_test(NAME gb_render_refuses_existing_output
+  COMMAND gb_render_tool "${GB_CLI_FIXTURE_DIR}/audio-gating.mp4" --duration 1
+    -o "${GB_CLI_FIXTURE_DIR}/export.mp4")
+set_tests_properties(gb_render_refuses_existing_output PROPERTIES
+  FIXTURES_REQUIRED gb_render_output
+  ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+  PASS_REGULAR_EXPRESSION "exists; use --overwrite")
+add_test(NAME gb_render_rejects_bad_range
+  COMMAND gb_render_tool "${GB_CLI_FIXTURE_DIR}/audio-gating.mp4" --start c2:00:00:01 --dry-run)
+set_tests_properties(gb_render_rejects_bad_range PROPERTIES
+  FIXTURES_REQUIRED gb_audio_gating_media
+  ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+  PASS_REGULAR_EXPRESSION "chapter 2 does not exist")

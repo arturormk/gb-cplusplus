@@ -12,7 +12,9 @@ another explicitly documented format". INI was chosen over JSON and YAML because
 
 ## Example
 
-`gb-render --example-settings` writes a file like this, with every setting commented:
+`gb-render --example-settings` writes a file like this, with every setting commented. The sections
+in use are implemented (ADR-0013); `[speed]` and `[height]` graphs and the automatic map scale are
+still planned.
 
 ```ini
 ; gb-render export settings
@@ -38,10 +40,9 @@ crop   = 0.12, 0.08, 0.64, 0.64   ; x, y, w, h of the canvas, 0..1; default: all
 width  = 1920           ; height follows from the aspect ratio
 
 [layout]
-placement = over        ; over the picture, or beside it on a black panel
-; panel      = right    ; beside only: left, right or bottom
-; panel_size = 0.32     ; beside only: fraction of the frame height
-margin = 0.02           ; space between overlays and the frame edge
+placement  = overlay    ; none, overlay, or a black panel: left, right, top, bottom
+panel_size = 0.32       ; panel only: fraction of the frame height
+margin     = 0.03       ; overlay only: space between overlays and the frame edge
 
 [units]
 speed     = km/h        ; km/h, mph, m/s, kn
@@ -49,37 +50,32 @@ altitude  = m           ; m, ft
 distance  = km          ; km, mi
 time_zone = local       ; utc, local, +02:00 or an IANA name such as Europe/Madrid
 
-[map]
-anchor  = bottom-right  ; top-left, top-right, bottom-left, bottom-right, or x, y
-size    = 0.36          ; fraction of the frame height
-opacity = 0.85
-scale   = auto          ; a ground distance (1.2km, 800m) or auto
-activity     = bicycle  ; starting values for auto: walk, hike, bicycle, car, flight
-look_ahead   = 45s
-margin       = 0.15
-closest      = 400m
-widest       = 5km
-response     = 8s
-tiles        = tiles/trip  ; optional: a prepared tile directory, relative to this file
-travelled    = yes
-remaining    = yes
-
-[speed]
-anchor = bottom-left
-size   = 0.12
-style  = number+graph   ; number, graph, or number+graph
-value  = 2d             ; 2d or 3d
-
-[height]
-anchor = bottom-left
-after  = speed          ; stacked next to the speed overlay
-size   = 0.12
-style  = graph
+[text]
+font_size     = 0.04    ; value text; on a panel, the largest size
+label_size    = 0.6     ; labels, relative to font_size
+labels        = above   ; above, left or none
+label_color   = #c8d0d8
+value_color   = #ffffff
+outline       = yes     ; a border around the glyphs
+outline_color = #000000
+outline_width = 0.08    ; fraction of the text size
 
 [telemetry]
-anchor = top-left
-size   = 0.05
-fields = utc, latitude, longitude, altitude, speed
+fields = time, speed, altitude, distance
+
+[field-speed]           ; optional, one per field
+label     = Speed       ; empty for no label
+anchor    = bottom-left ; a corner, top, bottom, or x, y in fractions of the frame
+align     = auto        ; auto, left, center, right
+font_size = 0.07        ; this field only
+
+[map]
+width   = 1.2km         ; ground distance across the map
+track   = yes           ; the route over the whole range, across chapters
+shape   = circle        ; square or circle
+size    = 0.3           ; overlay only: fraction of the frame height
+anchor  = top-right     ; overlay only
+opacity = 0.9           ; overlay only
 
 [output]
 codec  = h264           ; h264 or hevc
@@ -87,17 +83,19 @@ crf    = 20
 encoder_preset = medium
 audio  = yes
 audio_bitrate = 192000
-jpeg_quality  = 92
-gps_exif = no           ; stills only
 ```
 
 ## Rules
 
 ### Syntax
 
-- UTF-8. `key = value` lines, `[section]` headers, comments from `;` or `#` to the end of the
-  line. Keys before the first section are file-wide (`schema`). Blank lines are ignored.
+- UTF-8. `key = value` lines, `[section]` headers, comments from `;` to the end of the line, or
+  from a `#` at the start of a line or followed by a space or the end of the line, so that colours
+  such as `#ffd43b` are values. Keys before the first section are file-wide (`schema`). Blank
+  lines are ignored.
 - Values are text. Lists are comma-separated. Booleans are `yes`/`no` (also `true`/`false`).
+  Colours are `#rgb`, `#rrggbb`, `#rrggbbaa` or a name (black, white, gray, red, orange, yellow,
+  green, cyan, blue, magenta).
   Distances take a unit (`m`, `km`, `ft`, `mi`) and durations one (`s`, `min`), so a value never
   depends on a unit setting elsewhere.
 - Numbers are parsed in the C locale, as the other tools do, so `0.85` means the same everywhere.
@@ -117,12 +115,14 @@ gps_exif = no           ; stills only
 ### Combining files and options
 
 Built-in defaults, then each `--settings` file in order, then command-line options. A later value
-replaces an earlier one key by key. An overlay is present when its section is present in any file.
-`[map] enabled = no` removes one that an earlier file added. Options map onto keys: `--start` is
+replaces an earlier one key by key. An overlay is present when its section is present in any file
+(for the text: `[telemetry]` or any `[field-NAME]`). `[map] enabled = no` or
+`[telemetry] enabled = no` removes one that an earlier file added. gb-player 0.1 wrote
+`placement = beside` with `panel = SIDE`, and the map width as `[map] scale`; both are still read. Options map onto keys: `--start` is
 `range.start`, `--view` is `view.mode`, `--codec` is `output.codec`, and `--set SECTION.KEY=VALUE`
 reaches any key.
 
-`--print-settings` and `--save-settings` write the combined result in this format, every key
+`--print-settings` (and, later, `--save-settings`) writes the combined result in this format, every key
 explicit, with the range and view included and the version of `gb-render` in a comment.
 `activity` only records which preset the values started from. The values themselves are always
 written out, so a later change to a preset's defaults never changes an export made from a saved
@@ -130,15 +130,20 @@ file.
 
 ### Units and sizes
 
-- Every overlay `size`, `layout.margin` and `layout.panel_size` is a fraction of the output frame
-  **height**. Font sizes follow from the overlay size. Map tiles are drawn at frame height / 1080
-  output pixels per tile pixel. Nothing is in pixels, so a `--draft` export and a 4K export have
-  the same layout, and the same settings work at any resolution.
-- `anchor` is a corner, or `x, y` in frame-height units from the top left for a free position.
-  `after = NAME` places an overlay next to another one at the same corner, stacked away from the
-  edge.
-- With `placement = beside`, anchors are ignored and overlays are stacked in the panel in the
-  order of their sections in the file (or by `order = N`).
+- Every overlay `size`, font size, `layout.margin` and `layout.panel_size` is a fraction of the
+  output frame **height**. Map tiles are drawn at frame height / 1080 output pixels per tile
+  pixel. Nothing is in pixels, so a `--draft` export and a 4K export have the same layout, and the
+  same settings work at any resolution.
+- `anchor` is `top-left`, `top`, `top-right`, `bottom-left`, `bottom` or `bottom-right`, inset by
+  the margin, or `x, y` in fractions of the frame's width and height for the top-left corner of
+  the overlay (a field's `align = right` or `center` makes `x` its right edge or centre). Fields
+  at the same corner are stacked in the order of `[telemetry] fields`, beyond the map when it
+  shares the corner.
+- On a panel, anchors are ignored: the map is a square at the top of a side panel or at the left
+  of a top or bottom panel, and the fields are listed beside or below it, shrinking to fit.
+- The fields shown are `[telemetry] fields`, followed by any field that only has a `[field-NAME]`
+  section. Without a list or field sections, they are date and time, latitude, longitude,
+  altitude and speed.
 - The `[frame] aspect` is the aspect ratio of the whole output frame, including any panel. The
   picture area is what remains.
 - `[view] canvas` is the aspect ratio of the view as `gb-player` drew it, and `[frame] crop` the

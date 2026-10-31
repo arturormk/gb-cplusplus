@@ -1,6 +1,10 @@
 # Export: the `gb-render` command
 
 Video export is a command-line tool, `gb-render` (the name BLUEPRINT gives the headless renderer).
+What is implemented is listed in [`tools/gb-render/README.md`](../../../tools/gb-render/README.md);
+options it does not list (`--still`, `--contact-sheet`, `--show-layout`, `--save-settings`,
+`--prepare-tiles`, `--map-tiles`, `--manifest`, `--json`, `--map-scale auto`) are still planned.
+The map scale option is `--map-width DISTANCE`, and overlays are placed with `--placement`.
 The moment, the view and the capture rectangle are chosen in `gb-player`'s
 [Capture mode](capture.md), which also captures stills. Everything else is written down in
 settings files and on the command line, so an export can always be repeated exactly.

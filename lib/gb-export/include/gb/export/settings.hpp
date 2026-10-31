@@ -40,10 +40,11 @@ struct IniDocument {
   [[nodiscard]] const IniEntry *find(std::string_view section, std::string_view key) const;
 };
 
-// Reads the INI syntax: `[section]` headers, `key = value` lines, comments from ';' or '#' to the
-// end of the line, blank lines. Keys and section names are letters, digits, '_' and '-'. A key
-// given twice in one section, a line over 4 KiB, a file over 1 MiB, a NUL byte or a line that is
-// none of these is a SettingsError naming the line. What the sections and keys mean is not
+// Reads the INI syntax: `[section]` headers, `key = value` lines, comments from ';' to the end of
+// the line, or from a '#' that starts the line or is followed by a space or the end of the line
+// (so `#ffd43b` is a value), blank lines. Keys and section names are letters, digits, '_' and '-'.
+// A key given twice in one section, a line over 4 KiB, a file over 1 MiB, a NUL byte or a line that
+// is none of these is a SettingsError naming the line. What the sections and keys mean is not
 // checked here.
 [[nodiscard]] IniDocument parse_ini(std::string_view text);
 

@@ -1,3 +1,4 @@
+#include "gb/export/export_settings.hpp"
 #include "gb/export/framing.hpp"
 #include "gb/export/settings.hpp"
 
@@ -6,6 +7,7 @@
 #include <iostream>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 namespace {
 
@@ -39,7 +41,8 @@ void test_aspect() {
               !ex::parse_aspect("11:1") && !ex::parse_aspect("100000:1"),
           "invalid ratios rejected");
   require(ex::AspectRatio{4, 3}.text() == "4:3", "aspect text");
-  require(ex::parse_panel_side("right") == ex::PanelSide::right && !ex::parse_panel_side("top"),
+  require(ex::parse_panel_side("right") == ex::PanelSide::right &&
+              ex::parse_panel_side("top") == ex::PanelSide::top && !ex::parse_panel_side("middle"),
           "panel side names");
 }
 
@@ -62,6 +65,16 @@ void test_frame_layout() {
   layout = ex::frame_layout({16, 9}, 1920, ex::PanelSide::bottom, 0.25);
   require(layout.picture.height == 810 && layout.panel->y == 810 && layout.panel->height == 270,
           "bottom panel");
+  layout = ex::frame_layout({16, 9}, 1920, ex::PanelSide::top, 0.25);
+  require(layout.picture.height == 810 && layout.picture.y == 270 && layout.panel->y == 0 &&
+              layout.panel->height == 270,
+          "top panel");
+  {
+    const auto top = ex::panel_regions(layout, ex::PanelSide::top, true, true);
+    require(top.map && top.text && top.map->y == 24 && top.map->height == 270 - 48 &&
+                top.text->x > top.map->x,
+            "top panel: map left, text right");
+  }
   throws([] { (void)ex::frame_layout({16, 9}, 8); }, "too narrow");
   throws(
       [] {
@@ -182,6 +195,10 @@ void test_ini() {
   require(document.find("frame", "crop")->value == "0, 0, 1, 1", "CRLF");
   require(document.find("view", "yaw")->line == 10, "reopened section and line numbers");
   require(document.sections.size() == 2U, "sections listed once");
+  const auto colours = ex::parse_ini("[text]\na = #ffd43b # yellow\nb = #fff;white\nc = x #\n");
+  require(colours.find("text", "a")->value == "#ffd43b" &&
+              colours.find("text", "b")->value == "#fff" && colours.find("text", "c")->value == "x",
+          "'#' before a colour is not a comment");
 
   const auto error_line = [](const std::string &text) {
     try {
@@ -252,9 +269,8 @@ void test_settings_writer() {
   require(small.find("view", "zoom")->value == "2.5" &&
               small.find("view", "pan")->value == "0.125, 0.0",
           "flat view");
-  require(small.find("layout", "panel")->value == "right" &&
-              small.find("layout", "panel_size")->value == "0.3" &&
-              small.find("layout", "placement")->value == "beside",
+  require(!small.find("layout", "panel") && small.find("layout", "panel_size")->value == "0.3" &&
+              small.find("layout", "placement")->value == "right",
           "layout section");
   const auto crop_text = small.find("frame", "crop")->value;
   ex::Rect crop;
@@ -263,20 +279,253 @@ void test_settings_writer() {
           "crop parses");
   require(ex::crop_fits(std::stod(small.find("view", "canvas")->value), crop, picture),
           "written crop keeps the picture aspect: " + crop_text);
-  require(!small.find("map", "scale") && !small.find("telemetry", "fields"), "an empty panel");
+  require(!small.find("map", "width") && !small.find("telemetry", "fields"), "an empty panel");
 
   settings.map_width_metres = 1082.6;
   settings.telemetry = true;
   const auto filled = ex::parse_ini(ex::write_capture_settings(settings));
-  require(filled.find("map", "scale")->value == "1083m", "map scale as a ground distance");
+  require(filled.find("map", "width")->value == "1083m", "map scale as a ground distance");
   require(filled.find("telemetry", "fields")->value ==
                   "utc, latitude, longitude, altitude, speed" &&
               filled.find("units", "speed")->value == "km/h" &&
               filled.find("units", "time_zone")->value == "local",
           "telemetry fields and units");
   settings.panel = ex::PanelSide::none;
-  require(!ex::parse_ini(ex::write_capture_settings(settings)).find("map", "scale"),
+  require(!ex::parse_ini(ex::write_capture_settings(settings)).find("map", "width"),
           "no panel, no map");
+}
+
+ex::SettingsSource source(const std::string &name, const std::string &text) {
+  return {name, ex::parse_ini(text), true};
+}
+
+ex::ExportSettings combine(const std::vector<std::string> &texts,
+                           std::vector<std::string> *warnings = nullptr) {
+  std::vector<ex::SettingsSource> sources;
+  for (std::size_t index = 0; index < texts.size(); ++index)
+    sources.push_back(source("file" + std::to_string(index + 1) + ".ini", texts[index]));
+  return ex::combine_settings(sources, warnings);
+}
+
+std::string error_of(const std::vector<std::string> &texts) {
+  try {
+    (void)combine(texts);
+  } catch (const ex::SettingsValidationError &error) {
+    return error.what();
+  }
+  return {};
+}
+
+void test_values() {
+  require(ex::parse_color("#ffd43b") == ex::Color{0xff, 0xd4, 0x3b, 255}, "rrggbb");
+  require(ex::parse_color("#FFF") == ex::Color{255, 255, 255, 255}, "rgb");
+  require(ex::parse_color("#00000080") == ex::Color{0, 0, 0, 0x80}, "rrggbbaa");
+  require(ex::parse_color("white") == ex::Color{255, 255, 255, 255}, "named");
+  require(!ex::parse_color("#ff") && !ex::parse_color("ffd43b") && !ex::parse_color("#ggg"),
+          "invalid colours");
+  require(ex::color_text({0xff, 0xd4, 0x3b, 255}) == "#ffd43b" &&
+              ex::color_text({0, 0, 0, 0x80}) == "#00000080",
+          "colour text");
+
+  require(near(*ex::parse_distance("1.2km"), 1200.0) && near(*ex::parse_distance("800m"), 800.0) &&
+              near(*ex::parse_distance("1mi"), 1609.344) &&
+              near(*ex::parse_distance("1000ft"), 304.8) &&
+              near(*ex::parse_distance(" 2 KM "), 2000.0),
+          "distances");
+  require(!ex::parse_distance("1200") && !ex::parse_distance("km") && !ex::parse_distance("-1km") &&
+              !ex::parse_distance("0m"),
+          "a distance needs a positive amount and a unit");
+  require(ex::distance_text(1200.0) == "1200m" && ex::distance_text(12500.0) == "12.5km",
+          "distance text");
+
+  require(ex::parse_anchor("bottom-right") == ex::Anchor{ex::Corner::bottom_right}, "corner");
+  const auto free = ex::parse_anchor("0.25, 0.9");
+  require(free && free->corner == ex::Corner::free && near(free->x, 0.25) && near(free->y, 0.9),
+          "free anchor");
+  require(!ex::parse_anchor("1.5, 0") && !ex::parse_anchor("middle") && !ex::parse_anchor("0.5"),
+          "invalid anchors");
+  require(ex::anchor_text(*free) == "0.25, 0.9", "anchor text");
+
+  require(ex::parse_field("utc") == ex::Field::datetime &&
+              ex::parse_field("speed") == ex::Field::speed && !ex::parse_field("heart"),
+          "fields");
+  require(ex::parse_placement("over") == ex::Placement::overlay &&
+              ex::parse_placement("top") == ex::Placement::top && !ex::parse_placement("beside"),
+          "placements");
+}
+
+void test_export_settings() {
+  // Defaults: nothing but the schema.
+  auto s = combine({"schema = gb.export/1\n"});
+  require(s.placement == ex::Placement::overlay && !s.map.enabled && !s.telemetry &&
+              s.width == 1920 && s.output.codec == ex::Codec::h264 && s.output.audio,
+          "defaults");
+
+  // Overlay with custom fields, colours and a round map.
+  s = combine({R"(schema = gb.export/1
+[layout]
+placement = overlay
+[text]
+font_size = 0.05
+label_color = yellow
+value_color = #ffffff
+outline = yes
+[telemetry]
+fields = speed, altitude
+[field-speed]
+label = Velocidad
+anchor = bottom-right
+font_size = 0.08
+[field-time]
+label =
+anchor = 0.5, 0.05
+align = center
+[map]
+width = 1.5km
+track = no
+shape = circle
+anchor = top-left
+)"});
+  require(s.telemetry && s.fields.size() == 3U, "listed fields plus customised ones");
+  require(s.fields[0].field == ex::Field::speed && s.fields[0].label == "Velocidad" &&
+              s.fields[0].anchor.corner == ex::Corner::bottom_right &&
+              near(*s.fields[0].font_size, 0.08),
+          "a customised field");
+  require(s.fields[1].field == ex::Field::altitude && s.fields[1].label == "Altitude" &&
+              s.fields[1].anchor.corner == ex::Corner::bottom_left,
+          "a field with defaults");
+  require(s.fields[2].field == ex::Field::time && s.fields[2].label.empty() &&
+              s.fields[2].anchor.corner == ex::Corner::free &&
+              s.fields[2].align == ex::Align::center,
+          "a field only in its own section is appended; an empty label is no label");
+  require(near(s.text.font_size, 0.05) && s.text.label_color == ex::Color{0xff, 0xd4, 0x3b, 255},
+          "text style");
+  require(s.map.enabled && near(s.map.width_metres, 1500.0) && !s.map.track &&
+              s.map.shape == ex::MapShape::circle && s.map.anchor.corner == ex::Corner::top_left,
+          "map");
+
+  // Later files win key by key; enabled = no removes an overlay.
+  s = combine({"schema = gb.export/1\n[map]\nwidth = 2km\n[layout]\nplacement = left\n",
+               "schema = gb.export/1\n[map]\nshape = circle\n"});
+  require(s.map.enabled && near(s.map.width_metres, 2000.0) &&
+              s.map.shape == ex::MapShape::circle && s.placement == ex::Placement::left,
+          "combined files");
+  s = combine({"schema = gb.export/1\n[map]\n", "schema = gb.export/1\n[map]\nenabled = no\n"});
+  require(!s.map.enabled, "map removed");
+
+  // gb-player 0.1 wrote placement = beside with a panel key, and the map width as scale.
+  s = combine({"schema = gb.export/1\n[layout]\nplacement = beside\npanel = bottom\n"
+               "[map]\nscale = 832m\n[telemetry]\nfields = utc, speed\n"});
+  require(s.placement == ex::Placement::bottom && near(s.map.width_metres, 832.0) &&
+              s.fields.size() == 2U && s.fields[0].field == ex::Field::datetime,
+          "the earlier form");
+
+  // The settings Capture mode writes are read back.
+  ex::CaptureSettings capture;
+  capture.generator = "gb-player test";
+  capture.source = "GH010073.MP4";
+  capture.has_range = true;
+  capture.start = "c2:00:05:31.400";
+  capture.current = "c2:00:05:31.400";
+  capture.mode = 0;
+  capture.canvas = 16.0 / 9.0;
+  capture.panel = ex::PanelSide::top;
+  capture.panel_size = 0.25;
+  capture.crop = ex::fit_crop(
+      capture.canvas, *ex::picture_aspect(capture.aspect, capture.panel, 0.25), 0.5, 0.5, 0.6);
+  capture.map_width_metres = 900.0;
+  capture.telemetry = true;
+  s = combine({ex::write_capture_settings(capture)});
+  require(s.placement == ex::Placement::top && s.start == std::string("c2:00:05:31.400") &&
+              s.mode == 0 && s.map.enabled && near(s.map.width_metres, 900.0) && s.telemetry &&
+              s.crop.has_value(),
+          "Capture settings read back");
+
+  // --print-settings output reads back to the same settings.
+  s = combine({R"(schema = gb.export/1
+[view]
+mode = rectilinear
+yaw = -12.5
+fov = 95
+[frame]
+aspect = 4:3
+width = 1440
+[layout]
+placement = right
+panel_size = 0.4
+[units]
+speed = mph
+time_zone = Europe/Madrid
+[telemetry]
+fields = datetime, distance
+[field-distance]
+anchor = 0.1, 0.2
+[map]
+width = 3km
+)"});
+  const auto written = ex::write_export_settings(s, {"test"});
+  const auto again = combine({written});
+  require(ex::write_export_settings(again, {"test"}) == written, "printed settings round-trip");
+  require(again.mode == 0 && near(again.yaw, -12.5) && again.aspect == ex::AspectRatio{4, 3} &&
+              again.placement == ex::Placement::right && again.units.speed == ex::SpeedUnit::mph &&
+              again.units.time_zone == "Europe/Madrid" && again.fields.size() == 2U &&
+              again.fields[1].anchor.corner == ex::Corner::free,
+          "printed settings keep their values");
+
+  // The example is valid.
+  s = combine({ex::example_settings()});
+  require(s.map.enabled && s.map.shape == ex::MapShape::circle && s.telemetry, "example settings");
+
+  // --set overrides.
+  s = ex::combine_settings({source("a.ini", "schema = gb.export/1\n"),
+                            ex::override_source("--set", {"map.width=2.5km", "text.outline=no",
+                                                          "field-speed.label=V"})});
+  require(s.map.enabled && near(s.map.width_metres, 2500.0) && !s.text.outline &&
+              s.fields.size() == 1U && s.fields[0].label == "V",
+          "--set");
+  throws([] { (void)ex::override_source("--set", {"width=3"}); }, "--set needs a section");
+
+  // Warnings.
+  std::vector<std::string> warnings;
+  (void)combine({"schema = gb.export/1\n[layout]\nplacement = none\n[map]\n"}, &warnings);
+  require(warnings.size() == 1U, "placement none warns about the map");
+
+  // Errors name the file, line and key.
+  require(error_of({"[map]\nwidth = 1km\n"}).find("schema") != std::string::npos, "schema");
+  require(error_of({"schema = gb.export/2\n"}).find("gb.export/2") != std::string::npos,
+          "schema version");
+  require(error_of({"schema = gb.export/1\n[mapp]\nwidth = 1km\n"}) ==
+              "file1.ini:3: unknown section [mapp]",
+          "unknown section");
+  require(error_of({"schema = gb.export/1\n[map]\nwidht = 1km\n"}) ==
+              "file1.ini:3: [map] widht: unknown key",
+          "unknown key");
+  require(
+      error_of({"schema = gb.export/1\n[map]\nwidth = 1200\n"}).find("file1.ini:3: [map] width") ==
+          0U,
+      "distance without a unit");
+  require(error_of({"schema = gb.export/1\n[map]\nwidth = 1km\nscale = 2km\n"}).find("scale") !=
+              std::string::npos,
+          "width and scale together");
+  require(error_of({"schema = gb.export/1\n[text]\nfont_size = 2\n"}).find("out of range") !=
+              std::string::npos,
+          "out of range");
+  require(error_of({"schema = gb.export/1\n[field-heart]\nlabel = x\n"}).find("unknown field") !=
+              std::string::npos,
+          "unknown field section");
+  require(error_of({"schema = gb.export/1\n[telemetry]\nfields = speed, speed\n"}).find("twice") !=
+              std::string::npos,
+          "field listed twice");
+  require(error_of({"schema = gb.export/1\n[text]\nlabel_color = #12\n"}).find("colour") !=
+              std::string::npos,
+          "bad colour");
+  require(error_of({"schema = gb.export/1\n[frame]\ncrop = 0, 0, 0.5, 0.9\n"}).find("crop") !=
+              std::string::npos,
+          "crop of the wrong aspect ratio");
+  require(error_of({"schema = gb.export/1\n[layout]\nplacement = right\npanel_size = 0.9\n"
+                    "[frame]\naspect = 1:1\n"})
+                  .find("panel") != std::string::npos,
+          "panel leaves no picture");
 }
 
 } // namespace
@@ -290,6 +539,8 @@ int main() {
     test_output_scale();
     test_ini();
     test_settings_writer();
+    test_values();
+    test_export_settings();
   } catch (const std::exception &error) {
     std::cerr << "gb_export_tests: " << error.what() << '\n';
     return 1;

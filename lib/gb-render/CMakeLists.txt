@@ -11,6 +11,7 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
   shaders/frame.vert shaders/frame.frag)
 
 add_library(gb_render
+  src/export_overlay.cpp
   src/frame_renderer.cpp
   src/map_painter.cpp
   src/panel_painter.cpp
@@ -22,4 +23,4 @@ target_include_directories(gb_render
   PUBLIC include
   PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
 target_link_libraries(gb_render
-  PUBLIC gb::media gb::image gb::exporting gb::geo Qt6::Gui gb_project_options)
+  PUBLIC gb::media gb::image gb::exporting gb::geo gb::telemetry Qt6::Gui gb_project_options)

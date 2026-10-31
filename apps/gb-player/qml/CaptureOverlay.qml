@@ -33,20 +33,22 @@ Item {
     }
 
     // The panel takes part of the output frame next to the picture. Side panels are a fraction of
-    // the frame height, which is the picture's; a bottom panel is a fraction of the taller frame.
-    // It is previewed as the still will have it.
+    // the frame height, which is the picture's; a top or bottom panel is a fraction of the taller
+    // frame. It is previewed as the still will have it.
     Rectangle {
         readonly property real size: capture.panelSize
         readonly property string side: capture.panelSide
-        readonly property real frameHeight: side === "bottom" ? overlay.area.height / (1 - size) : overlay.area.height
+        readonly property bool across: side === "top" || side === "bottom"
+        readonly property real frameHeight: across ? overlay.area.height / (1 - size) : overlay.area.height
         visible: side !== "none"
         color: "black"
         border.color: "#3a4a56"
         x: side === "left" ? overlay.area.x - size * frameHeight
            : side === "right" ? overlay.area.x + overlay.area.width : overlay.area.x
-        y: side === "bottom" ? overlay.area.y + overlay.area.height : overlay.area.y
-        width: side === "bottom" ? overlay.area.width : size * frameHeight
-        height: side === "bottom" ? size * frameHeight : overlay.area.height
+        y: side === "bottom" ? overlay.area.y + overlay.area.height
+           : side === "top" ? overlay.area.y - size * frameHeight : overlay.area.y
+        width: across ? overlay.area.width : size * frameHeight
+        height: across ? size * frameHeight : overlay.area.height
         PanelPreview {
             anchors.fill: parent
             anchors.margins: 1

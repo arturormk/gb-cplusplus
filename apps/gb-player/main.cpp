@@ -185,7 +185,7 @@ Options parse(const int argc, char **argv) {
       // Developer check: enter Capture mode, halve the rectangle, capture to PATH and exit.
       options.capture_test = QString::fromLocal8Bit(value().data());
     } else if (argument == "--capture-panel") {
-      // With --capture-test: the side panel (none, left, right or bottom).
+      // With --capture-test: the side panel (none, left, right, top or bottom).
       options.capture_panel = QString::fromLocal8Bit(value().data());
     } else if (!argument.empty() && argument.front() == '-') {
       throw std::runtime_error("unknown option: " + std::string(argument));

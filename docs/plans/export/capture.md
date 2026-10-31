@@ -52,13 +52,13 @@ by ten with Shift.
 ## Side panels
 
 Overlays placed *beside* the picture take part of the output frame, so the picture's aspect
-ratio is not the frame's. The sidebar has a **Panel** choice (none, left, right or bottom, and its
+ratio is not the frame's. The sidebar has a **Panel** choice (none, left, right, top or bottom, and its
 size). The rectangle takes the aspect ratio of what is left. The frame aspect ratio, which is
 what upload targets require, stays the one chosen.
 
 The panel is black and can show, each with a checkbox (both on by default):
 
-- **Map**: the route map, a square at the top of a side panel or at the left of a bottom panel. It
+- **Map**: the route map, a square at the top of a side panel or at the left of a top or bottom panel. It
   has the map pane's zoom, so its ground scale is what the pane shows, and it is centred on the
   current position, north up, as `gb-render` draws it (on the pane's centre when there is no
   position). Tiles are drawn at frame height / 1080 output pixels per tile pixel, and the
@@ -88,7 +88,7 @@ In Capture mode the right-hand panel (map, telemetry, graphs) is replaced by:
 
 The settings shown are the parts `gb-player` knows about: `[range]`, `[view]`, `[frame]`, and,
 when a panel is set, `[layout]` with what the panel shows: `[units]` and `[telemetry]` for the
-text, and `[map] scale` (the ground distance across the map) when there is a GPS track. For
+text, and `[map] width` (the ground distance across the map) when there is a GPS track. For
 example:
 
 ```ini

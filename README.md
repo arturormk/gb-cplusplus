@@ -67,6 +67,8 @@ build/dev/tools/gb-frames/gb-frames --stream 0 --time 5 --output stream-0.png re
 build/dev/tools/gb-frames/gb-frames --reconstruct --stream 0 --stream 5 \
   --time 5 --output panorama.png recording.360
 build/dev/tools/gb-project/gb-project --time 5 recording.360
+build/dev/tools/gb-render/gb-render --example-settings > ride.ini
+build/dev/tools/gb-render/gb-render recording.360 --settings ride.ini --duration 30 -o clip.mp4
 build/dev/apps/gb-player/gb-player recording.360
 build/dev/apps/gb-player/gb-player --map-no-network recording.360
 build/dev/apps/gb-player/gb-player --benchmark 60 --seeks 20 recording.360 > benchmark.json

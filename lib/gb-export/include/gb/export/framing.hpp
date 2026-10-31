@@ -22,7 +22,7 @@ struct AspectRatio {
 // between 1:10 and 10:1.
 [[nodiscard]] std::optional<AspectRatio> parse_aspect(const std::string &text);
 
-enum class PanelSide { none, left, right, bottom };
+enum class PanelSide { none, left, right, top, bottom };
 
 [[nodiscard]] std::string panel_side_name(PanelSide side);
 [[nodiscard]] std::optional<PanelSide> parse_panel_side(const std::string &text);
@@ -67,8 +67,9 @@ struct FrameLayout {
                                        double panel_size = 0.0);
 
 // Where a side panel's contents go: a square map and the telemetry text, inside a margin of
-// 24/1080 of the frame height. A left or right panel stacks the map above the text; a bottom panel
-// puts the map on the left and the text to its right. With only one of them, it takes the room.
+// 24/1080 of the frame height. A left or right panel stacks the map above the text; a top or bottom
+// panel puts the map on the left and the text to its right. With only one of them, it takes the
+// room.
 struct PanelRegions {
   std::optional<PixelRect> map;
   std::optional<PixelRect> text;

@@ -1,5 +1,6 @@
 # Settings, framing geometry and layout for export: no Qt, unit-tested like the format libraries.
 add_library(gb_export
+  src/export_settings.cpp
   src/framing.cpp
   src/settings.cpp)
 add_library(gb::exporting ALIAS gb_export)

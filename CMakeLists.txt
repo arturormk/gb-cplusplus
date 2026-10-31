@@ -38,6 +38,7 @@ add_subdirectory(tools/gb-telemetry)
 add_subdirectory(tools/gb-time)
 add_subdirectory(tools/gb-frames)
 add_subdirectory(tools/gb-project)
+add_subdirectory(tools/gb-render)
 add_subdirectory(apps/gb-player)
 
 if(BUILD_TESTING)

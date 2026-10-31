@@ -19,6 +19,23 @@ bool valid_name(const std::string_view name) {
          std::all_of(name.begin(), name.end(), name_character);
 }
 
+// ';' starts a comment anywhere. '#' does at the start of a line, or followed by a space, a tab or
+// the end of the line, so that colours such as #ffd43b can be written as values.
+std::size_t comment_start(const std::string_view line) {
+  const auto first = line.find_first_not_of(" \t");
+  if (first != std::string_view::npos && line[first] == '#')
+    return first;
+  for (std::size_t index = 0; index < line.size(); ++index) {
+    if (line[index] == ';')
+      return index;
+    if (line[index] == '#' && (index + 1U == line.size() || line[index + 1U] == ' ' ||
+                               line[index + 1U] == '\t' || line[index + 1U] == '\r')) {
+      return index;
+    }
+  }
+  return std::string_view::npos;
+}
+
 std::string_view trim(std::string_view text) {
   while (!text.empty() && (text.front() == ' ' || text.front() == '\t'))
     text.remove_prefix(1);
@@ -98,7 +115,7 @@ IniDocument parse_ini(const std::string_view text) {
       throw SettingsError(line_number, "line is longer than 4 KiB");
     if (line.find('\0') != std::string_view::npos)
       throw SettingsError(line_number, "NUL byte");
-    if (const auto comment = line.find_first_of(";#"); comment != std::string_view::npos)
+    if (const auto comment = comment_start(line); comment != std::string_view::npos)
       line = line.substr(0, comment);
     line = trim(line);
     if (line.empty())
@@ -184,8 +201,7 @@ std::string write_capture_settings(const CaptureSettings &settings) {
 
   if (settings.panel != PanelSide::none) {
     out << "\n[layout]\n";
-    out << "placement  = beside\n";
-    out << "panel      = " << panel_side_name(settings.panel) << '\n';
+    out << "placement  = " << panel_side_name(settings.panel) << '\n';
     out << "panel_size = " << number(settings.panel_size, 3) << '\n';
     if (settings.telemetry) {
       out << "\n[units]\n";
@@ -195,7 +211,7 @@ std::string write_capture_settings(const CaptureSettings &settings) {
     }
     if (settings.map_width_metres) {
       out << "\n[map]\n";
-      out << "scale = " << std::max(1L, std::lround(*settings.map_width_metres))
+      out << "width = " << std::max(1L, std::lround(*settings.map_width_metres))
           << "m   ; ground distance across the map\n";
     }
     if (settings.telemetry) {
