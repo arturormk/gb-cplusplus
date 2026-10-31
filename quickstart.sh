@@ -7,8 +7,8 @@ readonly SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 readonly PRESET="dev"
 readonly BUILD_DIR="${SCRIPT_DIR}/build/${PRESET}"
 readonly INSTALL_DIR="${BUILD_DIR}/install"
-# Pinned so every machine formats identically; keep in step with scripts/format.sh.
-readonly CLANG_FORMAT="clang-format-15"
+# Pinned so every machine formats identically; exported so scripts/format.sh uses the same one.
+declare -rx CLANG_FORMAT="clang-format-15"
 
 install_dependencies=true
 run_tests=true
@@ -128,7 +128,7 @@ fi
 
 if [[ "${check_format}" == true ]]; then
   printf 'Checking C++ formatting...\n'
-  if ! CLANG_FORMAT="${CLANG_FORMAT}" "${SCRIPT_DIR}/scripts/format.sh" --check; then
+  if ! "${SCRIPT_DIR}/scripts/format.sh" --check; then
     printf 'Warning: formatting check failed (see above); the build itself succeeded.\n' >&2
   fi
 fi
