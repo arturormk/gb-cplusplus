@@ -22,6 +22,10 @@ format evidence before shared functionality moves into the player.
   scripts/format.sh --check  # report only
   ```
 
+  CI fails when a file is not formatted. Put pure reformatting in its own commit and add its
+  hash to `.git-blame-ignore-revs`; run `git config blame.ignoreRevsFile .git-blame-ignore-revs`
+  once so local `git blame` skips those commits too.
+
 - Add synthetic or legally distributable tests for binary behavior. Keep source media
   (`.360`, `.mp4`, `.jpg`, …) and generated outputs out of Git.
 - Record new format findings under `research/findings/`. Include the commands, file
