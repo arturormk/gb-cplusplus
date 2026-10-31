@@ -112,8 +112,12 @@ CaptureController::CaptureController(PlayerController &player, QString version, 
   });
   connect(&player_, &PlayerController::fileChanged, this, [this] {
     cancelCapture(QStringLiteral("Capture cancelled: another file was opened"));
-    start_.reset();
-    end_.reset();
+    const auto recording = player_.recordingPaths();
+    if (recording.isEmpty() || recording != range_recording_) {
+      start_.reset();
+      end_.reset();
+    }
+    range_recording_ = recording;
     emit rangeChanged();
     if (active_) {
       updateGps();

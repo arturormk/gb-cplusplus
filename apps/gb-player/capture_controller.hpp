@@ -228,6 +228,9 @@ private:
   QString resolution_warning_;
   std::optional<QString> start_;
   std::optional<QString> end_;
+  // The chapters the range belongs to: switching chapter keeps it, opening another recording
+  // clears it. Its positions name their chapter ("c3:00:01:02.500"), so they stay valid.
+  QStringList range_recording_;
   QString settings_text_;
   std::unique_ptr<gb::render::OffscreenRenderer> renderer_;
 

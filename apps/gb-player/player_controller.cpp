@@ -284,6 +284,12 @@ QStringList PlayerController::sequenceNames() const {
   return names;
 }
 
+QStringList PlayerController::recordingPaths() const {
+  if (!sequence_paths_.isEmpty())
+    return sequence_paths_;
+  return input_path_.isEmpty() || isPhoto() ? QStringList{} : QStringList{input_path_};
+}
+
 int PlayerController::overlap() const { return source_->layout.overlap; }
 
 int PlayerController::sourceLayout() const {

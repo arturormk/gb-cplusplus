@@ -92,6 +92,9 @@ public:
   // not chaptered is alone.
   [[nodiscard]] QStringList sequenceNames() const;
   [[nodiscard]] int sequenceIndex() const { return sequence_index_; }
+  // Absolute paths of the open recording's chapters; just the open file when it is not chaptered,
+  // and empty when nothing (or a photo) is open.
+  [[nodiscard]] QStringList recordingPaths() const;
   [[nodiscard]] bool hasMedia() const { return engine_.isOpen(); }
   // A JPEG photo is shown as a still: no transport, one GPS position at most, no track.
   [[nodiscard]] bool isPhoto() const { return engine_.isStill(); }
