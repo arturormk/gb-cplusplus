@@ -83,25 +83,14 @@ Pane {
                     ToolTip.visible: hovered
                     ToolTip.text: "Panel size, as a percentage of the frame height"
                 }
-            }
-            RowLayout {
-                visible: capture.panelSide !== "none"
-                spacing: 12
                 CheckBox {
-                    text: "Map"
-                    checked: capture.panelMap
-                    onToggled: capture.panelMap = checked
+                    visible: capture.panelSide !== "none"
+                    text: "Track"
+                    checked: capture.panelTrack
+                    onToggled: capture.panelTrack = checked
                     ToolTip.visible: hovered
                     ToolTip.delay: 400
-                    ToolTip.text: "The route map at the map pane's zoom, centred on the position, north up"
-                }
-                CheckBox {
-                    text: "Telemetry"
-                    checked: capture.panelTelemetry
-                    onToggled: capture.panelTelemetry = checked
-                    ToolTip.visible: hovered
-                    ToolTip.delay: 400
-                    ToolTip.text: "Date and time (local), latitude, longitude, altitude and speed at the frame"
+                    ToolTip.text: "Draw the route with its start and end on the map of stills; off shows only the position. Not part of the gb-render settings"
                 }
             }
 

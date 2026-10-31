@@ -270,21 +270,11 @@ void CaptureController::setPanelSize(const double size) {
   refitCrop();
 }
 
-void CaptureController::setPanelMap(const bool enabled) {
-  if (panel_map_ == enabled)
+void CaptureController::setPanelTrack(const bool enabled) {
+  if (panel_track_ == enabled)
     return;
-  panel_map_ = enabled;
+  panel_track_ = enabled;
   emit frameChanged();
-  updateSettings();
-  emit panelChanged();
-}
-
-void CaptureController::setPanelTelemetry(const bool enabled) {
-  if (panel_telemetry_ == enabled)
-    return;
-  panel_telemetry_ = enabled;
-  emit frameChanged();
-  updateSettings();
   emit panelChanged();
 }
 
@@ -561,7 +551,7 @@ void CaptureController::updateSettings() {
   settings.panel = kPanelSides[static_cast<std::size_t>(panel_side_)];
   settings.panel_size = panel_size_;
   if (settings.panel != ex::PanelSide::none) {
-    settings.telemetry = panel_telemetry_;
+    settings.telemetry = true;
     try {
       const auto layout =
           ex::frame_layout(settings.aspect, output_width_, settings.panel, panel_size_);
@@ -635,8 +625,6 @@ QString CaptureController::suggestedPath() const {
 
 gb::render::PanelContent CaptureController::panelContent() const {
   gb::render::PanelContent content;
-  content.map = panel_map_;
-  content.telemetry = panel_telemetry_;
   if (map_ != nullptr) {
     content.scene = map_->scene();
   } else {
@@ -644,6 +632,7 @@ gb::render::PanelContent CaptureController::panelContent() const {
     content.scene.max_zoom = player_.tileFetcher()->provider().max_zoom;
   }
   auto &scene = content.scene;
+  scene.track = panel_track_;
   // North up and centred on the current position, as gb-render draws it; where there is none,
   // as the map pane shows it.
   if (scene.route != nullptr && scene.points != nullptr && scene.record.has_value() &&
@@ -658,10 +647,8 @@ gb::render::PanelContent CaptureController::panelContent() const {
     return pane ? pane(key) : nullptr;
   };
   content.attribution = player_.mapAttribution();
-  if (panel_telemetry_) {
-    content.lines = gb::render::telemetry_lines(
-        gps_fix_ ? std::optional<gb::image::PhotoGps>(*gps_fix_) : std::nullopt);
-  }
+  content.lines = gb::render::telemetry_lines(
+      gps_fix_ ? std::optional<gb::image::PhotoGps>(*gps_fix_) : std::nullopt);
   return content;
 }
 

@@ -82,8 +82,9 @@ Capture mode.
   and the wheel changes the field of view (or zooms), as in Play mode.
 - **Panel**: none, left, right or bottom, with its size as a percentage of the frame height. It
   takes part of the output frame, so the rectangle gets the aspect ratio of what is left. It is
-  black and shows, with the **Map** and **Telemetry** checkboxes, the route map (at the map pane's
-  zoom, centred on the position, north up, with the attribution) and the date and time (local,
+  black and shows the route map (at the map pane's zoom, centred on the position, north up, with
+  the attribution; the **Track** checkbox draws the route with its start and end, or only the
+  position — for stills only, not in the gb-render settings) and the date and time (local,
   from GPS), latitude, longitude, altitude and speed at the frame, or "—" without a valid fix
   near it. The preview next to the rectangle is drawn as the still will be. Before writing, the
   map's missing tiles are requested through the map's rate-limited fetcher; Capture waits up to

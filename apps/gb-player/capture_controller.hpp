@@ -48,9 +48,10 @@ class CaptureController final : public QObject {
   Q_PROPERTY(QString aspectText READ aspectText NOTIFY frameChanged)
   Q_PROPERTY(QString panelSide READ panelSide WRITE setPanelSide NOTIFY frameChanged)
   Q_PROPERTY(double panelSize READ panelSize WRITE setPanelSize NOTIFY frameChanged)
-  // What the panel shows: the route map, at the map pane's zoom, and the telemetry text.
-  Q_PROPERTY(bool panelMap READ panelMap WRITE setPanelMap NOTIFY frameChanged)
-  Q_PROPERTY(bool panelTelemetry READ panelTelemetry WRITE setPanelTelemetry NOTIFY frameChanged)
+  // A panel always shows the route map, at the map pane's zoom, and the telemetry text.
+  // Whether its map draws the route with its start and end, or only the position. For
+  // stills only: it is not part of the gb-render settings.
+  Q_PROPERTY(bool panelTrack READ panelTrack WRITE setPanelTrack NOTIFY frameChanged)
   Q_PROPERTY(QObject *mapView READ mapView WRITE setMapView NOTIFY viewObjectChanged)
   // True while a capture waits for map tiles.
   Q_PROPERTY(bool busy READ busy NOTIFY busyChanged)
@@ -99,10 +100,8 @@ public:
   void setPanelSide(const QString &side);
   [[nodiscard]] double panelSize() const { return panel_size_; }
   void setPanelSize(double size);
-  [[nodiscard]] bool panelMap() const { return panel_map_; }
-  void setPanelMap(bool enabled);
-  [[nodiscard]] bool panelTelemetry() const { return panel_telemetry_; }
-  void setPanelTelemetry(bool enabled);
+  [[nodiscard]] bool panelTrack() const { return panel_track_; }
+  void setPanelTrack(bool enabled);
   [[nodiscard]] QObject *mapView() const;
   void setMapView(QObject *map);
   [[nodiscard]] bool busy() const { return prepared_ != nullptr; }
@@ -212,8 +211,7 @@ private:
   int free_height_{1};
   int panel_side_{};
   double panel_size_{0.32};
-  bool panel_map_{true};
-  bool panel_telemetry_{true};
+  bool panel_track_{true};
   QPointer<MapView> map_;
   QRectF crop_{0.0, 0.0, 1.0, 1.0};
   bool crop_set_{};

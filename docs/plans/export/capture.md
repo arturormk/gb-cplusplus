@@ -81,7 +81,7 @@ In Capture mode the right-hand panel (map, telemetry, graphs) is replaced by:
 
 | Group | Contents |
 |---|---|
-| Frame | Aspect ratio buttons, free W:H fields, panel side and size, and the panel's Map and Telemetry checkboxes. |
+| Frame | Aspect ratio buttons, free W:H fields, panel side and size, and a *Track* checkbox: the route, with its start and end, on the map of stills (off draws only the position; not written to the gb-render settings). A panel always shows the map and the telemetry. |
 | Capture | Resolution presets for the aspect ratio, or a width with the height derived from it. JPEG or PNG, JPEG quality. *Include GPS position (EXIF)*, off by default, disabled with the reason when there is no valid fix near the frame. The **Capture** button, and the folder captures go to. |
 | Range | The current position as a [chapter position](cli.md#positions-in-a-chaptered-recording). *Set start* and *Set end*, for the settings only. The range survives a change of chapter, so it can start in one chapter and end in another; opening another recording clears it. |
 | Settings | The settings as INI text, monospace and read-only, updated live as the view and rectangle change. **Copy** and **Save as…** |
