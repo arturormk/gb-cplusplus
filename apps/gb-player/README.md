@@ -201,7 +201,10 @@ for diagnosing playback that falls behind its audio; see
   software backend, decoding, presentation and telemetry still work, but no image is shown.
 - Audio: the first mono or stereo stream plays through SDL2 (`--no-audio` disables it). The MAX
   four-channel spatial track is not rendered. Hardware decoding (VA-API), edit lists,
-  a joined timeline across chapters, photos, and video export are not implemented.
+  a joined timeline across chapters, and video export are not implemented.
+- Photos: only the first JPEG codestream is shown; other MPF entries are ignored. The APP6
+  camera orientation is listed but not applied to the view. Linear and narrow lens
+  classification is unverified (ADR-0011).
 - The map is raster only, and tiles can look soft on HiDPI screens. Routes crossing the
   antimeridian are not drawn across it. The tile cache is never pruned automatically.
 - MAX reconstruction requires the verified two-stream geometry. The near-black `BACK` face of the

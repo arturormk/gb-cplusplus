@@ -434,8 +434,10 @@ Audio was added to complete M4 (ADR-0008). The stereo AAC track plays with an au
 and sample-accurate alignment to the video clock. It is heard only during stable playback: never
 while scrubbing, while a seek is decoding, within 250 ms after a seek, or while paused. On both
 samples, 20 s runs played with 0 dropped frames and 0 audio underruns, and the benchmark recorded
-no audible frames during scrubs, seek bursts or pauses. Hardware decoding, spatial audio and
-photos remain outside M4.
+no audible frames during scrubs, seek bursts or pauses. Hardware decoding and spatial audio
+remain outside M4. Photos were added after M4 (ADR-0011): MAX JPEG photos open as stills, with
+spherical views for equirectangular 360° and superwide photos and their EXIF position on the map.
+Linear and narrow lens classification is unverified until real photos are available.
 
 - Open file, play/pause/seek, spherical viewing, metadata panel.
 - Synchronize telemetry and media timeline; basic performance diagnostics.
