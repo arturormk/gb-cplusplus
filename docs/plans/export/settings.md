@@ -1,0 +1,161 @@
+# Export settings file (`gb.export/1`, INI)
+
+`gb-render` reads its settings from INI files: one section per part of the export, one per
+overlay. BLUEPRINT §9 asks for a versioned, documented settings format, and suggests JSON "or
+another explicitly documented format". INI was chosen over JSON and YAML because:
+
+- people write these files by hand, and INI is the easiest of the three to write, with comments;
+- every setting is flat within its section, so INI's lack of nesting costs nothing, and a section
+  plus a key is also the path for `--set` (`--set map.opacity=0.7`);
+- it needs no dependency. YAML would add yaml-cpp. The parser is small, bounded and lives in the
+  Qt-free `gb_export` core, where it is unit-tested like the format libraries.
+
+## Example
+
+`gb-render --example-settings` writes a file like this, with every setting commented:
+
+```ini
+; gb-render export settings
+schema = gb.export/1
+
+[range]
+; chapter:time positions, as gb-player shows them (or recording time without a chapter)
+start = c1:00:11:30.000
+end   = c2:00:02:05.000
+
+[view]
+mode   = rectilinear    ; the gb-player view names
+yaw    = -12.5
+pitch  = 4.0
+roll   = 0.0
+fov    = 95
+; flat views: zoom = 1.0 and pan = 0, 0, as in gb-player
+canvas = 1.7778         ; aspect ratio of the view the crop refers to
+
+[frame]
+aspect = 16:9           ; 16:9, 4:3, 1:1, 9:16 or W:H; the whole output frame
+crop   = 0.12, 0.08, 0.64, 0.64   ; x, y, w, h of the canvas, 0..1; default: all of it
+width  = 1920           ; height follows from the aspect ratio
+
+[layout]
+placement = over        ; over the picture, or beside it on a black panel
+; panel      = right    ; beside only: left, right or bottom
+; panel_size = 0.32     ; beside only: fraction of the frame height
+margin = 0.02           ; space between overlays and the frame edge
+
+[units]
+speed     = km/h        ; km/h, mph, m/s, kn
+altitude  = m           ; m, ft
+distance  = km          ; km, mi
+time_zone = local       ; utc, local, +02:00 or an IANA name such as Europe/Madrid
+
+[map]
+anchor  = bottom-right  ; top-left, top-right, bottom-left, bottom-right, or x, y
+size    = 0.36          ; fraction of the frame height
+opacity = 0.85
+scale   = auto          ; a ground distance (1.2km, 800m) or auto
+activity     = bicycle  ; starting values for auto: walk, hike, bicycle, car, flight
+look_ahead   = 45s
+margin       = 0.15
+closest      = 400m
+widest       = 5km
+response     = 8s
+tiles        = tiles/trip  ; optional: a prepared tile directory, relative to this file
+travelled    = yes
+remaining    = yes
+
+[speed]
+anchor = bottom-left
+size   = 0.12
+style  = number+graph   ; number, graph, or number+graph
+value  = 2d             ; 2d or 3d
+
+[height]
+anchor = bottom-left
+after  = speed          ; stacked next to the speed overlay
+size   = 0.12
+style  = graph
+
+[telemetry]
+anchor = top-left
+size   = 0.05
+fields = utc, latitude, longitude, altitude, speed
+
+[output]
+codec  = h264           ; h264 or hevc
+crf    = 20
+encoder_preset = medium
+audio  = yes
+audio_bitrate = 192000
+jpeg_quality  = 92
+gps_exif = no           ; stills only
+```
+
+## Rules
+
+### Syntax
+
+- UTF-8. `key = value` lines, `[section]` headers, comments from `;` or `#` to the end of the
+  line. Keys before the first section are file-wide (`schema`). Blank lines are ignored.
+- Values are text. Lists are comma-separated. Booleans are `yes`/`no` (also `true`/`false`).
+  Distances take a unit (`m`, `km`, `ft`, `mi`) and durations one (`s`, `min`), so a value never
+  depends on a unit setting elsewhere.
+- Numbers are parsed in the C locale, as the other tools do, so `0.85` means the same everywhere.
+- Lines are limited to 4 KiB and files to 1 MiB. Anything longer is an error, as the format
+  libraries do with oversized input.
+
+### Validation
+
+- `schema = gb.export/1` is required. A file without it, or with another version, is rejected.
+- Unknown sections and keys are errors that name the file, line and key, so a misspelling is never
+  silently ignored. A key given twice in one section is an error.
+- Values out of range are errors, with the allowed range.
+- A setting that cannot apply is an error: a crop outside the canvas, a view the source
+  layout does not support, audio on a recording without a playable track, `--size` not matching
+  `aspect`.
+
+### Combining files and options
+
+Built-in defaults, then each `--settings` file in order, then command-line options. A later value
+replaces an earlier one key by key. An overlay is present when its section is present in any file.
+`[map] enabled = no` removes one that an earlier file added. Options map onto keys: `--start` is
+`range.start`, `--view` is `view.mode`, `--codec` is `output.codec`, and `--set SECTION.KEY=VALUE`
+reaches any key.
+
+`--print-settings` and `--save-settings` write the combined result in this format, every key
+explicit, with the range and view included and the version of `gb-render` in a comment.
+`activity` only records which preset the values started from. The values themselves are always
+written out, so a later change to a preset's defaults never changes an export made from a saved
+file.
+
+### Units and sizes
+
+- Every overlay `size`, `layout.margin` and `layout.panel_size` is a fraction of the output frame
+  **height**. Font sizes follow from the overlay size. Map tiles are drawn at frame height / 1080
+  output pixels per tile pixel. Nothing is in pixels, so a `--draft` export and a 4K export have
+  the same layout, and the same settings work at any resolution.
+- `anchor` is a corner, or `x, y` in frame-height units from the top left for a free position.
+  `after = NAME` places an overlay next to another one at the same corner, stacked away from the
+  edge.
+- With `placement = beside`, anchors are ignored and overlays are stacked in the panel in the
+  order of their sections in the file (or by `order = N`).
+- The `[frame] aspect` is the aspect ratio of the whole output frame, including any panel. The
+  picture area is what remains.
+- `[view] canvas` is the aspect ratio of the view as `gb-player` drew it, and `[frame] crop` the
+  part of it that is exported ([capture](capture.md#what-the-rectangle-means)). The crop, measured
+  in canvas pixels (`w · canvas` by `h`), must have the picture area's aspect ratio within 0.1 %.
+  Without `crop`, the whole canvas is exported, and `canvas` defaults to the picture area's
+  aspect ratio.
+
+### What has no setting
+
+- **Map attribution** is always drawn when the map is present.
+- **Location in videos.** Export never embeds telemetry or location in a video, so there is no
+  setting for it. `gps_exif` applies to stills and defaults to `no`.
+- **Map orientation and centring.** The map is always centred on the current position, north up.
+
+### Versioning
+
+A change that alters the meaning of a key, or removes one, makes `gb.export/2`. Adding a key whose
+default keeps the output of older files unchanged stays `gb.export/1`. Reserved for later: a
+`[keyframes]` section for framing that changes over time.
