@@ -1,5 +1,6 @@
 #include "gb/geo/mercator.hpp"
 #include "gb/geo/route.hpp"
+#include "gb/geo/scale_curve.hpp"
 #include "gb/geo/tile_cache.hpp"
 #include "gb/geo/tiles.hpp"
 
@@ -349,6 +350,93 @@ void test_route_jumps() {
 
 } // namespace
 
+// A track along the equator, one record per second (ticks are milliseconds), at the speed
+// `speed(t)` in m/s; records for which `missing(t)` holds are left out.
+template <typename Speed, typename Missing>
+std::vector<gb::geo::RoutePoint> equator_track(const int seconds, Speed speed, Missing missing) {
+  constexpr double kMetresPerDegree = 6371008.8 * 3.14159265358979323846 / 180.0;
+  std::vector<gb::geo::RoutePoint> points;
+  double metres = 0.0;
+  for (int t = 0; t <= seconds; ++t) {
+    if (!missing(t))
+      points.push_back({{0.0, metres / kMetresPerDegree}, t * 1000LL, true, speed(t), false});
+    metres += speed(t);
+  }
+  return points;
+}
+
+void test_scale_curve() {
+  using namespace gb::geo;
+  const auto none = [](int) { return false; };
+  const ScaleCurveSettings settings{60.0, 150.0, 100000.0};
+  const auto at = [](const ScaleCurve &curve, const int seconds) {
+    return curve.width_at(seconds * 1000LL);
+  };
+  // The route of the next minute at three quarters of the radius: 600 m ahead, 1600 m across.
+  const auto expected = 2.0 * 600.0 / kScaleAheadFraction;
+
+  const ScaleCurve steady(equator_track(900, [](int) { return 10.0; }, none), 0, 900000, 0.001,
+                          settings);
+  check(!steady.empty(), "a curve over the range");
+  check(at(steady, 300) >= 0.95 * expected && at(steady, 300) <= 1.12 * expected,
+        "steady speed: the next minute fills the map with a margin");
+  double steepest = 0.0;
+  for (int t = 1; t <= 900; ++t)
+    steepest = std::max(steepest, std::fabs(std::log2(at(steady, t) / at(steady, t - 1))));
+  check(steepest <= kScaleZoomOutRate + 1e-9, "the zoom never changes faster than its rate");
+
+  const ScaleCurve still(equator_track(300, [](int) { return 0.0; }, none), 0, 300000, 0.001,
+                         settings);
+  check(near(at(still, 150), 150.0, 1.0), "standing still: the closest limit");
+  const ScaleCurve no_fix({}, 0, 300000, 0.001, settings);
+  check(near(at(no_fix, 10), 150.0, 1.0), "no fix at all: the closest limit");
+
+  // Speeding up from 2 to 20 m/s at 300 s: the map is already wide when it happens.
+  const ScaleCurve faster(
+      equator_track(900, [](int t) { return t < 300 ? 2.0 : 20.0; }, none), 0, 900000, 0.001,
+      settings);
+  check(at(faster, 300) >= 0.95 * 2.0 * 1200.0 / kScaleAheadFraction,
+        "zooming out happens ahead of time, so the route ahead stays in view");
+  check(at(faster, 200) < 1000.0, "but not long before");
+
+  // A ten-second stop is not followed; a five-minute stop is, slowly.
+  const ScaleCurve short_stop(
+      equator_track(900, [](int t) { return t >= 400 && t < 410 ? 0.0 : 10.0; }, none), 0,
+      900000, 0.001, settings);
+  double narrowest = 1e9;
+  for (int t = 100; t <= 800; ++t)
+    narrowest = std::min(narrowest, at(short_stop, t));
+  check(narrowest >= 0.95 * expected * (50.0 / 60.0), "a short stop barely moves the map");
+  const ScaleCurve long_stop(
+      equator_track(1200, [](int t) { return t >= 400 && t < 900 ? 0.0 : 10.0; }, none), 0,
+      1200000, 0.001, settings);
+  double fastest_in = 0.0;
+  for (int t = 1; t <= 1200; ++t)
+    fastest_in = std::max(fastest_in, std::log2(at(long_stop, t - 1) / at(long_stop, t)));
+  check(fastest_in <= kScaleZoomInRate + 1e-9, "zooming in is slow");
+  check(at(long_stop, 380) >= 2.0 * 200.0 / kScaleAheadFraction,
+        "approaching the stop, the rest of the way stays in view");
+  check(near(at(long_stop, 750), 150.0, 30.0), "a long stop ends at the closest limit");
+
+  // A five-minute GPS gap at steady speed: the next fix after it is taken as steady travel, so
+  // the gap does not zoom the map out to its whole length.
+  const ScaleCurve gap(equator_track(900, [](int) { return 10.0; },
+                                     [](int t) { return t > 300 && t < 600; }),
+                       0, 900000, 0.001, settings);
+  double widest = 0.0;
+  for (int t = 0; t <= 900; ++t)
+    widest = std::max(widest, at(gap, t));
+  check(widest <= 1.15 * expected, "a GPS gap does not widen the map");
+  check(at(gap, 450) >= 0.9 * expected, "the scale is held through the gap");
+
+  // The limits.
+  const ScaleCurve fast(equator_track(600, [](int) { return 300.0; }, none), 0, 600000, 0.001,
+                        {60.0, 150.0, 20000.0});
+  check(near(at(fast, 300), 20000.0, 1.0), "the widest limit");
+  check(near(fast.widest().metres, 20000.0, 1.0) && fast.closest().metres <= 20000.0,
+        "the extremes are reported");
+}
+
 int main() {
   const auto root = std::filesystem::temp_directory_path() /
                     ("gb-geo-test-" +
@@ -360,6 +448,7 @@ int main() {
     test_cache_headers();
     test_route();
     test_route_jumps();
+    test_scale_curve();
   } catch (const std::exception &error) {
     std::cerr << "FAIL: unexpected exception: " << error.what() << '\n';
     ++failures;

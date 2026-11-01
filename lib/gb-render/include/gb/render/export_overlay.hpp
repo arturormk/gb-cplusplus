@@ -49,6 +49,9 @@ public:
     return route_points_;
   }
   [[nodiscard]] bool has_usable_route() const { return usable_in_range_; }
+  // Every record with its usable and jump flags, for the automatic map scale's look-ahead.
+  [[nodiscard]] const std::vector<gb::geo::RoutePoint> &all_route_points() const { return all_; }
+  [[nodiscard]] double seconds_per_tick() const { return seconds_per_tick_; }
   // The route index shown at `ticks` (the nearest record, clamped to the range).
   [[nodiscard]] std::optional<std::size_t> route_index(std::int64_t ticks) const;
   // The usable route position at or before the route index, else the first usable one.
@@ -69,6 +72,8 @@ private:
   std::size_t last_{};
   std::vector<gb::geo::WorldPoint> route_;
   std::vector<gb::geo::RoutePoint> route_points_;
+  std::vector<gb::geo::RoutePoint> all_;
+  double seconds_per_tick_{1.0};
   std::vector<std::optional<double>> distance_; // per record in the range
   bool usable_in_range_{};
 };
@@ -92,6 +97,8 @@ struct OverlayFrame {
   std::vector<FieldText> fields;
   // The map: centre, current record and marker, course. Zoom and scale are set when painting.
   MapScene scene;
+  // The ground width across the map for an automatic scale; without it, [map] width.
+  std::optional<double> map_width_metres;
 };
 
 struct OverlayResult {
@@ -104,15 +111,18 @@ struct OverlayResult {
 [[nodiscard]] std::optional<QRectF> export_map_area(const gb::exporting::ExportSettings &settings,
                                                     const gb::exporting::FrameLayout &layout);
 
-// The map scene with its zoom for the ground width, at the frame's tile scale (height / 1080).
+// The map scene with its zoom for the ground width (`width_metres`, else [map] width), at the
+// frame's tile scale (height / 1080).
 [[nodiscard]] MapScene export_map_scene(const gb::exporting::ExportSettings &settings,
                                         const gb::exporting::FrameLayout &layout,
-                                        const MapScene &scene, QSizeF map_size);
+                                        const MapScene &scene, QSizeF map_size,
+                                        std::optional<double> width_metres = std::nullopt);
 
 // The tiles the map draws for one frame.
 [[nodiscard]] std::vector<gb::geo::TileKey>
 export_map_tiles(const gb::exporting::ExportSettings &settings,
-                 const gb::exporting::FrameLayout &layout, const MapScene &scene);
+                 const gb::exporting::FrameLayout &layout, const MapScene &scene,
+                 std::optional<double> width_metres = std::nullopt);
 
 // Draws the panel (black, with the map and text) or the overlays onto a frame that already holds
 // the picture at layout.picture. `attribution` is required wherever tiles are shown.

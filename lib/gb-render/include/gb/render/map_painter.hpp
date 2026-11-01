@@ -43,6 +43,12 @@ struct MapScene {
   std::optional<double> course; // degrees clockwise from north
   // Whether the route and its start and end are drawn; without it only the current position is.
   bool track{true};
+  // Video quality, for export: the tiles are composed at their own resolution and resampled with
+  // an area filter, so shrinking them (a small frame) does not alias, and around each half zoom
+  // level the two tile levels are crossfaded, so a changing zoom never switches them abruptly.
+  // Needs the tiles of both levels there (map_tiles lists them). Off, tiles are drawn directly
+  // at the nearest zoom, as the interactive map pane does.
+  bool smooth{false};
   // A decoded tile, or nullptr when it is not available.
   std::function<const QImage *(gb::geo::TileKey)> tile;
 };
@@ -50,7 +56,18 @@ struct MapScene {
 // The tile zoom drawn for a scene, within the provider's range.
 [[nodiscard]] int map_tile_zoom(const MapScene &scene);
 
-// The tiles covering a map of `size` target pixels, nearest to the centre first.
+// The tile levels drawn, bottom first, with their opacity: one level, or two around a half zoom
+// level for a smooth scene. Within the provider's range.
+struct MapTileLevel {
+  int zoom{};
+  double opacity{1.0};
+};
+[[nodiscard]] std::vector<MapTileLevel> map_tile_levels(const MapScene &scene);
+// The half-width, in zoom levels, of the crossfade around each half zoom level.
+inline constexpr double kMapLevelBlend = 0.12;
+
+// The tiles covering a map of `size` target pixels, nearest to the centre first, for every
+// level drawn.
 [[nodiscard]] std::vector<gb::geo::TileKey> map_tiles(QSizeF size, const MapScene &scene);
 
 // Ground distance across a map of `width` target pixels at the centre's latitude, in metres.

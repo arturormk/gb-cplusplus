@@ -42,6 +42,11 @@ struct Color {
 // "800m" below 10 km in whole metres, otherwise "12.5km".
 [[nodiscard]] std::string distance_text(double metres);
 
+// A duration: "90s", "1.5min", or a plain number of minutes ("1.5"). Returns seconds.
+[[nodiscard]] std::optional<double> parse_minutes(const std::string &text);
+// "1.5min", or "45s" below a minute.
+[[nodiscard]] std::string minutes_text(double seconds);
+
 // Where an overlay goes over the picture. A corner (or the middle of the top or bottom edge) is
 // inset by the layout margin, and overlays at the same corner are stacked away from the edge. A
 // free position is a point in fractions of the frame's width and height from its top left.
@@ -99,7 +104,13 @@ enum class MapShape { square, circle };
 
 struct MapSettings {
   bool enabled{};
-  double width_metres{1000.0}; // ground distance across the map
+  double width_metres{1000.0}; // ground distance across the map, when not automatic
+  // width = auto: the scale follows the route of the next `ahead_seconds`, within the limits
+  // (gb::geo::ScaleCurve).
+  bool auto_width{};
+  double ahead_seconds{60.0};
+  double closest_metres{150.0};
+  double widest_metres{100000.0};
   bool track{true};            // the route over the whole range, travelled and remaining
   MapShape shape{MapShape::square};
   double size{0.3}; // overlay: side of the map, fraction of the frame height

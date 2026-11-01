@@ -78,8 +78,10 @@ and `--show-layout` remain.
 ## Phase 5: the map overlay and its scale
 
 **Fixed scale done (2026-10-31)** (ADR-0013): `[map] width`, `track`, `shape = square | circle`,
-the tile stage with `--max-tiles`, `--map-no-network` and `--require-tiles`. The automatic scale,
-the scale bar, `--contact-sheet` and tile directories remain.
+the tile stage with `--max-tiles`, `--map-no-network` and `--require-tiles`. **Automatic scale
+done (2026-11-01)**: `[map] width = auto` with `ahead`, `closest` and `widest`
+(`gb::geo::ScaleCurve`), its range in `--dry-run`. Activity presets, a response setting, the scale
+bar, `--contact-sheet` and tile directories remain.
 
 - Extract `MapPainter` from `MapView`, with no visible change. Add the scale bar and
   `AttributionPainter`. (Done early for Capture mode's side panel: `paint_map` and

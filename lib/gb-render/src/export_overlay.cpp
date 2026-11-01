@@ -214,7 +214,8 @@ void paint_round_attribution(QPainter &painter, const QSizeF size, const QString
 }
 
 int paint_map_box(QPainter &painter, const QRectF &area, const ex::ExportSettings &settings,
-                  const ex::FrameLayout &layout, const MapScene &base, const QString &attribution,
+                  const ex::FrameLayout &layout, const MapScene &base,
+                  const std::optional<double> width_metres, const QString &attribution,
                   const double opacity) {
   const QSize size(static_cast<int>(std::lround(area.width())),
                    static_cast<int>(std::lround(area.height())));
@@ -229,7 +230,7 @@ int paint_map_box(QPainter &painter, const QRectF &area, const ex::ExportSetting
     QPainter map(&image);
     map.setRenderHint(QPainter::Antialiasing, true);
     map.setRenderHint(QPainter::TextAntialiasing, true);
-    const auto scene = export_map_scene(settings, layout, base, QSizeF(size));
+    const auto scene = export_map_scene(settings, layout, base, QSizeF(size), width_metres);
     const auto has_route = scene.route != nullptr && !scene.route->empty();
     if (has_route)
       missing = paint_map(map, QSizeF(size), scene).missing_tiles;
@@ -427,7 +428,7 @@ void paint_panel_fields(QPainter &painter, const QRectF &area, const ex::ExportS
 
 ExportTrack::ExportTrack(std::vector<tm::GpsPoint> points, const std::int64_t range_start,
                          const std::int64_t range_end, const double seconds_per_tick)
-    : points_(std::move(points)) {
+    : points_(std::move(points)), seconds_per_tick_(seconds_per_tick) {
   const auto ticks_less = [](const tm::GpsPoint &point, const std::int64_t ticks) {
     return point.media_time_ticks < ticks;
   };
@@ -457,6 +458,7 @@ ExportTrack::ExportTrack(std::vector<tm::GpsPoint> points, const std::int64_t ra
   static_cast<void>(gb::geo::mark_route_jumps(all, seconds_per_tick));
   route_points_.assign(all.begin() + static_cast<std::ptrdiff_t>(first_),
                        all.begin() + static_cast<std::ptrdiff_t>(last_));
+  all_ = std::move(all);
   std::optional<gb::geo::LatLon> anchor;
   double travelled = 0.0;
   for (const auto &route_point : route_points_) {
@@ -673,24 +675,28 @@ std::optional<QRectF> export_map_area(const ex::ExportSettings &settings,
 }
 
 MapScene export_map_scene(const ex::ExportSettings &settings, const ex::FrameLayout &layout,
-                          const MapScene &scene, const QSizeF map_size) {
+                          const MapScene &scene, const QSizeF map_size,
+                          const std::optional<double> width_metres) {
   auto result = scene;
   result.scale = unit(layout);
   result.track = settings.map.track;
+  result.smooth = true;
   const auto latitude = gb::geo::unproject(scene.center).latitude;
   result.zoom =
-      map_zoom_for_width(map_size.width(), result.scale, settings.map.width_metres, latitude);
+      map_zoom_for_width(map_size.width(), result.scale,
+                         width_metres.value_or(settings.map.width_metres), latitude);
   return result;
 }
 
 std::vector<gb::geo::TileKey> export_map_tiles(const ex::ExportSettings &settings,
                                                const ex::FrameLayout &layout,
-                                               const MapScene &scene) {
+                                               const MapScene &scene,
+                                               const std::optional<double> width_metres) {
   const auto area = export_map_area(settings, layout);
   if (!area)
     return {};
   const QSizeF size(std::round(area->width()), std::round(area->height()));
-  return map_tiles(size, export_map_scene(settings, layout, scene, size));
+  return map_tiles(size, export_map_scene(settings, layout, scene, size, width_metres));
 }
 
 OverlayResult paint_export_overlays(QPainter &painter, const ex::ExportSettings &settings,
@@ -707,7 +713,7 @@ OverlayResult paint_export_overlays(QPainter &painter, const ex::ExportSettings 
   if (settings.placement == ex::Placement::overlay) {
     if (map_area) {
       result.missing_tiles = paint_map_box(painter, *map_area, settings, layout, frame.scene,
-                                           attribution, settings.map.opacity);
+                                           frame.map_width_metres, attribution, settings.map.opacity);
     }
     paint_overlay_fields(painter, settings, layout, fields, map_area);
   } else if (layout.panel) {
@@ -716,7 +722,8 @@ OverlayResult paint_export_overlays(QPainter &painter, const ex::ExportSettings 
                                            settings.map.enabled, !fields.empty());
     if (map_area)
       result.missing_tiles =
-          paint_map_box(painter, *map_area, settings, layout, frame.scene, attribution, 1.0);
+          paint_map_box(painter, *map_area, settings, layout, frame.scene,
+                        frame.map_width_metres, attribution, 1.0);
     if (regions.text)
       paint_panel_fields(painter, qrect(*regions.text), settings, layout, fields);
   }

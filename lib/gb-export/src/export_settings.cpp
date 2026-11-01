@@ -183,6 +183,15 @@ public:
       for (const auto field : order)
         s.fields.push_back(field_settings(field));
     }
+    if (s.map.enabled && s.map.auto_width && s.map.closest_metres > s.map.widest_metres) {
+      throw SettingsValidationError("[map] closest: " + distance_text(s.map.closest_metres) +
+                                    " is wider than widest = " +
+                                    distance_text(s.map.widest_metres));
+    }
+    if (s.map.enabled && !s.map.auto_width && !auto_keys_.empty() && warnings_ != nullptr) {
+      for (const auto &key : auto_keys_)
+        warnings_->push_back("[map] " + key + " has no effect without width = auto");
+    }
     if (s.placement == Placement::none && (s.map.enabled || s.telemetry) && warnings_ != nullptr)
       warnings_->push_back("placement = none: the map and telemetry are not drawn");
 
@@ -525,8 +534,26 @@ private:
       auto &m = s.map;
       if (k == "enabled")
         map_enabled_ = boolean(e);
-      else if (k == "width" || k == "scale")
-        m.width_metres = distance(e, 10.0, 2.0e6);
+      else if (k == "width" || k == "scale") {
+        m.auto_width = lower(trim(e.value)) == "auto";
+        if (!m.auto_width)
+          m.width_metres = distance(e, 10.0, 2.0e6);
+      } else if (k == "ahead") {
+        const auto value = parse_minutes(e.value);
+        if (!value)
+          fail(e.line, e.section, k,
+               "expected minutes (1.5, 1.5min) or seconds (90s), got '" + e.value + "'");
+        if (*value < 5.0 || *value > 3600.0)
+          fail(e.line, e.section, k, e.value + " is out of range 5s to 60min");
+        m.ahead_seconds = *value;
+        auto_keys_.push_back(k);
+      } else if (k == "closest") {
+        m.closest_metres = distance(e, 10.0, 2.0e6);
+        auto_keys_.push_back(k);
+      } else if (k == "widest") {
+        m.widest_metres = distance(e, 10.0, 2.0e6);
+        auto_keys_.push_back(k);
+      }
       else if (k == "track")
         m.track = boolean(e);
       else if (k == "shape")
@@ -578,6 +605,7 @@ private:
   std::optional<Placement> panel_;
   bool map_present_{};
   std::optional<bool> map_enabled_;
+  std::vector<std::string> auto_keys_; // [map] keys that only apply to width = auto
   bool telemetry_present_{};
   std::optional<bool> telemetry_enabled_;
   std::optional<std::vector<Field>> list_;
@@ -702,6 +730,33 @@ std::string distance_text(const double metres) {
   if (metres < 10000.0)
     return std::to_string(std::max(1L, std::lround(metres))) + "m";
   return number(metres / 1000.0, 3) + "km";
+}
+
+std::optional<double> parse_minutes(const std::string &text) {
+  const auto value = lower(trim(text));
+  double factor = 60.0;
+  auto amount_text = value;
+  if (value.ends_with("min")) {
+    amount_text = value.substr(0, value.size() - 3U);
+  } else if (value.ends_with("s")) {
+    amount_text = value.substr(0, value.size() - 1U);
+    factor = 1.0;
+  }
+  const auto amount = parse_number(trim(amount_text));
+  if (!amount || !(*amount > 0.0))
+    return std::nullopt;
+  return *amount * factor;
+}
+
+std::string minutes_text(const double seconds) {
+  const auto trimmed = [](std::string text) {
+    if (text.ends_with(".0"))
+      text.resize(text.size() - 2U);
+    return text;
+  };
+  if (seconds < 60.0)
+    return trimmed(number(seconds, 3)) + "s";
+  return trimmed(number(seconds / 60.0, 4)) + "min";
 }
 
 std::optional<Anchor> parse_anchor(const std::string &text) {
@@ -952,7 +1007,14 @@ std::string write_export_settings(const ExportSettings &s, const std::vector<std
   if (s.map.enabled) {
     const auto &m = s.map;
     out << "\n[map]\n";
-    out << "width   = " << distance_text(m.width_metres) << '\n';
+    if (m.auto_width) {
+      out << "width   = auto\n";
+      out << "ahead   = " << minutes_text(m.ahead_seconds) << '\n';
+      out << "closest = " << distance_text(m.closest_metres) << '\n';
+      out << "widest  = " << distance_text(m.widest_metres) << '\n';
+    } else {
+      out << "width   = " << distance_text(m.width_metres) << '\n';
+    }
     out << "track   = " << (m.track ? "yes" : "no") << '\n';
     out << "shape   = " << (m.shape == MapShape::circle ? "circle" : "square") << '\n';
     out << "size    = " << number(m.size, 4) << '\n';
@@ -1031,7 +1093,10 @@ anchor = top-left
 
 [map]
 ; enabled = no removes a map that an earlier file added.
-width   = 1.2km         ; ground distance across the map: 800m, 1.2km, 0.5mi
+width   = 1.2km         ; ground distance across the map: 800m, 1.2km, 0.5mi, or auto
+; ahead   = 1min        ; auto: the route of the next minute (1.5, 1.5min, 90s) stays in view
+; closest = 150m        ; auto: the narrowest the map gets
+; widest  = 100km       ; auto: the widest
 track   = yes           ; the route over the whole range, even across chapters
 shape   = circle        ; square, or circle (inscribed in the square)
 size    = 0.3           ; overlay only: side of the map

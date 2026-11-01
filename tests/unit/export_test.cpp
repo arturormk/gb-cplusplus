@@ -489,6 +489,38 @@ speed = 2.5
           "--set");
   throws([] { (void)ex::override_source("--set", {"width=3"}); }, "--set needs a section");
 
+  // The automatic map scale.
+  s = combine({"schema = gb.export/1\n[map]\nwidth = auto\nahead = 1.5\nclosest = 200m\n"});
+  require(s.map.auto_width && near(s.map.ahead_seconds, 90.0) &&
+              near(s.map.closest_metres, 200.0) && near(s.map.widest_metres, 100000.0),
+          "width = auto, ahead in decimal minutes");
+  require(near(*ex::parse_minutes("90s"), 90.0) && near(*ex::parse_minutes("0.5min"), 30.0) &&
+              !ex::parse_minutes("soon") && !ex::parse_minutes("0"),
+          "durations");
+  {
+    const auto text = ex::write_export_settings(s);
+    require(text.find("width   = auto") != std::string::npos &&
+                text.find("ahead   = 1.5min") != std::string::npos,
+            "auto scale written");
+    require(combine({text}).map.ahead_seconds == 90.0 && combine({text}).map.auto_width,
+            "auto scale round-trips");
+  }
+  s = combine({"schema = gb.export/1\n[map]\nwidth = auto\n",
+               "schema = gb.export/1\n[map]\nwidth = 900m\n"});
+  require(!s.map.auto_width && near(s.map.width_metres, 900.0), "a later fixed width wins");
+  {
+    std::vector<std::string> ignored;
+    (void)combine({"schema = gb.export/1\n[map]\nahead = 2\n"}, &ignored);
+    require(ignored.size() == 1U && ignored[0].find("ahead") != std::string::npos,
+            "ahead without width = auto warns");
+  }
+  require(error_of({"schema = gb.export/1\n[map]\nwidth = auto\nclosest = 5km\nwidest = 1km\n"})
+                  .find("closest") != std::string::npos,
+          "closest wider than widest");
+  require(error_of({"schema = gb.export/1\n[map]\nahead = 2h\n"}).find("ahead") !=
+              std::string::npos,
+          "ahead needs minutes or seconds");
+
   // Warnings.
   std::vector<std::string> warnings;
   (void)combine({"schema = gb.export/1\n[layout]\nplacement = none\n[map]\n"}, &warnings);

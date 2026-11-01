@@ -85,7 +85,10 @@ start of a line or when followed by a space, so `#ffd43b` is a value.
 
 ```ini
 [map]
-width   = 1.2km      ; ground distance across the map: 800m, 1.2km, 0.5mi, 2000ft
+width   = 1.2km      ; ground distance across the map: 800m, 1.2km, 0.5mi, 2000ft, or auto
+ahead   = 1min       ; width = auto: the route of the next minute stays in view (1.5, 1.5min, 90s)
+closest = 150m       ; width = auto: the narrowest the map gets
+widest  = 100km      ; width = auto: the widest
 track   = yes        ; the route over the whole range, even across chapters
 shape   = circle     ; square, or a circle inscribed in the square
 size    = 0.3        ; over the picture: side of the map, fraction of the frame height
@@ -97,7 +100,24 @@ The map is always centred on the current position, north up. With `track = yes` 
 recorded route from the start to the end of the range, travelled part in orange and the rest in
 blue, broken where there is no valid fix; with `no`, only the current position. Without a valid
 fix the map stays on the last position and the marker is not drawn. The attribution is always
-drawn. The scale is fixed; an automatic scale is planned.
+drawn.
+
+**Automatic scale.** With `width = auto`, the map is as wide as it needs to be for the route of
+the next `ahead` (a plain number is minutes) to stay in view, the farthest point of it at three
+quarters of the map's radius, within `closest` and `widest`. The scale is computed once, before
+rendering, from the GPS records, including those after the end of the range, and is smoothed so
+it changes steadily: the map starts zooming out before it is needed (at most a quarter of a zoom
+level per second), zooms back in slowly (at most 0.03 levels per second), ignores dips shorter
+than 15 s, such as a short stop, and does not follow changes under a tenth of a level. Across a
+GPS gap the first fix after it is taken as steady travel, so a gap does not widen the map; where
+there is no current fix, or the track ends within the look-ahead, the scale is held. `--dry-run`
+reports the closest and widest scale and when they occur. An automatic scale draws tiles at
+several zoom levels, so it needs more tiles than a fixed one.
+
+**Tile quality.** Tiles are composed at their own resolution and resampled with an area filter,
+so a small frame (where tiles are shrunk) shows no jagged or shimmering lines and text. Within
+0.12 of a half zoom level the two nearest tile levels are crossfaded, so a changing scale never
+switches them abruptly; such frames need the tiles of both levels.
 
 **Tiles.** Before rendering, `gb-render` works out every tile the map draws over the range, uses
 those in the tile cache, and fetches the missing ones through the player's rate-limited fetcher

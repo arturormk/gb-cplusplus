@@ -26,9 +26,9 @@ struct Viewport {
   double height{};
 };
 
-Viewport viewport(const QSizeF size, const MapScene &scene) {
+Viewport viewport(const QSizeF size, const MapScene &scene, const int tile_zoom) {
   Viewport view;
-  view.tile_zoom = map_tile_zoom(scene);
+  view.tile_zoom = tile_zoom;
   // One tile spans 256 map pixels at its own zoom regardless of the provider's tile size.
   view.world_pixels = 256.0 * std::pow(2.0, scene.zoom);
   view.tile_pixels = view.world_pixels / std::ldexp(1.0, view.tile_zoom);
@@ -58,27 +58,136 @@ TileRange tile_range(const Viewport &view) {
   return range;
 }
 
+const QImage *tile_image(const MapScene &scene, const gb::geo::TileKey key) {
+  return scene.tile ? scene.tile(key) : nullptr;
+}
+
+// Draws one tile, or a placeholder for it, into `target`: the nearest cached ancestor, scaled up,
+// or a plain square. Returns whether the tile itself was missing.
+bool draw_tile(QPainter &painter, const QRectF &target, const MapScene &scene, const int zoom,
+               const int x, const int y, const double inset) {
+  if (const auto *image = tile_image(scene, {zoom, x, y}); image != nullptr) {
+    painter.drawImage(target, *image);
+    return false;
+  }
+  for (int level = 1; level <= kAncestorLevels && zoom - level >= 0; ++level) {
+    const gb::geo::TileKey parent{zoom - level, x >> level, y >> level};
+    if (const auto *image = tile_image(scene, parent); image != nullptr) {
+      const auto fraction = 1.0 / static_cast<double>(1 << level);
+      const auto sx = (x - (parent.x << level)) * fraction * image->width();
+      const auto sy = (y - (parent.y << level)) * fraction * image->height();
+      painter.drawImage(target, *image,
+                        QRectF(sx, sy, image->width() * fraction, image->height() * fraction));
+      return true;
+    }
+  }
+  painter.fillRect(target.adjusted(inset, inset, -inset, -inset), kPlaceholder);
+  return true;
+}
+
+// Tiles drawn straight into the target, each scaled on its own (the map pane's way).
+int paint_tiles_direct(QPainter &painter, const Viewport &view, const MapScene &scene) {
+  int missing = 0;
+  const auto range = tile_range(view);
+  for (int x = range.first_x; x <= range.last_x && x - range.first_x < range.count; ++x) {
+    for (int y = range.first_y; y <= range.last_y; ++y) {
+      const QRectF target(x * view.tile_pixels - view.left, y * view.tile_pixels - view.top,
+                          view.tile_pixels, view.tile_pixels);
+      const auto wrapped = ((x % range.count) + range.count) % range.count;
+      missing += draw_tile(painter, target, scene, view.tile_zoom, wrapped, y, 0.5) ? 1 : 0;
+    }
+  }
+  return missing;
+}
+
+// Tiles composed at their own resolution into one image of the visible part (no resampling, no
+// seams), shrunk or enlarged to the target with an area filter, then placed at its exact,
+// fractional position. `painter` is in map pixels, `scale` target pixels each.
+int paint_tiles_filtered(QPainter &painter, const Viewport &view, const MapScene &scene,
+                         const double opacity) {
+  constexpr int kTile = 256;
+  const auto range = tile_range(view);
+  const auto per_tile_pixel = view.tile_pixels / kTile; // map pixels per mosaic pixel
+  // The visible part in mosaic pixels, with a pixel to spare for the filter at the edges.
+  const auto left = static_cast<int>(std::floor(view.left / per_tile_pixel)) - 1;
+  const auto right = static_cast<int>(std::ceil((view.left + view.width) / per_tile_pixel)) + 1;
+  const auto top = static_cast<int>(std::floor(view.top / per_tile_pixel)) - 1;
+  const auto bottom = static_cast<int>(std::ceil((view.top + view.height) / per_tile_pixel)) + 1;
+  if (right <= left || bottom <= top)
+    return 0;
+  QImage mosaic(right - left, bottom - top, QImage::Format_ARGB32_Premultiplied);
+  mosaic.fill(Qt::transparent);
+  int missing = 0;
+  {
+    QPainter compose(&mosaic);
+    compose.setRenderHint(QPainter::SmoothPixmapTransform, true);
+    for (int x = range.first_x; x <= range.last_x && x - range.first_x < range.count; ++x) {
+      for (int y = range.first_y; y <= range.last_y; ++y) {
+        const QRectF target(x * kTile - left, y * kTile - top, kTile, kTile);
+        const auto wrapped = ((x % range.count) + range.count) % range.count;
+        missing += draw_tile(compose, target, scene, view.tile_zoom, wrapped, y, 1.0) ? 1 : 0;
+      }
+    }
+  }
+  // The area filter needs whole target pixels; the remaining fraction of a pixel in size and
+  // position is left to a bilinear draw at nearly 1:1, which keeps the motion smooth.
+  const auto device = per_tile_pixel * scene.scale; // target pixels per mosaic pixel
+  const auto width = std::max(1, static_cast<int>(std::lround(mosaic.width() * device)));
+  const auto height = std::max(1, static_cast<int>(std::lround(mosaic.height() * device)));
+  const auto resampled =
+      std::abs(device - 1.0) < 1e-6
+          ? mosaic
+          : mosaic.scaled(width, height, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
+  painter.save();
+  painter.setOpacity(painter.opacity() * opacity);
+  painter.drawImage(QRectF(left * per_tile_pixel - view.left, top * per_tile_pixel - view.top,
+                           mosaic.width() * per_tile_pixel, mosaic.height() * per_tile_pixel),
+                    resampled);
+  painter.restore();
+  return missing;
+}
+
 } // namespace
 
 int map_tile_zoom(const MapScene &scene) {
   return std::clamp(static_cast<int>(std::lround(scene.zoom)), scene.min_zoom, scene.max_zoom);
 }
 
+std::vector<MapTileLevel> map_tile_levels(const MapScene &scene) {
+  const auto nearest = map_tile_zoom(scene);
+  if (!scene.smooth)
+    return {{nearest, 1.0}};
+  // Distance past the half level between floor(zoom) and the level above, in -0.5..0.5.
+  const auto past_half = scene.zoom - std::floor(scene.zoom) - 0.5;
+  if (std::abs(past_half) >= kMapLevelBlend)
+    return {{nearest, 1.0}};
+  const auto lower = std::clamp(static_cast<int>(std::floor(scene.zoom)), scene.min_zoom,
+                                scene.max_zoom);
+  const auto upper = std::clamp(lower + 1, scene.min_zoom, scene.max_zoom);
+  if (lower == upper)
+    return {{lower, 1.0}};
+  // Smoothstep from the lower level alone to the upper level alone.
+  const auto t = (past_half + kMapLevelBlend) / (2.0 * kMapLevelBlend);
+  return {{lower, 1.0}, {upper, t * t * (3.0 - 2.0 * t)}};
+}
+
 std::vector<gb::geo::TileKey> map_tiles(const QSizeF size, const MapScene &scene) {
   std::vector<gb::geo::TileKey> keys;
   if (size.width() <= 0.0 || size.height() <= 0.0 || !(scene.scale > 0.0))
     return keys;
-  const auto view = viewport(size, scene);
-  const auto range = tile_range(view);
-  const auto center_x = (view.left + view.width / 2.0) / view.tile_pixels;
-  const auto center_y = (view.top + view.height / 2.0) / view.tile_pixels;
   std::vector<std::pair<double, gb::geo::TileKey>> ordered;
-  for (int x = range.first_x; x <= range.last_x && x - range.first_x < range.count; ++x) {
-    for (int y = range.first_y; y <= range.last_y; ++y) {
-      const auto wrapped = ((x % range.count) + range.count) % range.count;
-      const auto dx = x + 0.5 - center_x;
-      const auto dy = y + 0.5 - center_y;
-      ordered.emplace_back(dx * dx + dy * dy, gb::geo::TileKey{view.tile_zoom, wrapped, y});
+  for (const auto level : map_tile_levels(scene)) {
+    const auto view = viewport(size, scene, level.zoom);
+    const auto range = tile_range(view);
+    const auto center_x = (view.left + view.width / 2.0) / view.tile_pixels;
+    const auto center_y = (view.top + view.height / 2.0) / view.tile_pixels;
+    for (int x = range.first_x; x <= range.last_x && x - range.first_x < range.count; ++x) {
+      for (int y = range.first_y; y <= range.last_y; ++y) {
+        const auto wrapped = ((x % range.count) + range.count) % range.count;
+        const auto dx = x + 0.5 - center_x;
+        const auto dy = y + 0.5 - center_y;
+        ordered.emplace_back(dx * dx + dy * dy, gb::geo::TileKey{view.tile_zoom, wrapped, y});
+      }
     }
   }
   std::sort(ordered.begin(), ordered.end(),
@@ -103,44 +212,23 @@ MapPaintResult paint_map(QPainter &painter, const QSizeF size, const MapScene &s
   MapPaintResult result;
   if (size.width() <= 0.0 || size.height() <= 0.0 || !(scene.scale > 0.0))
     return result;
-  const auto view = viewport(size, scene);
   painter.save();
   painter.setClipRect(QRectF(QPointF(0.0, 0.0), size), Qt::IntersectClip);
   painter.scale(scene.scale, scene.scale);
   painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
 
-  const auto tile = [&scene](const gb::geo::TileKey key) -> const QImage * {
-    return scene.tile ? scene.tile(key) : nullptr;
-  };
-  const auto range = tile_range(view);
-  for (int x = range.first_x; x <= range.last_x && x - range.first_x < range.count; ++x) {
-    for (int y = range.first_y; y <= range.last_y; ++y) {
-      const QRectF target(x * view.tile_pixels - view.left, y * view.tile_pixels - view.top,
-                          view.tile_pixels, view.tile_pixels);
-      const auto wrapped = ((x % range.count) + range.count) % range.count;
-      if (const auto *image = tile({view.tile_zoom, wrapped, y}); image != nullptr) {
-        painter.drawImage(target, *image);
-        continue;
-      }
-      ++result.missing_tiles;
-      // Placeholder: the nearest cached ancestor, scaled up, until the tile itself arrives.
-      bool drawn = false;
-      for (int level = 1; level <= kAncestorLevels && view.tile_zoom - level >= 0 && !drawn;
-           ++level) {
-        const gb::geo::TileKey parent{view.tile_zoom - level, wrapped >> level, y >> level};
-        if (const auto *image = tile(parent); image != nullptr) {
-          const auto fraction = 1.0 / static_cast<double>(1 << level);
-          const auto sx = (wrapped - (parent.x << level)) * fraction * image->width();
-          const auto sy = (y - (parent.y << level)) * fraction * image->height();
-          painter.drawImage(target, *image,
-                            QRectF(sx, sy, image->width() * fraction, image->height() * fraction));
-          drawn = true;
-        }
-      }
-      if (!drawn)
-        painter.fillRect(target.adjusted(0.5, 0.5, -0.5, -0.5), kPlaceholder);
+  if (scene.smooth) {
+    for (const auto level : map_tile_levels(scene)) {
+      const auto missing = paint_tiles_filtered(painter, viewport(size, scene, level.zoom), scene,
+                                                level.opacity);
+      result.missing_tiles = std::max(result.missing_tiles, missing);
     }
+  } else {
+    result.missing_tiles =
+        paint_tiles_direct(painter, viewport(size, scene, map_tile_zoom(scene)), scene);
   }
+  // Route and markers are placed in the scene's own map pixels (any tile level gives the same).
+  const auto view = viewport(size, scene, map_tile_zoom(scene));
 
   if (scene.route == nullptr || scene.points == nullptr || scene.route->empty() ||
       scene.route->size() != scene.points->size()) {

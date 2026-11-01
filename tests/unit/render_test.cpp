@@ -5,6 +5,7 @@
 #include "gb/image/photo.hpp"
 #include "gb/media/playback.hpp"
 #include "gb/render/export_overlay.hpp"
+#include "gb/render/map_painter.hpp"
 #include "gb/render/panel_painter.hpp"
 #include "gb/render/still.hpp"
 
@@ -441,6 +442,66 @@ void test_export_overlays() {
 
 } // namespace
 
+// Map tiles shrunk for a small frame: one-pixel stripes average to grey instead of aliasing, and
+// around a half zoom level two tile levels are crossfaded.
+void test_map_quality() {
+  namespace gr = gb::render;
+  QImage stripes(256, 256, QImage::Format_ARGB32_Premultiplied);
+  for (int y = 0; y < 256; ++y) {
+    for (int x = 0; x < 256; ++x)
+      stripes.setPixelColor(x, y, x % 2 == 0 ? Qt::black : Qt::white);
+  }
+  gr::MapScene scene;
+  scene.center = {0.5, 0.5};
+  scene.zoom = 4.3; // tiles of zoom 4, shrunk to 0.5 · 2^0.3 ≈ 0.62 of their size
+  scene.scale = 0.5;
+  scene.tile = [&stripes](gb::geo::TileKey) { return &stripes; };
+  const auto spread = [&](const bool smooth) {
+    scene.smooth = smooth;
+    QImage image(200, 200, QImage::Format_ARGB32_Premultiplied);
+    image.fill(Qt::red);
+    QPainter painter(&image);
+    (void)gr::paint_map(painter, QSizeF(200, 200), scene);
+    painter.end();
+    int lowest = 255;
+    int highest = 0;
+    for (int y = 20; y < 180; ++y) {
+      for (int x = 20; x < 180; ++x) {
+        const auto grey = image.pixelColor(x, y).red();
+        lowest = std::min(lowest, grey);
+        highest = std::max(highest, grey);
+      }
+    }
+    return highest - lowest;
+  };
+  require(spread(false) > 100, "shrunk directly, the stripes alias");
+  // Each target pixel covers about 1.6 stripes, so a box filter leaves 96..160 at most.
+  require(spread(true) < 70, "shrunk with the area filter, they average out");
+
+  scene.smooth = true;
+  scene.zoom = 4.2;
+  require(gr::map_tile_levels(scene).size() == 1U && gr::map_tile_levels(scene)[0].zoom == 4,
+          "away from the half level: one level");
+  scene.zoom = 4.5;
+  const auto levels = gr::map_tile_levels(scene);
+  require(levels.size() == 2U && levels[0].zoom == 4 && levels[1].zoom == 5 &&
+              std::abs(levels[1].opacity - 0.5) < 1e-9,
+          "at the half level: both, crossfaded");
+  scene.zoom = 4.5 + gr::kMapLevelBlend - 1e-6;
+  require(gr::map_tile_levels(scene).back().opacity > 0.999, "the fade ends on the upper level");
+  const auto keys = gr::map_tiles(QSizeF(200, 200), [&] {
+    auto at_half = scene;
+    at_half.zoom = 4.5;
+    return at_half;
+  }());
+  require(std::any_of(keys.begin(), keys.end(), [](const auto &k) { return k.zoom == 4; }) &&
+              std::any_of(keys.begin(), keys.end(), [](const auto &k) { return k.zoom == 5; }),
+          "the tiles of both levels are listed");
+  scene.smooth = false;
+  scene.zoom = 4.5;
+  require(gr::map_tile_levels(scene).size() == 1U, "the map pane draws one level");
+}
+
 int main(int argc, char **argv) {
   if (qEnvironmentVariableIsEmpty("QT_QPA_PLATFORM"))
     qputenv("QT_QPA_PLATFORM", "offscreen");
@@ -450,6 +511,7 @@ int main(int argc, char **argv) {
   try {
     test_panel();
     test_export_overlays();
+    test_map_quality();
     gb::render::OffscreenRenderer renderer;
     if (!renderer.initialize()) {
       std::cout << "gb_render_tests: skipped: " << renderer.error() << '\n';

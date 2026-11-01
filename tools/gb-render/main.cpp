@@ -4,6 +4,7 @@
 #include "gb/export/export_settings.hpp"
 #include "gb/export/framing.hpp"
 #include "gb/export/settings.hpp"
+#include "gb/geo/scale_curve.hpp"
 #include "gb/geo/tile_cache.hpp"
 #include "gb/geo/tiles.hpp"
 #include "gb/media/audio.hpp"
@@ -338,20 +339,35 @@ gb::render::MapScene base_scene(const gb::render::ExportTrack &track,
   return scene;
 }
 
+// With an automatic scale, a record is shown from halfway after the previous one to halfway
+// before the next, at the widths of the curve over that time: the ends and the middle are taken.
 std::set<gb::geo::TileKey> needed_tiles(const ex::ExportSettings &settings,
                                         const ex::FrameLayout &layout,
                                         const gb::render::ExportTrack &track,
-                                        const gb::geo::TileProvider &provider) {
+                                        const gb::geo::TileProvider &provider,
+                                        const gb::geo::ScaleCurve *curve) {
   std::set<gb::geo::TileKey> keys;
   if (!track.has_usable_route())
     return keys;
   auto scene = base_scene(track, provider);
+  const auto &points = track.route_points();
   for (const auto index : track.range_records()) {
-    if (!track.route_points()[index].usable)
+    if (!points[index].usable)
       continue;
     scene.center = track.route()[index];
-    for (const auto key : gb::render::export_map_tiles(settings, layout, scene))
-      keys.insert(key);
+    if (curve == nullptr) {
+      for (const auto key : gb::render::export_map_tiles(settings, layout, scene))
+        keys.insert(key);
+      continue;
+    }
+    const auto ticks = points[index].ticks;
+    const auto before = index > 0U ? (points[index - 1U].ticks + ticks) / 2 : ticks;
+    const auto after = index + 1U < points.size() ? (ticks + points[index + 1U].ticks) / 2 : ticks;
+    for (const auto at : {before, ticks, after}) {
+      for (const auto key :
+           gb::render::export_map_tiles(settings, layout, scene, curve->width_at(at)))
+        keys.insert(key);
+    }
   }
   return keys;
 }
@@ -769,9 +785,17 @@ int run(const Options &options, int argc, char **argv) {
   const auto attribution = QString::fromStdString(provider.attribution);
   const auto cache_root =
       options.map_cache ? options.map_cache : gb::geo::default_tile_cache_root();
+  std::optional<gb::geo::ScaleCurve> scale_curve;
+  if (overlays && settings.map.enabled && settings.map.auto_width) {
+    scale_curve.emplace(track.all_route_points(), start, end, track.seconds_per_tick(),
+                        gb::geo::ScaleCurveSettings{settings.map.ahead_seconds,
+                                                    settings.map.closest_metres,
+                                                    settings.map.widest_metres});
+  }
   std::set<gb::geo::TileKey> tile_keys;
   if (overlays && settings.map.enabled)
-    tile_keys = needed_tiles(settings, layout, track, provider);
+    tile_keys = needed_tiles(settings, layout, track, provider,
+                             scale_curve ? &*scale_curve : nullptr);
 
   // Audio.
   std::optional<gb::media::AudioStream> audio;
@@ -828,8 +852,20 @@ int run(const Options &options, int argc, char **argv) {
     std::set<int> zooms;
     for (const auto key : tile_keys)
       zooms.insert(key.zoom);
-    std::cerr << "  map     " << ex::distance_text(settings.map.width_metres) << " across, "
-              << tile_keys.size() << " tiles (zoom";
+    std::cerr << "  map     ";
+    if (scale_curve) {
+      const auto closest = scale_curve->closest();
+      const auto widest = scale_curve->widest();
+      std::cerr << "auto, " << ex::minutes_text(settings.map.ahead_seconds) << " ahead: "
+                << ex::distance_text(closest.metres) << " across at "
+                << gb::media::format_recording_position(timeline, closest.ticks) << " to "
+                << ex::distance_text(widest.metres) << " at "
+                << gb::media::format_recording_position(timeline, widest.ticks) << "\n"
+                << "          ";
+    } else {
+      std::cerr << ex::distance_text(settings.map.width_metres) << " across, ";
+    }
+    std::cerr << tile_keys.size() << " tiles (zoom";
     for (const auto zoom : zooms)
       std::cerr << ' ' << zoom;
     std::cerr << "), " << cached << " cached, "
@@ -969,6 +1005,8 @@ int run(const Options &options, int argc, char **argv) {
       const auto *fix = track.fix_at(ticks);
       overlay.fields = gb::render::field_texts(settings, zone, fix, track.distance_at(ticks));
       overlay.scene = scene;
+      if (scale_curve)
+        overlay.map_width_metres = scale_curve->width_at(ticks);
       const auto time = static_cast<double>(seconds(ticks, timeline.time_base));
       std::optional<double> course;
       if (fix != nullptr) {

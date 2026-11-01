@@ -13,8 +13,8 @@ another explicitly documented format". INI was chosen over JSON and YAML because
 ## Example
 
 `gb-render --example-settings` writes a file like this, with every setting commented. The sections
-in use are implemented (ADR-0013); `[speed]` and `[height]` graphs and the automatic map scale are
-still planned.
+in use are implemented (ADR-0013), with the automatic map scale (`[map] width = auto`); `[speed]`
+and `[height]` graphs are still planned.
 
 ```ini
 ; gb-render export settings
@@ -70,7 +70,10 @@ align     = auto        ; auto, left, center, right
 font_size = 0.07        ; this field only
 
 [map]
-width   = 1.2km         ; ground distance across the map
+width   = 1.2km         ; ground distance across the map, or auto
+ahead   = 1min          ; auto: the route of the next minute stays in view
+closest = 150m          ; auto: narrowest
+widest  = 100km         ; auto: widest
 track   = yes           ; the route over the whole range, across chapters
 shape   = circle        ; square or circle
 size    = 0.3           ; overlay only: fraction of the frame height

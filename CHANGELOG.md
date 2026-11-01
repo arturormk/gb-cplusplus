@@ -27,7 +27,10 @@ First public release: a minimum usable product for GoPro MAX 2025 recordings on 
   panel left, right, top or bottom; telemetry fields with custom labels, anchors and sizes, two
   text colours and an outline; a fixed-width map, square or round, with the route over the whole
   range; ranges across chapters; H.264/HEVC with AAC in MP4 or MKV, with no source metadata; map
-  tiles fetched before rendering up to `--max-tiles`. Capture mode gains a top panel.
+  tiles fetched before rendering up to `--max-tiles`. Capture mode gains a top panel. An
+  automatic map scale, `[map] width = auto`, keeps the route of the next `ahead` minutes in view,
+  zooming out ahead of time and back in slowly. Export map tiles are area-filtered and crossfaded
+  between zoom levels, so small frames and a changing scale stay smooth.
 - Route map (player, stills and export): implausible GPS jumps break the route. Short clusters
   of fixes isolated by jumps are omitted. Whether a step is a jump depends on the neighbouring
   steps and the reported speed, so walking and flying recordings are judged alike.

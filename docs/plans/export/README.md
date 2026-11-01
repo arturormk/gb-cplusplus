@@ -3,7 +3,8 @@
 Status: In progress (2026-10-31). Capture mode in `gb-player`, with the shared renderer it needs,
 is implemented (ADR-0012). `gb-render` exports video with text and map overlays, over the picture
 or on a panel, across chapters (ADR-0013, [`tools/gb-render`](../../../tools/gb-render/README.md));
-stills, the automatic map scale, prepared tile directories and graphs are not done yet.
+with a fixed or automatic map scale; stills, activity presets, prepared tile directories and graphs
+are not done yet.
 
 This plan covers exporting stills and videos from GoPro recordings with **`gb-render`**, a
 command-line tool, which is also the headless renderer that BLUEPRINT M6 requires, and with a
