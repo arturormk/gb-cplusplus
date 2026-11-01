@@ -79,6 +79,8 @@ struct Options {
   bool dry_run{};
   bool print_settings{};
   bool example_settings{};
+  std::optional<fs::path> manifest;
+  bool json{};
   std::string map_provider{"osm"};
   bool map_network{true};
   std::optional<fs::path> map_cache;
@@ -126,6 +128,8 @@ void help() {
          "  --draft                half width (a quarter of the pixels), fastest encoder preset\n"
          "  --dry-run              report what would be done, write nothing\n"
          "  --print-settings       print the combined settings and exit\n"
+         "  --manifest FILE        write a JSON record of every frame written (gb.render.manifest/v1)\n"
+         "  --json                 a JSON report on stdout (gb.render/v1); diagnostics stay on stderr\n"
          "  --example-settings     print a commented settings file and exit\n"
          "  --decoder-threads N    decoder threads (default: automatic)\n"
          "  --help, --version\n\n"
@@ -204,6 +208,10 @@ Options parse_arguments(const int argc, char **argv) {
       options.dry_run = true;
     } else if (argument == "--print-settings") {
       options.print_settings = true;
+    } else if (argument == "--manifest") {
+      options.manifest = require_value(index, argument);
+    } else if (argument == "--json") {
+      options.json = true;
     } else if (argument == "--example-settings") {
       options.example_settings = true;
     } else if (argument == "--map-provider") {
@@ -274,10 +282,18 @@ std::string speed_text(const double speed) {
 
 // ---- telemetry ----------------------------------------------------------------------------------
 
-// The GPS records of the chapters the range touches, on the recording timeline.
+// Where a GPS record comes from: its chapter and its time in that chapter's telemetry track.
+struct RecordOrigin {
+  int chapter{};
+  std::int64_t media_time_ticks{};
+};
+
+// The GPS records of the chapters the range touches, on the recording timeline. `origins`
+// receives, for each record, where it comes from.
 std::vector<gb::telemetry::GpsPoint> load_track(const gb::media::RecordingTimeline &timeline,
                                                 const std::int64_t start, const std::int64_t end,
-                                                std::vector<std::string> &warnings) {
+                                                std::vector<std::string> &warnings,
+                                                std::vector<RecordOrigin> &origins) {
   // Each chapter is read on its own thread: extraction reads every metadata sample of the file.
   std::vector<std::pair<const gb::media::TimelineChapter *, std::future<gb::telemetry::Extraction>>>
       pending;
@@ -309,12 +325,14 @@ std::vector<gb::telemetry::GpsPoint> load_track(const gb::media::RecordingTimeli
     const gb::media::Rational telemetry_base{static_cast<std::int32_t>(base.numerator),
                                              static_cast<std::int32_t>(base.denominator)};
     for (auto point : extraction.gps) {
+      const auto local_ticks = point.media_time_ticks;
       point.media_time_ticks =
           chapter.offset_ticks +
           gb::media::rescale_ticks(point.media_time_ticks, telemetry_base, timeline.time_base);
       if (!points.empty() && point.media_time_ticks < points.back().media_time_ticks)
         continue; // keep the records in order; out-of-order records would break the lookup
       points.push_back(point);
+      origins.push_back({chapter.number, local_ticks});
     }
   }
   return points;
@@ -657,7 +675,108 @@ std::string size_text(const std::uintmax_t bytes) {
   return out.str();
 }
 
+// ---- JSON ---------------------------------------------------------------------------------------
+
+std::string json_string(const std::string_view input) {
+  std::string output;
+  output.reserve(input.size() + 2U);
+  output += '"';
+  for (const char character : input) {
+    const auto byte = static_cast<unsigned char>(character);
+    if (character == '"' || character == '\\') {
+      output += '\\';
+      output += character;
+    } else if (character == '\n') {
+      output += "\\n";
+    } else if (character == '\t') {
+      output += "\\t";
+    } else if (byte < 0x20U) {
+      std::array<char, 8> escaped{};
+      std::snprintf(escaped.data(), escaped.size(), "\\u%04x", byte);
+      output += escaped.data();
+    } else {
+      output += character;
+    }
+  }
+  output += '"';
+  return output;
+}
+
+std::string json_path(const fs::path &path) { return json_string(path.string()); }
+
+// The shortest text that reads back as the same double; null when not finite.
+std::string json_number(const double value) {
+  if (!std::isfinite(value))
+    return "null";
+  std::array<char, 32> text{};
+  const auto end = std::to_chars(text.data(), text.data() + text.size(), value).ptr;
+  return {text.data(), end};
+}
+
+std::string json_rational(const gb::media::Rational value) {
+  return "{\"numerator\": " + std::to_string(value.numerator) +
+         ", \"denominator\": " + std::to_string(value.denominator) + "}";
+}
+
+std::string json_strings(const std::vector<std::string> &values, const std::size_t from = 0U) {
+  std::string output = "[";
+  for (auto index = from; index < values.size(); ++index)
+    output += (index == from ? "" : ", ") + json_string(values[index]);
+  return output + "]";
+}
+
+// The per-frame record of --manifest: written as the frames are, one line each, and removed
+// unless the export completes.
+class Manifest {
+public:
+  Manifest(fs::path path, const bool overwrite) : path_(std::move(path)) {
+    if (fs::exists(path_) && !overwrite)
+      throw UsageError(path_.string() + " exists; use --overwrite to replace it");
+    file_.open(path_, std::ios::binary | std::ios::trunc);
+    if (!file_)
+      throw std::runtime_error("cannot write " + path_.string());
+  }
+  Manifest(const Manifest &) = delete;
+  Manifest &operator=(const Manifest &) = delete;
+  ~Manifest() {
+    if (!kept_) {
+      file_.close();
+      std::error_code ignored;
+      fs::remove(path_, ignored);
+    }
+  }
+
+  std::ofstream &out() { return file_; }
+
+  void frame(const std::string &line) {
+    file_ << (frames_ == 0 ? "\n    " : ",\n    ") << line;
+    ++frames_;
+  }
+
+  void finish() {
+    file_ << (frames_ == 0 ? "]\n}\n" : "\n  ]\n}\n");
+    file_.close();
+    if (!file_)
+      throw std::runtime_error("cannot write " + path_.string());
+    kept_ = true;
+  }
+
+  [[nodiscard]] const fs::path &path() const { return path_; }
+
+private:
+  fs::path path_;
+  std::ofstream file_;
+  long long frames_{};
+  bool kept_{};
+};
+
 int run(const Options &options, int argc, char **argv) {
+  if ((options.json || options.manifest) && (options.example_settings || options.print_settings))
+    throw UsageError("--json and --manifest report an export; they cannot be combined with "
+                     "--example-settings or --print-settings");
+  if (options.manifest && options.dry_run)
+    throw UsageError("--manifest records the frames of an export; it cannot be combined with "
+                     "--dry-run");
   if (options.example_settings) {
     std::cout << ex::example_settings();
     return 0;
@@ -715,7 +834,14 @@ int run(const Options &options, int argc, char **argv) {
         fs::equivalent(chapter.path, options.output)) {
       throw UsageError("refusing to overwrite the recording " + chapter.path.filename().string());
     }
+    if (options.manifest && fs::exists(*options.manifest) &&
+        fs::equivalent(chapter.path, *options.manifest)) {
+      throw UsageError("refusing to overwrite the recording " + chapter.path.filename().string());
+    }
   }
+  if (options.manifest && !options.output.empty() && fs::exists(*options.manifest) &&
+      fs::exists(options.output) && fs::equivalent(*options.manifest, options.output))
+    throw UsageError("the manifest and the output must be different files");
   const auto &source_layout = timeline.chapters.front().layout;
   check_view(settings, source_layout);
   // A flat picture (the source itself, or the 2:1 panorama) with no framing given fills the frame:
@@ -775,10 +901,12 @@ int run(const Options &options, int argc, char **argv) {
   const auto overlays = settings.placement != ex::Placement::none;
   const auto needs_track = overlays && (settings.map.enabled || settings.telemetry);
   gb::render::ExportTrack track;
-  if (needs_track) {
-    track = gb::render::ExportTrack(load_track(timeline, start, end, warnings), start, end,
-                                    static_cast<double>(seconds(1, timeline.time_base)));
-    if (!track.has_usable_route())
+  std::vector<RecordOrigin> origins;
+  // The manifest names the GPS record each frame shows, or would show, even without overlays.
+  if (needs_track || options.manifest) {
+    track = gb::render::ExportTrack(load_track(timeline, start, end, warnings, origins), start,
+                                    end, static_cast<double>(seconds(1, timeline.time_base)));
+    if (needs_track && !track.has_usable_route())
       warnings.emplace_back("no valid GPS fix in the range: telemetry shows \"—\"");
   }
   const auto &provider = *gb::geo::find_provider(options.map_provider);
@@ -842,14 +970,15 @@ int run(const Options &options, int argc, char **argv) {
   if (needs_track)
     std::cerr << "  GPS     " << track.points().size() << " records, "
               << track.route_points().size() << " in the range\n";
-  if (overlays && settings.map.enabled) {
-    int cached = 0;
+  const auto map_shown = overlays && settings.map.enabled;
+  int cached = 0;
+  std::set<int> zooms;
+  if (map_shown) {
     if (cache_root) {
       const gb::geo::TileCache cache(*cache_root);
       for (const auto key : tile_keys)
         cached += cache.load(provider, key).has_value() ? 1 : 0;
     }
-    std::set<int> zooms;
     for (const auto key : tile_keys)
       zooms.insert(key.zoom);
     std::cerr << "  map     ";
@@ -877,12 +1006,102 @@ int run(const Options &options, int argc, char **argv) {
   }
   for (const auto &warning : warnings)
     std::cerr << "gb-render: warning: " << warning << '\n';
-  if (options.dry_run)
+
+  // The --json report: what would be done, and after an export, what was.
+  const auto json_report = [&](const std::string &result) {
+    const auto position = [&timeline](const std::int64_t ticks) {
+      return json_string(gb::media::format_recording_position(timeline, ticks));
+    };
+    std::ostringstream out;
+    out << "{\n  \"schema\": \"gb.render/v1\",\n  \"version\": " << json_string(kVersion)
+        << ",\n  \"recording\": " << json_path(options.recording)
+        << ",\n  \"layout\": " << json_string(source_layout.description)
+        << ",\n  \"chapters\": [";
+    for (std::size_t index = 0; index < timeline.chapters.size(); ++index) {
+      const auto &chapter = timeline.chapters[index];
+      out << (index == 0U ? "\n    " : ",\n    ") << "{\"number\": " << chapter.number
+          << ", \"path\": " << json_path(chapter.path) << ", \"offset_ticks\": "
+          << chapter.offset_ticks << ", \"duration_ticks\": " << chapter.duration_ticks << '}';
+    }
+    out << "\n  ],\n  \"time_base\": " << json_rational(timeline.time_base)
+        << ",\n  \"frame_rate\": " << json_rational(rate) << ",\n  \"range\": {\"start\": "
+        << position(start) << ", \"end\": " << position(end) << ", \"start_ticks\": " << start
+        << ", \"end_ticks\": " << end << ", \"seconds\": "
+        << json_number(static_cast<double>(seconds(end - start, timeline.time_base)))
+        << "},\n  \"speed\": " << json_number(speed)
+        << ",\n  \"frames_expected\": " << frames_expected << ",\n  \"output\": {\"path\": "
+        << (options.output.empty() ? std::string("null") : json_path(options.output))
+        << ", \"width\": " << layout.width << ", \"height\": " << layout.height
+        << ", \"placement\": " << json_string(ex::placement_name(settings.placement))
+        << ", \"panel\": " << (layout.panel ? "true" : "false") << ", \"codec\": "
+        << json_string(settings.output.codec == ex::Codec::hevc ? "hevc" : "h264")
+        << ", \"crf\": " << settings.output.crf
+        << ", \"encoder_preset\": " << json_string(settings.output.encoder_preset)
+        << ", \"audio\": " << (audio ? "true" : "false") << ", \"draft\": "
+        << (options.draft ? "true" : "false") << "},\n  \"gps\": ";
+    if (needs_track || options.manifest) {
+      out << "{\"records\": " << track.points().size()
+          << ", \"in_range\": " << track.route_points().size()
+          << ", \"usable\": " << (track.has_usable_route() ? "true" : "false") << '}';
+    } else {
+      out << "null";
+    }
+    out << ",\n  \"map\": ";
+    if (map_shown) {
+      out << "{\"provider\": " << json_string(provider.id) << ", \"scale\": ";
+      if (scale_curve) {
+        const auto closest = scale_curve->closest();
+        const auto widest = scale_curve->widest();
+        out << "\"auto\", \"ahead_seconds\": " << json_number(settings.map.ahead_seconds)
+            << ", \"closest\": {\"metres\": " << json_number(closest.metres)
+            << ", \"position\": " << position(closest.ticks)
+            << "}, \"widest\": {\"metres\": " << json_number(widest.metres)
+            << ", \"position\": " << position(widest.ticks) << '}';
+      } else {
+        out << "\"fixed\", \"width_metres\": " << json_number(settings.map.width_metres);
+      }
+      out << ", \"tiles\": " << tile_keys.size() << ", \"zooms\": [";
+      for (auto zoom = zooms.begin(); zoom != zooms.end(); ++zoom)
+        out << (zoom == zooms.begin() ? "" : ", ") << *zoom;
+      out << "], \"cached\": " << cached << ", \"to_fetch\": "
+          << (options.map_network ? std::to_string(tile_keys.size() - static_cast<std::size_t>(cached))
+                                  : std::string("null"))
+          << ", \"network\": " << (options.map_network ? "true" : "false") << '}';
+    } else {
+      out << "null";
+    }
+    out << ",\n  \"dry_run\": " << (options.dry_run ? "true" : "false")
+        << ",\n  \"result\": " << result << ",\n  \"warnings\": " << json_strings(warnings)
+        << "\n}\n";
+    std::cout << out.str() << std::flush;
+  };
+
+  if (options.dry_run) {
+    if (options.json)
+      json_report("null");
     return 0;
-  const auto reported_warnings = warnings.size();
+  }
+  auto printed_warnings = warnings.size();
 
   if (fs::exists(options.output) && !options.overwrite)
     throw UsageError(options.output.string() + " exists; use --overwrite to replace it");
+  std::optional<Manifest> manifest;
+  if (options.manifest) {
+    manifest.emplace(*options.manifest, options.overwrite);
+    auto &out = manifest->out();
+    out << "{\n  \"schema\": \"gb.render.manifest/v1\",\n  \"version\": " << json_string(kVersion)
+        << ",\n  \"recording\": " << json_path(options.recording)
+        << ",\n  \"output\": " << json_path(options.output) << ",\n  \"chapters\": [";
+    for (std::size_t index = 0; index < timeline.chapters.size(); ++index) {
+      const auto &chapter = timeline.chapters[index];
+      out << (index == 0U ? "\n    " : ",\n    ") << "{\"number\": " << chapter.number
+          << ", \"path\": " << json_path(chapter.path)
+          << ", \"offset_ticks\": " << chapter.offset_ticks << '}';
+    }
+    out << "\n  ],\n  \"time_base\": " << json_rational(timeline.time_base)
+        << ",\n  \"frame_rate\": " << json_rational(rate) << ",\n  \"speed\": "
+        << json_number(speed) << ",\n  \"frames\": [";
+  }
 
   TileSet tiles;
   if (!tile_keys.empty()) {
@@ -893,6 +1112,8 @@ int run(const Options &options, int argc, char **argv) {
       if (options.require_tiles)
         throw std::runtime_error(message + " (--require-tiles)");
       std::cerr << "gb-render: warning: " << message << '\n';
+      warnings.push_back(message);
+      printed_warnings = warnings.size();
     }
   }
 
@@ -1031,6 +1252,31 @@ int run(const Options &options, int argc, char **argv) {
     }
     painter.end();
     writer.write_video(frame.constBits(), static_cast<int>(frame.bytesPerLine()), pts);
+    if (manifest) {
+      const auto &source = timeline.chapters[chapter];
+      std::ostringstream line;
+      line << "{\"frame\": " << written << ", \"pts\": " << pts << ", \"source_ticks\": " << ticks
+           << ", \"chapter\": " << source.number
+           << ", \"chapter_ticks\": " << ticks - source.offset_ticks << ", \"position\": "
+           << json_string(gb::media::format_recording_position(timeline, ticks)) << ", \"gps\": ";
+      if (const auto index = track.nearest(ticks); index) {
+        const auto &point = track.points()[*index];
+        const auto &origin = origins[*index];
+        line << "{\"record\": " << *index << ", \"chapter\": " << origin.chapter
+             << ", \"media_time_ticks\": " << origin.media_time_ticks
+             << ", \"time_base\": {\"numerator\": " << point.time_base.numerator
+             << ", \"denominator\": " << point.time_base.denominator << "}, \"utc\": "
+             << (point.utc ? json_string(*point.utc) : std::string("null"))
+             << ", \"validity\": " << json_string(gb::telemetry::validity_name(point.validity))
+             << ", \"shown\": " << (track.fix_at(ticks) != nullptr ? "true" : "false") << '}';
+      } else {
+        line << "null";
+      }
+      if (scale_curve)
+        line << ", \"map_width_metres\": " << json_number(scale_curve->width_at(ticks));
+      line << '}';
+      manifest->frame(line.str());
+    }
     if (audio_feed) {
       const auto duration =
           set->duration > 0
@@ -1074,15 +1320,25 @@ int run(const Options &options, int argc, char **argv) {
   if (error)
     throw std::runtime_error("cannot rename " + partial.string() + " to " +
                              options.output.string() + ": " + error.message());
+  if (manifest)
+    manifest->finish();
   cleanup.keep = true;
   const auto seconds_taken = static_cast<double>(clock_timer.elapsed()) / 1000.0;
   std::cerr << "gb-render: wrote " << options.output.string() << " ("
             << size_text(fs::file_size(options.output)) << ", " << written << " frames, "
             << writer.description() << ") in " << static_cast<int>(seconds_taken) << " s\n";
   if (missing_tiles_max > 0 && tiles.unavailable == 0)
-    std::cerr << "gb-render: warning: some map tiles were drawn as placeholders\n";
-  for (auto index = reported_warnings; index < warnings.size(); ++index)
+    warnings.emplace_back("some map tiles were drawn as placeholders");
+  for (auto index = printed_warnings; index < warnings.size(); ++index)
     std::cerr << "gb-render: warning: " << warnings[index] << '\n';
+  if (options.json) {
+    const auto bytes = fs::file_size(options.output);
+    json_report("{\"path\": " + json_path(options.output) + ", \"bytes\": " +
+                std::to_string(bytes) + ", \"frames\": " + std::to_string(written) +
+                ", \"encoding\": " + json_string(writer.description()) +
+                ", \"seconds\": " + json_number(seconds_taken) + ", \"manifest\": " +
+                (manifest ? json_path(manifest->path()) : std::string("null")) + "}");
+  }
   return 0;
 }
 

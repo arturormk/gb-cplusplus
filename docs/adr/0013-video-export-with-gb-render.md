@@ -94,4 +94,6 @@ ground width, an optional track over the whole range and an optional circular sh
   2026-11-01). Good look-ahead and limits depend on speed, terrain, distance and map detail, so
   they are set by hand; the fixed zoom rates suit the recordings tried so far; and the moving map
   with the speed text shows scale well enough for an inset.
-- Not yet done: graphs, `--manifest`, `--json`.
+- `--manifest` (`gb.render.manifest/v1`, one line per frame with the GPS record it shows) and
+  `--json` (`gb.render/v1` report on stdout) are done (2026-11-01).
+- Not yet done: graphs.

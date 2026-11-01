@@ -1,8 +1,8 @@
 # Export: the `gb-render` command
 
 Video export is a command-line tool, `gb-render` (the name BLUEPRINT gives the headless renderer).
-What is implemented is listed in [`tools/gb-render/README.md`](../../../tools/gb-render/README.md);
-options it does not list (`--manifest`, `--json`) are still planned. `--save-settings` is not
+What is implemented is listed in [`tools/gb-render/README.md`](../../../tools/gb-render/README.md).
+`--save-settings` is not
 planned ([repeatability](#command-line)). Stills, contact sheets and `--show-layout` are not
 planned ([checking](#checking-before-an-export)), nor are prepared tile directories (`--prepare-tiles`, `--map-tiles`; [map tiles](#map-tiles)).
 The map scale option is `--map-width DISTANCE`, and overlays are placed with `--placement`.

@@ -165,9 +165,34 @@ when complete; Ctrl+C removes it. An existing output is not replaced without `--
 `--draft` renders at half the width with the fastest encoder preset. Progress goes to stderr.
 Exit status: 0 done, 1 failure, 2 usage or settings error, 130 cancelled.
 
+## Reports
+
+`--json` prints a `gb.render/v1` report on stdout once the job is done: the chapters, the snapped
+range in ticks and positions, the expected frame count, the output, the GPS records, the map
+scale and tile set, the warnings and, after an export (`"result"`), the file, its size, the frames
+written and the encoder. With `--dry-run` the result is `null`. The human report and progress
+still go to stderr. A failed or cancelled run prints no JSON, only its exit status.
+
+`--manifest FILE` writes a `gb.render.manifest/v1` record of every frame written, one line each:
+
+```json
+{"frame": 0, "pts": 0, "source_ticks": 5120, "chapter": 1, "chapter_ticks": 5120, "position": "00:00:00.400",
+ "gps": {"record": 1, "chapter": 1, "media_time_ticks": 333, "time_base": {"numerator": 1, "denominator": 1000},
+         "utc": "2026-01-01T12:00:00.333Z", "validity": "valid", "shown": true}}
+```
+
+`pts` is the output time and `source_ticks` the recording time, both in the file's `time_base`;
+`chapter_ticks` is the time within the frame's chapter. `gps` is the record nearest the frame
+(`null` without GPS), in its chapter's telemetry time base, as `gb-time --json --at` reports it;
+`shown` is whether the telemetry fields show it (a valid fix within one record interval). With an
+automatic map scale, `map_width_metres` is the frame's map width. The manifest is written with
+the export and removed with it when the export fails or is cancelled. It cannot be combined with
+`--dry-run`, and an existing file is not replaced without `--overwrite`. The test suite checks
+each frame's record against `gb::telemetry::nearest_point` (the M6 gate on synthetic GPS).
+
 ## Not yet
 
-Speed and height graphs, `--manifest` and `--json` are planned in
+Speed and height graphs are planned in
 [`docs/plans/export/phases.md`](../../docs/plans/export/phases.md).
 
 Stills, contact sheets and `--show-layout` are not planned. To preview, render a short segment:

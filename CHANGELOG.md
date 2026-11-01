@@ -40,6 +40,10 @@ First public release: a minimum usable product for GoPro MAX 2025 recordings on 
 - `gb-render`: `[output] speed` exports faster than real time (1–1000×) by dropping frames before
   they are rendered or encoded, with the audio time-stretched at its pitch up to 4× and no audio
   track above that. libavfilter is now a build dependency.
+- `gb-render`: `--json` prints a `gb.render/v1` report on stdout, for a dry run or an export, and
+  `--manifest FILE` writes a `gb.render.manifest/v1` record of every frame written: output and
+  source times, chapter, and the GPS record the overlays use. CTest checks each frame's record
+  against `nearest_point` on a video with synthetic GPS.
 - `gb-inspect`: ISO BMFF container and content-based JPEG inspection.
 - `gb-metadata`: GPMF metadata inventory, sample decoding, and raw payload export.
 - `gb-telemetry`: timestamped GPS export to JSON, CSV, GPX, and GeoJSON.

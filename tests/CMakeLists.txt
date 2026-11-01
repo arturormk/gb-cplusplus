@@ -436,3 +436,46 @@ set_tests_properties(gb_render_rejects_bad_range PROPERTIES
   FIXTURES_REQUIRED gb_audio_gating_media
   ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
   PASS_REGULAR_EXPRESSION "chapter 2 does not exist")
+
+# --json and --manifest on a video with synthetic GPS: three records at 0, 333 and 666 ms (the
+# jitter fixture's gpmd track) under two seconds of 25 fps video.
+add_test(NAME gb_render_gps_fixture_setup
+  COMMAND "${GB_FFMPEG_EXECUTABLE}" -v error
+    -f lavfi -i testsrc=s=160x90:r=25:d=2 -i "${GB_CLI_FIXTURE_DIR}/metadata-jitter.mp4"
+    -map 0:v -map 1:d -c:v mpeg4 -c:d copy -tag:d gpmd -y "${GB_CLI_FIXTURE_DIR}/render-gps.mp4")
+set_tests_properties(gb_render_gps_fixture_setup PROPERTIES
+  FIXTURES_REQUIRED gb_cli_media
+  FIXTURES_SETUP gb_render_gps_media)
+add_test(NAME gb_render_dry_run_json
+  COMMAND gb_render_tool "${GB_CLI_FIXTURE_DIR}/render-gps.mp4" --dry-run --json --width 320
+    --placement bottom --map-width 1km --map-no-network)
+set_tests_properties(gb_render_dry_run_json PROPERTIES
+  FIXTURES_REQUIRED gb_render_gps_media
+  ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+  PASS_REGULAR_EXPRESSION
+    "\"schema\": \"gb.render/v1\".*\"frames_expected\": 50.*\"gps\": {\"records\": 3, \"in_range\": 3, \"usable\": true}.*\"scale\": \"fixed\", \"width_metres\": 1000.*\"dry_run\": true,.*\"result\": null")
+add_test(NAME gb_render_manifest
+  COMMAND gb_render_tool "${GB_CLI_FIXTURE_DIR}/render-gps.mp4" --duration 1 --width 320
+    --placement bottom --map-width 1km --map-no-network --encoder-preset ultrafast --overwrite
+    --manifest "${GB_CLI_FIXTURE_DIR}/render-gps.manifest.json" --json
+    -o "${GB_CLI_FIXTURE_DIR}/render-gps-export.mp4")
+set_tests_properties(gb_render_manifest PROPERTIES
+  FIXTURES_REQUIRED gb_render_gps_media
+  FIXTURES_SETUP gb_render_manifest_output
+  ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+  TIMEOUT 120
+  SKIP_REGULAR_EXPRESSION "offscreen rendering is unavailable"
+  PASS_REGULAR_EXPRESSION "\"result\": {\"path\": .*\"frames\": 25,.*\"manifest\": .*render-gps.manifest.json")
+# The M6 gate: each frame's GPS record is the one nearest_point finds at its source time.
+add_test(NAME gb_render_manifest_gate
+  COMMAND "${CMAKE_COMMAND}" -DMANIFEST=${GB_CLI_FIXTURE_DIR}/render-gps.manifest.json
+    -DGB_TIME=$<TARGET_FILE:gb_time_tool> -DRECORDING=${GB_CLI_FIXTURE_DIR}/render-gps.mp4
+    -P "${CMAKE_CURRENT_SOURCE_DIR}/check_render_manifest.cmake")
+set_tests_properties(gb_render_manifest_gate PROPERTIES
+  FIXTURES_REQUIRED gb_render_manifest_output
+  PASS_REGULAR_EXPRESSION "manifest gate: 25 frames match nearest_point")
+add_test(NAME gb_render_rejects_manifest_dry_run
+  COMMAND gb_render_tool "${GB_CLI_FIXTURE_DIR}/render-gps.mp4" --dry-run
+    --manifest "${GB_CLI_FIXTURE_DIR}/never.json")
+set_tests_properties(gb_render_rejects_manifest_dry_run PROPERTIES
+  PASS_REGULAR_EXPRESSION "cannot be combined with --dry-run")

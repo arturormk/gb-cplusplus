@@ -112,7 +112,8 @@ implemented yet.
 
 ## Phase 7: the M6 gate
 
-- `--manifest` and `--json`. The `gb-render` README.
+- `--manifest` and `--json`. The `gb-render` README. **Done (2026-11-01)**; the gate's
+  fixture check (`gb_render_manifest_gate`) runs in CTest.
 - The M6 gate run on the samples, recorded in `research/findings/`. BLUEPRINT M6 status,
   `docs/architecture.md`, `docs/dependencies.md` and the README updated.
 
