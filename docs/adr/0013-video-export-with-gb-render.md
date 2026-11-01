@@ -85,5 +85,7 @@ ground width, an optional track over the whole range and an optional circular sh
   chapters are read in parallel.
 - Capture mode's panel text and `gb-render`'s panel text are drawn by different painters, so a
   capture and an export of the same panel settings can differ in the text.
-- Not yet done: stills and contact sheets in `gb-render`, graphs, `--show-layout`,
-  `--save-settings`, `--manifest`, `--json`.
+- Stills, contact sheets and `--show-layout` in `gb-render` are not done (amendment,
+  2026-11-01). A short `--start`/`--duration` segment with `--draft` previews an export, and
+  Capture mode writes stills.
+- Not yet done: graphs, `--save-settings`, `--manifest`, `--json`.

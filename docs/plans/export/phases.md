@@ -2,7 +2,7 @@
 
 Each phase ends with something usable, tests, and updated docs, following BLUEPRINT §14. The
 phases are ordered so that the riskiest unknowns are measured before code depends on them, and
-so that a still export works end to end before video does.
+so that a still from Capture mode works end to end before video does.
 
 ## Phase 0: spikes (measure first)
 
@@ -25,9 +25,9 @@ Each spike is recorded in `research/findings/` with commands and results.
 
 **Done (2026-10-31)**, with the parts of phase 2 that Capture mode needs: the chapter positions,
 the EXIF writer, the INI syntax reader and the Capture settings writer in `lib/gb-export`, and
-Capture mode itself (ADR-0012). Still to do in phase 2: settings validation and combining, the
-`--print-settings` family, and `tools/gb-render --still`, with the test that compares it with a
-capture. The GPU-versus-CPU comparison is not done yet: the offscreen test compares the GPU
+Capture mode itself (ADR-0012). The rest of phase 2 (settings validation and combining,
+`--print-settings`) was done with phase 3; `gb-render --still` and the test comparing it with a
+capture are dropped (2026-11-01). The GPU-versus-CPU comparison is not done yet: the offscreen test compares the GPU
 renderer with itself (a crop against the whole canvas), not with `project_equirectangular`.
 
 - Move shader, upload and draw from `video_view.cpp` into `lib/gb-render`'s `FrameRenderer`, with
@@ -38,7 +38,7 @@ renderer with itself (a crop against the whole canvas), not with `project_equire
 - Check the player before and after with its smoke, audio-gating and GUI-stall tests, the
   benchmark, and an image comparison.
 
-## Phase 2: stills, in `gb-player` and `gb-render`
+## Phase 2: stills in `gb-player`
 
 - `lib/gb-export`: the INI parser and writer, settings validation and combining (`--settings`,
   options, `--set`), `--print-settings`, `--save-settings`, `--example-settings`. Canvas and crop
@@ -49,8 +49,9 @@ renderer with itself (a crop against the whole canvas), not with `project_equire
 - **Capture mode** in `gb-player`: Play/Capture selector, frozen canvas, aspect ratio and panel,
   capture rectangle with handles and keys, capture of the displayed frame (JPEG, PNG, GPS EXIF),
   *Set start* / *Set end*, the live settings text with Copy and Save as.
-- `tools/gb-render` with `--still` for photos and video frames.
-- Result: framed stills from the player, and the same stills from the command line.
+- `tools/gb-render` with `--still` for photos and video frames is not planned (2026-11-01). A
+  short `--draft` segment previews an export, and Capture mode writes stills.
+- Result: framed stills from the player.
 
 ## Phase 3: video, one chapter
 
@@ -67,12 +68,12 @@ settings validation, combining and `--print-settings`. No separate encoder threa
 
 **Text done (2026-10-31)** (ADR-0013): fields with labels, anchors, sizes, two colours and an
 outline, over the picture or on a left, right, top or bottom panel; units and time zone. Graphs
-and `--show-layout` remain.
+remain. `--show-layout` is not planned (2026-11-01).
 
 - Extract `ProfilePainter` from `ProfileView`, with no visible change. Add
   `TelemetryTextPainter`.
 - Layout in `gb_export` (over and beside, anchors, `after`, panel order), the compositor in the
-  export job, `--show-layout`.
+  export job.
 - Units and time zone.
 
 ## Phase 5: the map overlay and its scale
@@ -81,13 +82,13 @@ and `--show-layout` remain.
 the tile stage with `--max-tiles`, `--map-no-network` and `--require-tiles`. **Automatic scale
 done (2026-11-01)**: `[map] width = auto` with `ahead`, `closest` and `widest`
 (`gb::geo::ScaleCurve`), its range in `--dry-run`. Activity presets, a response setting, the scale
-bar and `--contact-sheet` remain. Tile directories are dropped (2026-11-01, see below).
+bar remain. `--contact-sheet` and tile directories are dropped (2026-11-01, see below).
 
 - Extract `MapPainter` from `MapView`, with no visible change. Add the scale bar and
   `AttributionPainter`. (Done early for Capture mode's side panel: `paint_map` and
   `paint_attribution` in `gb_render`, which the map pane now draws with; no scale bar yet.)
 - Ground distance ↔ zoom conversion in `gb_geo`. The fixed scale, then the automatic scale curve
-  in `gb_export`, with the activity presets, its summary in `--dry-run`, and `--contact-sheet`.
+  in `gb_export`, with the activity presets and its summary in `--dry-run`.
 - The tile stage: compute the tiles drawn, fetch missing ones through `TileFetcher` before
   rendering, `--max-tiles`, `--map-no-network` with placeholders, `--require-tiles`. ADR amending
   ADR-0009 and BLUEPRINT §9. Tile directories (`--prepare-tiles DIR`, `--map-tiles DIR`) are
@@ -105,7 +106,7 @@ implemented yet.
 
 - `RecordingTimeline`, `SequenceReader`, `SequenceAudioReader` and rebased telemetry, built on the
   rule measured in spike 3, with the consistency checks and warnings.
-- Ranges, contact sheets and the scale curve across chapter boundaries.
+- Ranges and the scale curve across chapter boundaries.
 
 ## Phase 7: the M6 gate
 
@@ -133,8 +134,8 @@ tree.
 | Tile stage | The computed tile set for fixed and automatic scales on a synthetic route, with no margin or extra zoom. Against a local test server (as `gb_tiles_tests` does): only uncached tiles are requested, never more than two at a time, and a failure gives a placeholder, not a stalled export. The tile set is the same at two output resolutions. |
 | EXIF | Written GPS IFD parses back to the same values. No EXIF when the option is off. Disabled with no valid fix. |
 | Gate | `gb-render --manifest` on a fixture with synthetic GPS: each frame's record index equals `nearest_point` at its source PTS. On the private samples, the same check plus a visual comparison with the player at chosen timestamps. |
-| CLI | `gb-render` on the fixture: a still, a contact sheet, a short draft clip, a dry run, and the error paths (bad position, existing output without `--overwrite`, `--max-tiles` exceeded, Ctrl+C leaving no partial file). |
-| Capture | Offscreen `gb-player` test: enter Capture mode on the fixture, set an aspect ratio and a rectangle, capture, and compare the image with `gb-render --still` run on the copied settings. The rectangle keeps its place on the picture when the window is resized. |
+| CLI | `gb-render` on the fixture: a short draft clip, a dry run, and the error paths (bad position, existing output without `--overwrite`, `--max-tiles` exceeded, Ctrl+C leaving no partial file). |
+| Capture | Offscreen `gb-player` test: enter Capture mode on the fixture, set an aspect ratio and a rectangle, capture, and check the image and the settings shown. The rectangle keeps its place on the picture when the window is resized. |
 
 ## ADRs to write
 

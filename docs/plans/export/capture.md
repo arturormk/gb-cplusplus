@@ -121,9 +121,9 @@ It is meant to be combined with an overlay file:
 - A capture renders the **displayed frame**: the frame set the engine is showing, not a frame
   decoded again. If the video is playing, Capture pauses it first, so the frame captured is the
   one on screen.
-- It uses the same renderer and still writer as `gb-render --still`, through the shared
-  libraries ([pipeline](pipeline.md#where-the-code-goes)). A test checks that a capture and
-  `gb-render --still` with the copied settings give the same image.
+- It uses the same renderer as `gb-render`, through the shared libraries
+  ([pipeline](pipeline.md#where-the-code-goes)). `gb-render` writes no stills (not planned,
+  2026-11-01), so a capture is not compared with one.
 - The file name is suggested from the recording, position and view, for example
   `GH010073_c2-00m05s400_rectilinear.jpg`, in the last folder used. Shift+click asks for a name.
   An existing file is never replaced without asking.

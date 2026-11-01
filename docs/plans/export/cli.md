@@ -2,9 +2,9 @@
 
 Video export is a command-line tool, `gb-render` (the name BLUEPRINT gives the headless renderer).
 What is implemented is listed in [`tools/gb-render/README.md`](../../../tools/gb-render/README.md);
-options it does not list (`--still`, `--contact-sheet`, `--show-layout`, `--save-settings`,
-`--manifest`, `--json`) are still planned. Prepared tile directories (`--prepare-tiles`,
-`--map-tiles`) are not planned ([map tiles](#map-tiles)).
+options it does not list (`--save-settings`, `--manifest`, `--json`) are still planned. Stills,
+contact sheets and `--show-layout` are not planned ([checking](#checking-before-an-export)), nor
+are prepared tile directories (`--prepare-tiles`, `--map-tiles`; [map tiles](#map-tiles)).
 The map scale option is `--map-width DISTANCE`, and overlays are placed with `--placement`.
 The moment, the view and the capture rectangle are chosen in `gb-player`'s
 [Capture mode](capture.md), which also captures stills. Everything else is written down in
@@ -17,28 +17,18 @@ settings files and on the command line, so an export can always be repeated exac
    settings it shows, for example as `framing.ini`.
 2. **Describe the overlays in an INI settings file** ([settings.md](settings.md)). Start from
    `gb-render --example-settings > ride.ini`, which writes a commented example.
-3. **Check single frames.**
-
-   ```sh
-   gb-render GH010073.MP4 --settings framing.ini --settings ride.ini --still c2:00:05:31.400 -o check.jpg
-   ```
-
-   A still takes about a second, so the layout can be adjusted by editing the file and running it
-   again. `--show-layout` draws each overlay's rectangle and name on the still, to help with
-   placement. The result can be opened in `gb-player`, which opens JPEGs, or in any image viewer.
-4. **Check the whole range at once.** `--contact-sheet 12` renders 12 frames spread evenly over
-   the range into one image, each labelled with its position. This is how to check that an
-   automatic map scale behaves well across a ride, without rendering video.
-5. **Export a short test segment.**
+3. **Preview a short segment.**
 
    ```sh
    gb-render GH010073.MP4 --settings framing.ini --settings ride.ini --duration 10 --draft -o test.mp4
    ```
 
-   `--draft` renders at a quarter of the output area with the fastest encoder preset. Because
-   overlay sizes are fractions of the frame height ([settings](settings.md#units-and-sizes)), the
-   draft has the same layout as the full export.
-6. **Export.** The same command without `--draft`, with the full range. `--dry-run` first reports
+   `--duration` overrides the `end` in the settings, and `--start POS` its `start`, so any
+   moment can be previewed without editing the files. `--draft` renders at half the width (a
+   quarter of the pixels) with the fastest encoder preset. Because overlay sizes are fractions of
+   the frame height ([settings](settings.md#units-and-sizes)), the draft has the same layout as
+   the full export. Edit the settings and run it again until the layout is right.
+4. **Export.** The same command without `--draft`, with the full range. `--dry-run` first reports
    what would be done (snapped range, frame count, output size, map tiles to fetch, warnings)
    without writing anything.
 
@@ -48,7 +38,7 @@ settings files and on the command line, so an export can always be repeated exac
 gb-render RECORDING [--settings FILE]... [options] -o OUTPUT
 ```
 
-`RECORDING` is any chapter of the recording, or a photo. Settings are combined in this order,
+`RECORDING` is any chapter of the recording. Settings are combined in this order,
 later ones winning: built-in defaults, then each `--settings` file in order, then options. So
 overlay layout can live in one file and output settings in another (`--settings bike.ini
 --settings youtube-1080p.ini`).
@@ -56,13 +46,12 @@ overlay layout can live in one file and output settings in another (`--settings 
 | Group | Options |
 |---|---|
 | Range | `--start POS`, `--end POS` or `--duration SECONDS`. Without them, the whole recording. |
-| Stills | `--still POS` (repeatable; one file each, numbered when there are several). `--contact-sheet N`. For a photo, `--still` takes no position. |
 | View | `--view MODE` (the `gb-player` names), `--yaw`, `--pitch`, `--roll`, `--fov`, and for flat views `--zoom` and `--pan X,Y`. `--canvas ASPECT`: the aspect ratio of the canvas the crop refers to. |
 | Frame | `--aspect 16:9` (also `4:3`, `1:1`, `9:16`, `W:H`), `--crop X,Y,W,H` in canvas units (the whole canvas by default), `--width W` (height from the aspect ratio) or `--size WxH` (must match it). |
-| Output | `-o FILE`. The container comes from the extension (`.mp4`, `.mkv`, `.jpg`, `.png`). `--codec h264` or `hevc`, `--crf N`, `--encoder-preset NAME`, `--no-audio`, `--audio-bitrate BPS`, `--jpeg-quality Q`, `--gps-exif`, `--overwrite`. |
+| Output | `-o FILE`. The container comes from the extension (`.mp4`, `.mkv`). `--codec h264` or `hevc`, `--crf N`, `--encoder-preset NAME`, `--no-audio`, `--audio-bitrate BPS`, `--overwrite`. |
 | Map | `--map-scale 1.2km` or `--map-scale auto`, `--map-activity walk\|hike\|bicycle\|car\|flight`, and the network options `gb-player` has: `--map-provider`, `--map-no-network`, `--map-cache`. Plus `--max-tiles N` and `--require-tiles`. |
 | Anything else | `--set SECTION.KEY=VALUE` overrides one setting in the file, for example `--set map.opacity=0.7`. |
-| Checking | `--dry-run`, `--draft`, `--show-layout`, `--print-settings` (prints the combined settings file and exits), `--manifest FILE` (per-frame record, see [pipeline](pipeline.md#timing)), `--json` (machine-readable report on stdout). |
+| Checking | `--dry-run`, `--draft`, `--print-settings` (prints the combined settings file and exits), `--manifest FILE` (per-frame record, see [pipeline](pipeline.md#timing)), `--json` (machine-readable report on stdout). |
 | Standard | `--help`, `--version`, and the exit codes and stderr diagnostics of the other tools. |
 
 Only the settings people change from export to export are options. Overlay layout is in the file,
@@ -124,7 +113,7 @@ not depend on the overlay size or the output resolution.
 | Flight | 120 s | 5 km | 200 km |
 
 `--dry-run` reports the automatic scale's range over the export and the times of its widest and
-closest points, and `--contact-sheet` shows it.
+closest points. A `--draft` export, with `[output] speed` above 1 for a long range, shows it.
 
 Where the route ahead has no valid fix, it is left out of the look-ahead. Where the current frame
 has no valid fix, the map keeps the last scale and shows the position as unavailable, as the
@@ -151,6 +140,19 @@ belongs with future work on supporting other map providers and offline map sourc
 
 `--dry-run` reports the tile set: how many tiles, at which zoom levels, how many
 are already in the cache, and how many would be fetched.
+
+## Checking before an export
+
+`--dry-run` reports what would be done without writing anything, and a short `--draft` segment
+(`--start`, `--duration`) shows the result. Stills come from `gb-player`'s
+[Capture mode](capture.md).
+
+**Not planned: stills, contact sheets and `--show-layout`** (decided 2026-11-01). Earlier
+versions of this plan had `gb-render --still POS` (one frame to JPEG or PNG, also for photos),
+`--contact-sheet N` (N frames over the range in one image, to check the automatic map scale) and
+`--show-layout` (overlay rectangles and names drawn on a still). A short draft segment covers
+what they were for: it takes a few seconds, shows the real layout, and also shows motion, which a
+still cannot. Capture mode already writes stills, with GPS EXIF on request.
 
 ## Progress and output
 

@@ -161,9 +161,11 @@ Exit status: 0 done, 1 failure, 2 usage or settings error, 130 cancelled.
 
 ## Not yet
 
-Stills and contact sheets (`--still`, `--contact-sheet`), speed and height graphs,
-`--show-layout`, `--save-settings`, `--manifest` and `--json` are planned in
+Speed and height graphs, `--save-settings`, `--manifest` and `--json` are planned in
 [`docs/plans/export/phases.md`](../../docs/plans/export/phases.md).
+
+Stills, contact sheets and `--show-layout` are not planned. To preview, render a short segment:
+`--start POS --duration 10 --draft`. Stills come from `gb-player`'s Capture mode.
 
 Prepared tile directories (`--prepare-tiles`, `--map-tiles`) are not planned. Tiles fetched by an
 export stay in the tile cache, so after one run with the network, `--map-no-network

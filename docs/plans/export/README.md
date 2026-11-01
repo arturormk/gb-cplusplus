@@ -3,13 +3,12 @@
 Status: In progress (2026-10-31). Capture mode in `gb-player`, with the shared renderer it needs,
 is implemented (ADR-0012). `gb-render` exports video with text and map overlays, over the picture
 or on a panel, across chapters (ADR-0013, [`tools/gb-render`](../../../tools/gb-render/README.md));
-with a fixed or automatic map scale; stills, activity presets and graphs are not done yet.
-Prepared tile directories are not planned.
+with a fixed or automatic map scale; activity presets and graphs are not done yet. Stills and
+contact sheets in `gb-render`, `--show-layout` and prepared tile directories are not planned.
 
-This plan covers exporting stills and videos from GoPro recordings with **`gb-render`**, a
-command-line tool, which is also the headless renderer that BLUEPRINT M6 requires, and with a
-**Capture mode in `gb-player`** that frames and captures stills and shows that framing as
-`gb-render` settings. It is split into five documents:
+This plan covers exporting videos from GoPro recordings with **`gb-render`**, a command-line
+tool, which is also the headless renderer that BLUEPRINT M6 requires, and with a **Capture mode
+in `gb-player`** that frames and captures stills and shows that framing as `gb-render` settings. It is split into five documents:
 
 - [`capture.md`](capture.md): Capture mode in `gb-player`: aspect ratio, capture rectangle,
   stills, and the settings sidebar.
@@ -24,17 +23,17 @@ command-line tool, which is also the headless renderer that BLUEPRINT M6 require
 ## What export must do
 
 1. **Range.** For video, an interval, which may cross the boundaries between contiguous chapters
-   of one recording, given as chapter positions that can be read off `gb-player`. For a photo, or
-   for one frame of a video, a still.
+   of one recording, given as chapter positions that can be read off `gb-player`. Stills of a
+   photo or of one frame are captured in `gb-player`.
 2. **Framing.** A projection and a capture rectangle chosen on a preview, at a common aspect ratio (16:9, 4:3, 1:1, 9:16)
    or a free one, and an output resolution.
 3. **Overlays.** Map, speed, height and telemetry text, drawn *over* the picture or *beside* it on
    a black panel. The map tracks the current position at a fixed scale, or at an automatic one
    that keeps the route ahead in view, within limits.
-4. **Outputs.** Stills (JPEG, PNG) and videos (MP4 or MKV, H.264 or HEVC). Audio in videos is
-   optional. Telemetry is not embedded in exported videos. Stills can optionally carry GPS EXIF.
-5. **Checking before exporting.** Single stills, a contact sheet over the range, a fast draft of a
-   short segment, and a dry run.
+4. **Outputs.** Videos (MP4 or MKV, H.264 or HEVC) from `gb-render`, and stills (JPEG, PNG)
+   from Capture mode. Audio in videos is optional. Telemetry is not embedded in exported videos.
+   Stills can optionally carry GPS EXIF.
+5. **Checking before exporting.** A fast draft of a short segment, and a dry run.
 
 ## Decisions this plan proposes
 
@@ -46,7 +45,7 @@ record under `docs/adr/` when the work is done.
 | 1 | Video export is a **command-line tool, `gb-render`**. Every export is described by settings files and options, so it can be repeated exactly. (ADR) | [cli](cli.md) |
 | 2 | Framing is done in a **Capture mode in `gb-player`**: aspect ratio, a movable and resizable capture rectangle over the view, stills captured at a chosen resolution, and the framing shown as settings to copy. Play mode is unchanged. (ADR) | [capture](capture.md) |
 | 3 | Settings are an **INI file**, `gb.export/1`: one section per part and per overlay, with comments, no new dependency, strictly validated. Several files and options combine, later ones winning. | [settings](settings.md) |
-| 4 | Overlay geometry is in **fractions of the frame height**, so stills, drafts and the full export have the same layout at any resolution. | [settings](settings.md#units-and-sizes) |
+| 4 | Overlay geometry is in **fractions of the frame height**, so Capture-mode stills, drafts and the full export have the same layout at any resolution. | [settings](settings.md#units-and-sizes) |
 | 5 | Positions in a chaptered recording are written **`c2:00:05:31.400`**: chapter, then the time within it in the player's clock format. `gb-player` shows that form on its clock and in Capture mode. | [cli](cli.md#positions-in-a-chaptered-recording) |
 | 6 | Frames are rendered **offscreen on the GPU with the player's shader**, moved into a renderer that `gb-player` and `gb-render` share. The CPU projection stays as the reference and becomes an automated test oracle. (ADR) | [pipeline](pipeline.md#video-renderer) |
 | 7 | Overlays are drawn with **QPainter by painters shared** with the player's map and graph. | [pipeline](pipeline.md#overlay-painters) |

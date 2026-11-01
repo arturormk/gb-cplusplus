@@ -170,7 +170,7 @@ file.
 
 - **Map attribution** is always drawn when the map is present.
 - **Location in videos.** Export never embeds telemetry or location in a video, so there is no
-  setting for it. `gps_exif` applies to stills and defaults to `no`.
+  setting for it. GPS EXIF in stills is a Capture-mode option, off by default.
 - **Map orientation and centring.** The map is always centred on the current position, north up.
 
 ### Versioning

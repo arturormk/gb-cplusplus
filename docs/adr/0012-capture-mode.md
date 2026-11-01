@@ -75,9 +75,9 @@ scene-graph render node, and could only draw into the window.
   differs by at most 1/255.
 - Offscreen rendering needs OpenGL 3.3 or OpenGL ES 3.0. Without it, capture reports the reason,
   and the tests that need it are reported as skipped.
-- `gb-render --still` does not exist yet. The test the plan asks for, comparing a capture with
-  `gb-render --still` on the copied settings, waits for it; `gb-render` will reuse
-  `OffscreenRenderer`, `render_still` and `write_still`.
+- `gb-render --still` is not planned (amendment, 2026-11-01), so the test comparing a capture
+  with it is dropped. Stills are written only by Capture mode; `gb-render` previews with a short
+  `--draft` segment.
 - The resolution warning is an estimate at the centre of the view: the projections stretch the
   source differently across it.
 - The panel's text layout (fonts, rows, columns) is the player's; `gb-render`'s overlay layout

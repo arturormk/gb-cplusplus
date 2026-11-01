@@ -692,7 +692,7 @@ int run(const Options &options, int argc, char **argv) {
     std::transform(extension.begin(), extension.end(), extension.begin(),
                    [](const unsigned char c) { return static_cast<char>(std::tolower(c)); });
     if (extension != ".mp4" && extension != ".mkv")
-      throw UsageError("the output must end in .mp4 or .mkv (stills are not exported yet)");
+      throw UsageError("the output must end in .mp4 or .mkv");
   }
 
   // Qt for fonts, painting and offscreen OpenGL; no window is ever shown.

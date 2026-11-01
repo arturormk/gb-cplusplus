@@ -16,7 +16,8 @@ SequenceReader ──FrameSet──▶ FrameRenderer (offscreen GL, player shade
                                                               └──▶ MP4/MKV muxer ◀┘
 ```
 
-A still is the same path for one frame, with a still writer at the end instead of the encoder.
+A Capture-mode still in `gb-player` is the same path for one frame, with a still writer at the
+end instead of the encoder.
 
 The job runs in `gb-render` ([cli.md](cli.md)). It takes the combined, validated settings
 ([settings.md](settings.md)) and a recording path, and has no other inputs, which is what makes an
@@ -55,7 +56,7 @@ moment, so the drawing code is shared rather than duplicated:
 Both are refactors with no visible change, checked with the player's smoke, audio-gating and
 GUI-stall tests, its benchmark, and image comparison before and after. The visible changes to the
 player are [Capture mode](capture.md) and the chapter prefix on its clock. A capture uses the same
-`FrameRenderer`, still writer and settings code as `gb-render --still`.
+`FrameRenderer` and settings code as `gb-render`.
 
 ## Video renderer
 
@@ -147,7 +148,6 @@ unavailable ("—"), never as zero. The map breaks the route at invalid stretche
 `gb_export` computes the layout from the settings and the output size: the picture rectangle, the
 panel rectangle for `beside`, and each overlay's rectangle, all in pixels. It rounds them to
 whole pixels and keeps the picture area's size even. Layout is pure geometry and is unit-tested.
-`--show-layout` draws these rectangles with their names.
 
 ## Map scale
 
@@ -184,8 +184,8 @@ records only:
 4. Where the current record has no valid fix, hold the last value.
 
 The curve is deterministic, so an export repeated from the same settings gives the same frames.
-Stills, contact sheets, drafts and the full export use the same curve, so a
-still at a position shows exactly the map the video will have there. For a ~20-minute recording at
+Drafts and the full export use the same curve, so a draft shows exactly the map the video will
+have. For a ~20-minute recording at
 18 GPS records per second it is a few tens of thousands of records, which takes milliseconds.
 
 ## Map tiles in export
@@ -304,9 +304,11 @@ is already built with them, so `docs/dependencies.md` needs a note, not a new pa
 
 ## Still writer
 
+Used by Capture mode in `gb-player` (`gb::render::write_still`); `gb-render` writes no stills.
+
 - **PNG** through the existing `write_png` path (from the composited `QImage`).
 - **JPEG** encoded with FFmpeg's `mjpeg` encoder, or `QImageWriter`, with a chosen quality.
-- **GPS EXIF**, only with `--gps-exif` (`gps_exif = yes`):
+- **GPS EXIF**, only when asked for (Capture mode's GPS EXIF option):
   - for a photo source, the photo's own GPS IFD position, altitude and time;
   - for a video frame, the nearest recorded GPS record, but only if it has a valid fix and is
     within one record interval of the frame. Its latitude, longitude, altitude, speed, and UTC
