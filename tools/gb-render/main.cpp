@@ -760,7 +760,8 @@ int run(const Options &options, int argc, char **argv) {
   const auto needs_track = overlays && (settings.map.enabled || settings.telemetry);
   gb::render::ExportTrack track;
   if (needs_track) {
-    track = gb::render::ExportTrack(load_track(timeline, start, end, warnings), start, end);
+    track = gb::render::ExportTrack(load_track(timeline, start, end, warnings), start, end,
+                                    static_cast<double>(seconds(1, timeline.time_base)));
     if (!track.has_usable_route())
       warnings.emplace_back("no valid GPS fix in the range: telemetry shows \"—\"");
   }

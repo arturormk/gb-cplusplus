@@ -202,7 +202,7 @@ gb::geo::RoutePoint at(const double north_metres, const double east_metres,
   const auto latitude = 40.0 + north_metres / kMetresPerDegree;
   const auto longitude =
       -3.0 + east_metres / (kMetresPerDegree * std::cos(40.0 * 3.14159265358979323846 / 180.0));
-  return {{latitude, longitude}, ticks, usable};
+  return {{latitude, longitude}, ticks, usable, std::nullopt, false};
 }
 
 void test_route() {
@@ -255,6 +255,98 @@ void test_route() {
         "route bounds");
 }
 
+// A straight track at 18 records per second (55 ms apart) with deterministic fix noise.
+std::vector<gb::geo::RoutePoint> straight_track(const double speed, const double noise,
+                                                const int records) {
+  std::vector<gb::geo::RoutePoint> track;
+  for (int index = 0; index < records; ++index) {
+    const auto seconds = 0.055 * index;
+    auto point = at(speed * seconds + noise * std::sin(index * 1.7), noise * std::cos(index * 2.3),
+                    static_cast<std::int64_t>(index) * 55);
+    point.speed_mps = speed;
+    track.push_back(point);
+  }
+  return track;
+}
+
+std::size_t count_unusable(const std::vector<gb::geo::RoutePoint> &points) {
+  std::size_t count = 0;
+  for (const auto &point : points)
+    count += point.usable ? 0U : 1U;
+  return count;
+}
+
+void test_route_jumps() {
+  using namespace gb::geo;
+  constexpr double kSecondsPerTick = 0.001;
+  // Walking (1.4 m/s, ±1 m noise), cruising (250 m/s, ±3 m noise) and standing still (±2 m noise)
+  // recordings have no jumps, with or without a reported speed.
+  for (const auto &[speed, noise] : {std::pair{1.4, 1.0}, {250.0, 3.0}, {0.0, 2.0}}) {
+    auto clean = straight_track(speed, noise, 600);
+    auto found = mark_route_jumps(clean, kSecondsPerTick);
+    check(found.jumps == 0U && count_unusable(clean) == 0U,
+          "no jumps in a clean track at " + std::to_string(speed) + " m/s");
+    for (auto &point : clean)
+      point.speed_mps.reset();
+    found = mark_route_jumps(clean, kSecondsPerTick);
+    check(found.jumps == 0U, "no jumps without speed at " + std::to_string(speed) + " m/s");
+  }
+
+  for (const auto &[speed, offset] : {std::pair{1.4, 600.0}, {250.0, 3000.0}}) {
+    const auto label = " at " + std::to_string(speed) + " m/s";
+    // As in a real recording: the first half second of fixes sits far from where the track
+    // continues, and later one record jumps away and back.
+    auto track = straight_track(speed, 1.0, 600);
+    for (std::size_t index = 0; index < 10U; ++index)
+      track[index].position.latitude += offset / 111194.9;
+    track[300].position.longitude += offset / 85000.0;
+    const auto found = mark_route_jumps(track, kSecondsPerTick);
+    check(found.omitted == 11U && count_unusable(track) == 11U, "outliers omitted" + label);
+    check(!track[0].usable && !track[9].usable && track[10].usable && !track[300].usable &&
+              track[299].usable && track[301].usable,
+          "the right records omitted" + label);
+    check(found.jumps == 3U && track[301].break_before, "breaks around the outliers" + label);
+    const auto runs = usable_runs(track);
+    check(runs.size() == 2U && runs[0] == std::pair<std::size_t, std::size_t>{10, 300} &&
+              runs[1] == std::pair<std::size_t, std::size_t>{301, 600},
+          "runs skip the outliers" + label);
+
+    // A lasting shift is a break; neither side is an outlier.
+    auto shifted = straight_track(speed, 1.0, 600);
+    for (std::size_t index = 200; index < shifted.size(); ++index)
+      shifted[index].position.longitude += offset / 85000.0;
+    const auto shift = mark_route_jumps(shifted, kSecondsPerTick);
+    check(shift.jumps == 1U && shift.omitted == 0U && shifted[200].break_before &&
+              usable_runs(shifted).size() == 2U,
+          "a lasting shift is a break" + label);
+    check(route_candidates(shifted, shifted[199].position, offset * 4.0 / 3.0).size() == 2U,
+          "a jump ends a click pass" + label);
+  }
+
+  // One fix a second at 10 m/s, with no record for 50 s in the middle (a GPS gap): the reported
+  // speed vouches for the 500 m step, which the neighbouring 10 m steps alone would call a jump.
+  std::vector<RoutePoint> sparse;
+  for (int index = 0; index < 40; ++index) {
+    const auto second = index < 20 ? index : index + 49;
+    auto point = at(10.0 * second, 0.0, static_cast<std::int64_t>(second) * 1000);
+    point.speed_mps = 10.0;
+    sparse.push_back(point);
+  }
+  check(mark_route_jumps(sparse, kSecondsPerTick).jumps == 0U, "reported speed vouches");
+  for (auto &point : sparse)
+    point.speed_mps.reset();
+  check(mark_route_jumps(sparse, kSecondsPerTick).jumps == 1U && sparse[20].break_before,
+        "without speed it is a jump");
+
+  // When no segment lasts, nothing is omitted: the jumps are only breaks.
+  auto brief = straight_track(1.4, 0.5, 30);
+  for (std::size_t index = 15; index < brief.size(); ++index)
+    brief[index].position.latitude += 500.0 / 111194.9;
+  const auto short_run = mark_route_jumps(brief, kSecondsPerTick);
+  check(short_run.jumps == 1U && short_run.omitted == 0U && brief[15].break_before,
+        "short runs are not emptied");
+}
+
 } // namespace
 
 int main() {
@@ -267,6 +359,7 @@ int main() {
     test_cache(root);
     test_cache_headers();
     test_route();
+    test_route_jumps();
   } catch (const std::exception &error) {
     std::cerr << "FAIL: unexpected exception: " << error.what() << '\n';
     ++failures;

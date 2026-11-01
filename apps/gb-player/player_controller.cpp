@@ -660,7 +660,7 @@ bool PlayerController::openPhoto(const QString &path) {
       telemetry_rows_.push_back(row(QStringLiteral("DOP"), number(*gps.dop, 2)));
     if (gps.speed_mps)
       telemetry_rows_.push_back(row(QStringLiteral("Speed"), speedText(*gps.speed_mps)));
-    map_route_.push_back({{gps.latitude, gps.longitude}, 0, true});
+    map_route_.push_back({{gps.latitude, gps.longitude}, 0, true, std::nullopt, false});
   } else {
     telemetry_rows_.push_back(row(
         QStringLiteral("GPS"), unavailable() + QStringLiteral(" — the photo records no position"),
@@ -862,11 +862,20 @@ void PlayerController::applyMetadata(const std::uint64_t generation,
   }
   map_route_.clear();
   if (metadata_->telemetry.has_value()) {
-    for (const auto &point : metadata_->telemetry->gps) {
+    const auto &telemetry = *metadata_->telemetry;
+    for (const auto &point : telemetry.gps) {
       map_route_.push_back(
           {{static_cast<double>(point.latitude), static_cast<double>(point.longitude)},
            point.media_time_ticks,
-           point.validity == gb::telemetry::Validity::valid});
+           point.validity == gb::telemetry::Validity::valid,
+           static_cast<double>(point.speed_2d),
+           false});
+    }
+    // Implausible jumps break the route, and the fixes they isolate are not shown.
+    if (telemetry.time_base.denominator != 0U) {
+      static_cast<void>(gb::geo::mark_route_jumps(
+          map_route_, static_cast<double>(telemetry.time_base.numerator) /
+                          static_cast<double>(telemetry.time_base.denominator)));
     }
   }
   emit metadataChanged();
@@ -980,6 +989,11 @@ void PlayerController::updateTelemetry() {
     setMapPosition(QStringLiteral("invalid"),
                    QStringLiteral("No valid GPS fix at this time (nearest record: %1)")
                        .arg(QString::fromStdString(gb::telemetry::validity_name(point->validity))),
+                   record, std::nullopt);
+  } else if (record < map_route_.size() && !map_route_[record].usable) {
+    setMapPosition(QStringLiteral("invalid"),
+                   QStringLiteral("This GPS fix jumps implausibly far from the track around it, so "
+                                  "the map does not show it"),
                    record, std::nullopt);
   } else if (gap != nullptr) {
     setMapPosition(

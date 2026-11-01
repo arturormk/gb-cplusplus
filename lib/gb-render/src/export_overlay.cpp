@@ -426,7 +426,7 @@ void paint_panel_fields(QPainter &painter, const QRectF &area, const ex::ExportS
 // ---- ExportTrack --------------------------------------------------------------------------------
 
 ExportTrack::ExportTrack(std::vector<tm::GpsPoint> points, const std::int64_t range_start,
-                         const std::int64_t range_end)
+                         const std::int64_t range_end, const double seconds_per_tick)
     : points_(std::move(points)) {
   const auto ticks_less = [](const tm::GpsPoint &point, const std::int64_t ticks) {
     return point.media_time_ticks < ticks;
@@ -444,18 +444,29 @@ ExportTrack::ExportTrack(std::vector<tm::GpsPoint> points, const std::int64_t ra
     --first_;
   if (last_ < points_.size())
     ++last_;
+  // Jumps are judged over every record, so the range's ends keep their context.
+  std::vector<gb::geo::RoutePoint> all;
+  all.reserve(points_.size());
+  for (const auto &point : points_) {
+    all.push_back({{static_cast<double>(point.latitude), static_cast<double>(point.longitude)},
+                   point.media_time_ticks,
+                   point.validity == tm::Validity::valid,
+                   static_cast<double>(point.speed_2d),
+                   false});
+  }
+  static_cast<void>(gb::geo::mark_route_jumps(all, seconds_per_tick));
+  route_points_.assign(all.begin() + static_cast<std::ptrdiff_t>(first_),
+                       all.begin() + static_cast<std::ptrdiff_t>(last_));
   std::optional<gb::geo::LatLon> anchor;
   double travelled = 0.0;
-  for (auto index = first_; index < last_; ++index) {
-    const auto &point = points_[index];
-    const auto usable = point.validity == tm::Validity::valid;
-    const gb::geo::LatLon position{static_cast<double>(point.latitude),
-                                   static_cast<double>(point.longitude)};
+  for (const auto &route_point : route_points_) {
+    const auto &position = route_point.position;
+    const auto usable = route_point.usable;
     route_.push_back(gb::geo::project(position));
-    route_points_.push_back({position, point.media_time_ticks, usable});
     usable_in_range_ = usable_in_range_ || usable;
     if (usable) {
-      if (!anchor) {
+      // A jump is not travelled: counting restarts after it.
+      if (!anchor || route_point.break_before) {
         anchor = position;
       } else if (const auto step = gb::geo::distance_metres(*anchor, position);
                  step >= kDistanceStepMetres) {

@@ -29,10 +29,11 @@ namespace gb::render {
 class ExportTrack {
 public:
   ExportTrack() = default;
-  // `points` in recording order, their media_time_ticks already on the recording timeline. The
-  // route the map draws is the part within [range_start, range_end].
+  // `points` in recording order, their media_time_ticks already on the recording timeline, which
+  // has `seconds_per_tick`. The route the map draws is the part within [range_start, range_end],
+  // without implausible jumps and the outliers they isolate (gb::geo::mark_route_jumps).
   ExportTrack(std::vector<gb::telemetry::GpsPoint> points, std::int64_t range_start,
-              std::int64_t range_end);
+              std::int64_t range_end, double seconds_per_tick);
 
   [[nodiscard]] const std::vector<gb::telemetry::GpsPoint> &points() const { return points_; }
   [[nodiscard]] bool empty() const { return points_.empty(); }
@@ -55,7 +56,7 @@ public:
 
   // Distance travelled from the start of the range to the record at `ticks`, in metres, or nothing
   // before the first valid fix. Movements under 3 m are not counted, so GPS jitter while standing
-  // still does not add up.
+  // still does not add up, and neither are jumps or outliers.
   [[nodiscard]] std::optional<double> distance_at(std::int64_t ticks) const;
 
   // Records whose position the map can show: every usable record within the range, and the

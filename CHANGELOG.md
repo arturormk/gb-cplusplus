@@ -28,6 +28,9 @@ First public release: a minimum usable product for GoPro MAX 2025 recordings on 
   text colours and an outline; a fixed-width map, square or round, with the route over the whole
   range; ranges across chapters; H.264/HEVC with AAC in MP4 or MKV, with no source metadata; map
   tiles fetched before rendering up to `--max-tiles`. Capture mode gains a top panel.
+- Route map (player, stills and export): implausible GPS jumps break the route. Short clusters
+  of fixes isolated by jumps are omitted. Whether a step is a jump depends on the neighbouring
+  steps and the reported speed, so walking and flying recordings are judged alike.
 - `gb-render`: `[output] speed` exports faster than real time (1–1000×) by dropping frames before
   they are rendered or encoded, with the audio time-stretched at its pitch up to 4× and no audio
   track above that. libavfilter is now a build dependency.

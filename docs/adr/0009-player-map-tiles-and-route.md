@@ -75,6 +75,16 @@ The [OSM tile usage policy](https://operations.osmfoundation.org/policies/tiles/
      records is a separate polyline, so an invalid stretch is a visible break rather than a
      straight line across missing data. The route is split into travelled and remaining parts at
      the current record.
+   - Implausible jumps also break the route (`gb::geo::mark_route_jumps`, amended 2026-11-01).
+     A step is a jump when it is longer than 8 times the expected step plus 10 m of fix noise.
+     The expected step is the larger of the median of the 10 neighbouring steps on each side
+     and the receiver's 2D speed times the interval. GoPro's speed is measured by the receiver,
+     not derived from positions, so it can vouch for a long step after a gap but never for a
+     jump. Because the test is relative, it treats walking and flying recordings alike. Jumps
+     split a run into segments. A segment shorter than 2 s is an outlier cluster: it is not
+     drawn, is not a seek target, gets no marker, and adds no distance. A longer segment is
+     kept, and the route just breaks at the jump. For example, the first 0.55 s of fixes in a
+     MAX recording sat 634 m from the rest of the track (10 records at DOP 8.4).
    - The marker is the record that `gb::telemetry::nearest_point` selects for the displayed
      frame. It is never interpolated. Its arrow is the direction of travel
      (`motion_azimuth_degrees`), not camera heading.

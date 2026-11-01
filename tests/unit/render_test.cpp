@@ -315,7 +315,7 @@ void test_export_overlays() {
   // The track: lookup, the one-interval rule, gaps and distance.
   auto points = synthetic_walk(600); // 60 s
   points[300].validity = gb::telemetry::Validity::invalid;
-  const gr::ExportTrack track(points, 10000, 50000); // 10 s to 50 s
+  const gr::ExportTrack track(points, 10000, 50000, 0.001); // 10 s to 50 s
   require(track.nearest(1049) == 10U && track.nearest(1050) == 10U && track.nearest(1051) == 11U,
           "nearest record, earlier on ties");
   require(track.fix_at(1000) != nullptr && track.fix_at(30000) == nullptr,
