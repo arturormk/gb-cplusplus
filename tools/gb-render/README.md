@@ -17,16 +17,21 @@ gb-render GH010073.MP4 --settings framing.ini --settings ride.ini -o ride.mp4
 capture rectangle. `ride.ini` describes the overlays and the output. Later files and options win,
 key by key; `--set SECTION.KEY=VALUE` reaches any setting (`--set map.width=2km`).
 `--print-settings` prints the combined result with every key written out; save it to a file to
-repeat an export exactly (`--duration` is not included, so pass it again or use `--end`).
+repeat an export exactly (`--duration`, a preview option, is not included).
 
 ## Range and chapters
 
-`RECORDING` is any chapter of a recording. `--start` and `--end` (or `--duration`) take positions
-as the player's clock shows them: `c2:00:05:31.400` is chapter 2 at 5 min 31.4 s into that
+`RECORDING` is any chapter of a recording. `--start` and `--end` take positions as the player's
+clock shows them: `c2:00:05:31.400` is chapter 2 at 5 min 31.4 s into that
 chapter; `GH020073.MP4:5:31.4` names the chapter's file; a time without a chapter is recording
 time. A range may cross chapters: they are joined on one timeline, each starting where the
 previous one's video ends, with the audio of each chapter placed at its start. The output has one
 frame per source frame, at the source's frame rate, starting at zero.
+
+`--duration SECONDS` is for previews: it overrides the settings' `end` with a short range from the
+start, so a layout can be tried on a few seconds without editing the files
+(`--start POS --duration 10 --draft`). It is not a setting and `--print-settings` does not write
+it; a final export takes its range from `start` and `end`.
 
 ## Placement
 

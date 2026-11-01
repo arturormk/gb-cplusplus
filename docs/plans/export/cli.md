@@ -45,7 +45,7 @@ overlay layout can live in one file and output settings in another (`--settings 
 
 | Group | Options |
 |---|---|
-| Range | `--start POS`, `--end POS` or `--duration SECONDS`. Without them, the whole recording. |
+| Range | `--start POS`, `--end POS`. Without them, the whole recording. `--duration SECONDS`, for previews, overrides the end with a short range from the start. |
 | View | `--view MODE` (the `gb-player` names), `--yaw`, `--pitch`, `--roll`, `--fov`, and for flat views `--zoom` and `--pan X,Y`. `--canvas ASPECT`: the aspect ratio of the canvas the crop refers to. |
 | Frame | `--aspect 16:9` (also `4:3`, `1:1`, `9:16`, `W:H`), `--crop X,Y,W,H` in canvas units (the whole canvas by default), `--width W` (height from the aspect ratio) or `--size WxH` (must match it). |
 | Output | `-o FILE`. The container comes from the extension (`.mp4`, `.mkv`). `--codec h264` or `hevc`, `--crf N`, `--encoder-preset NAME`, `--no-audio`, `--audio-bitrate BPS`, `--overwrite`. |
@@ -59,8 +59,9 @@ where it can be commented, versioned and shared, and `--set` reaches the rest.
 
 **Repeatability.** `--print-settings > FILE` writes the combined settings, every key written out,
 including the range and view given as options and the `gb-render` version in a comment. Running
-`gb-render RECORDING --settings FILE -o OUTPUT` gives the same frames again. `--duration` is an
-option, not a setting, so it is not written; pass it again or use `--end`. A separate
+`gb-render RECORDING --settings FILE -o OUTPUT` gives the same frames again. `--duration` is for
+previewing layouts, not a setting, so it is not written: a final export's range is `start` and
+`end`. A separate
 `--save-settings FILE` was planned and dropped (2026-11-01): `--print-settings` already does it.
 
 ## Positions in a chaptered recording

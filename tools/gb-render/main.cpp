@@ -99,7 +99,7 @@ void help() {
          "Range:\n"
          "  --start POS            c2:00:05:31.400, GH020073.MP4:00:05:31.4, or recording time\n"
          "  --end POS              end of the range (exclusive)\n"
-         "  --duration SECONDS     instead of --end\n"
+         "  --duration SECONDS     preview: a short range from the start, instead of --end\n"
          "Framing and layout:\n"
          "  --view MODE            rectilinear, fisheye, stereographic, little-planet, panorama,\n"
          "                         raw-1, raw-2, original\n"
