@@ -277,6 +277,10 @@ Native support means **opening the original file directly**, not necessarily zer
 
 End-state formats and modes include 360° video/photos; conventional video/photos; SuperView/Superwide, Wide, Linear, Narrow as available; TimeWarp and time-lapse; and supported source projection variants.
 
+TimeWarp and TimeLapse videos are required for v1.0 (decided 2026-11-01). GoBro treats both as time-compressed recordings and judges them by measured timing and GPS, never by the mode name alone, since a TimeLapse can be taken while moving. Telemetry, map, graphs and clock work in capture time. See [`plans/timewarp-timelapse.md`](plans/timewarp-timelapse.md).
+
+The single-lens modes Narrow (27 mm), Linear (19 mm), Wide (16 mm) and Max SuperView (13 mm) are also required for v1.0, for photos and videos. GoBro recognises them from the metadata and shows the camera's names. See [`plans/lens-modes.md`](plans/lens-modes.md).
+
 **Do not conflate capture mode and geometric projection.** Identify source image geometry and lens mode separately from output viewing projection. Reprojection cannot restore content outside the recorded field of view.
 
 Start with media formats proven by the MAX 2025 corpus. Extend via format capability detection rather than just file extensions. JPEG first; examine MAX 360 photo representation; assess RAW `.GPR` later.
@@ -467,6 +471,8 @@ Location are unavailable for Qt 6.2, so the map uses its own renderer.
 
 - `gb-map-render` proves offline/cached export; `gb-render` implements map + telemetry overlays.
 - GUI export presets; MP4 export with audio synchronization and attribution.
+- TimeWarp and TimeLapse videos open, play and export with telemetry in capture time ([plan](plans/timewarp-timelapse.md)). Required for v1.0.
+- Narrow, Linear, Wide and Max SuperView photos and videos recognised from metadata and shown by their GoPro names ([plan](plans/lens-modes.md)). Required for v1.0.
 - **Gate:** representative exported frames match telemetry at corresponding player timestamps; no uncontrolled tile requests; reproducible CLI export.
 
 ### Later

@@ -63,7 +63,8 @@ record under `docs/adr/` when the work is done.
   settings format reserves a section for it.
 - Exporting a navigable 360° file with spherical metadata. The equirectangular Panorama view can
   be exported as a flat 2:1 picture, and that is all.
-- Frame-rate conversion, slow motion, TimeWarp retiming.
+- Frame-rate conversion, slow motion, TimeWarp retiming. Exporting *from* TimeWarp and TimeLapse
+  recordings is in scope for v1.0: see [`../timewarp-timelapse.md`](../timewarp-timelapse.md).
 - Hardware encoders (VA-API, NVENC). These come later, behind the same encoder interface.
 - Rendering the four-channel ambisonic MAX audio. Export uses the same mono/stereo audio
   selection as playback (ADR-0008).

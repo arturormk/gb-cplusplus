@@ -118,7 +118,9 @@ instead of trusting that field as an upper bound.
 | 4 | `fdsc` data | 1/90000 | 543.560 s; 39,592 samples | Handler `GoPro SOS`, about 9.3 kbit/s; semantics not yet established |
 
 No projection or field-of-view value understood by these tools proves “superwide”; that mode
-label comes from the capture context. Unlike the native `.360`, this file is already a single
+label comes from the capture context. The container's `moov/udta/GPMF` settings block, which
+the tools do not read yet, records `VFOV` `X` and `ZFOV` 163.78°; the mode is Max SuperView
+(see [`../plans/lens-modes.md`](../plans/lens-modes.md)). Unlike the native `.360`, this file is already a single
 ordinary 16:9 video stream and has no `GoPro AMB` PCM track.
 
 ### Embedded telemetry

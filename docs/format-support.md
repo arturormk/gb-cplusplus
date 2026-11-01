@@ -56,6 +56,11 @@ near-black `BACK` source face in stream 5 of the `.360` sample rather than conce
 - Fragmented-media sample mapping, edit lists, multiple sample descriptions, compressed/complex
   GPMF values, GPS9, sensor-series export, and MPF decoding. EXIF and XMP are interpreted only
   for the fields listed above.
+- TimeWarp and TimeLapse videos: no sample examined, no media-to-capture time mapping. Planned for
+  v1.0 in [`plans/timewarp-timelapse.md`](plans/timewarp-timelapse.md).
+- Video capture settings in `moov/udta/GPMF` (lens, projection, stabilisation), and lens-mode
+  names for videos. Photo Linear and Narrow are unverified. Planned for v1.0 in
+  [`plans/lens-modes.md`](plans/lens-modes.md).
 - General payload extraction, HEIF item interpretation, or file repair. Raw `gpmd` sample export is
   explicitly supported by `gb-metadata`.
 
