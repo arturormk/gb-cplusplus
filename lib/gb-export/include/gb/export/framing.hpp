@@ -66,16 +66,20 @@ struct FrameLayout {
 [[nodiscard]] FrameLayout frame_layout(AspectRatio frame, int width, PanelSide panel = {},
                                        double panel_size = 0.0);
 
-// Where a side panel's contents go: a square map and the telemetry text, inside a margin of
-// 24/1080 of the frame height. A left or right panel stacks the map above the text; a top or bottom
-// panel puts the map on the left and the text to its right. With only one of them, it takes the
-// room.
+// Where a side panel's contents go: a square map, the telemetry text and up to two graphs, inside
+// a margin of 24/1080 of the frame height, with that gap between them. A left or right panel
+// stacks them top to bottom: map, text, graphs; a top or bottom panel puts them left to right.
+// The graphs share the height of their region, one above the other. What is missing leaves its
+// room to the rest: the map alone fills what it can; with one other part, it takes up to 60 % of
+// a side panel's height (half a top panel's width), with both, 45 % (a third); the text and the
+// graphs split what the map leaves 40 : 60.
 struct PanelRegions {
   std::optional<PixelRect> map;
   std::optional<PixelRect> text;
+  std::vector<PixelRect> graphs; // as many as asked for, unless there is no room
 };
 [[nodiscard]] PanelRegions panel_regions(const FrameLayout &layout, PanelSide side, bool map,
-                                         bool text);
+                                         bool text, int graphs = 0);
 
 // Common frame widths for an aspect ratio, smallest first.
 [[nodiscard]] std::vector<int> width_presets(AspectRatio frame);

@@ -149,6 +149,37 @@ struct MapSettings {
   double opacity{1.0}; // overlay only
 };
 
+// The graphs of a value against time over the export range: [speed] (2D speed) and [height]
+// (WGS 84 altitude). In a panel they share the room the map and text leave, one above the other,
+// in this order.
+enum class Graph { speed, height };
+
+inline constexpr std::array<Graph, 2> kAllGraphs{Graph::speed, Graph::height};
+
+[[nodiscard]] std::string graph_name(Graph graph); // the section name: speed, height
+
+struct GraphSettings {
+  bool enabled{};
+  // Overlay only: the corner or point, the inset from the frame edges (x from the left or right
+  // edge, y from the top or bottom; default [layout] margin), and the size. A graph at the same
+  // corner as an earlier one is stacked beyond it, keeping its own x inset.
+  Anchor anchor{Corner::bottom_right};
+  std::optional<double> margin_x;
+  std::optional<double> margin_y;
+  double width{0.6};   // fraction of the frame height
+  double height{0.18}; // fraction of the frame height
+  // Each value is the mean over a centred window of this many seconds, as gb-player smooths its
+  // graphs; 0 for the recorded values.
+  double smooth_seconds{3.0};
+  // The time across the graph: the whole range when unset (or not shorter than the range);
+  // otherwise this many seconds that scroll with the cursor at the centre, held at the start and
+  // end of the range.
+  std::optional<double> window_seconds;
+  Color line_color{0x3b, 0x9b, 0xdb, 255};
+  Color cursor_color{0xf7, 0x67, 0x07, 255};
+  Color background{0x0d, 0x14, 0x1a, 0xb3}; // behind the plot, over the picture or the panel
+};
+
 enum class SpeedUnit { kmh, mph, ms, kn };
 enum class AltitudeUnit { m, ft };
 enum class DistanceUnit { km, mi };
@@ -214,7 +245,18 @@ struct ExportSettings {
   bool telemetry{};
   std::vector<FieldSettings> fields;
   MapSettings map;
+  // By Graph; a graph is shown when its section is present.
+  std::array<GraphSettings, 2> graphs{};
   OutputSettings output;
+
+  [[nodiscard]] GraphSettings &graph(Graph which) {
+    return graphs[static_cast<std::size_t>(which)];
+  }
+  [[nodiscard]] const GraphSettings &graph(Graph which) const {
+    return graphs[static_cast<std::size_t>(which)];
+  }
+  // The graphs shown, speed first.
+  [[nodiscard]] std::vector<Graph> shown_graphs() const;
 
   [[nodiscard]] FrameLayout frame_layout() const; // throws std::invalid_argument
   [[nodiscard]] double picture_aspect() const;

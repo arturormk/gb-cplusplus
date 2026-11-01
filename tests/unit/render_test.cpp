@@ -4,6 +4,7 @@
 #include "gb/export/framing.hpp"
 #include "gb/image/photo.hpp"
 #include "gb/media/playback.hpp"
+#include "gb/render/export_graph.hpp"
 #include "gb/render/export_overlay.hpp"
 #include "gb/render/map_painter.hpp"
 #include "gb/render/panel_painter.hpp"
@@ -464,6 +465,160 @@ void test_export_overlays() {
 
 // Map tiles shrunk for a small frame: one-pixel stripes average to grey instead of aliasing, and
 // around a half zoom level two tile levels are crossfaded.
+void test_export_graphs() {
+  namespace ex = gb::exporting;
+  namespace gr = gb::render;
+
+  // 60 s of walking, climbing 0.1 m a record; the export covers 10 s to 50 s.
+  auto points = synthetic_walk(600);
+  for (std::size_t index = 250; index < 260; ++index)
+    points[index].validity = gb::telemetry::Validity::invalid;
+  const gr::ExportTrack track(points, 10000, 50000, 0.001);
+
+  ex::ExportSettings settings;
+  settings.placement = ex::Placement::overlay;
+  settings.graph(ex::Graph::speed).enabled = true;
+  settings.graph(ex::Graph::height).enabled = true;
+  settings.graph(ex::Graph::height).smooth_seconds = 0.0;
+  auto layout = ex::frame_layout({16, 9}, 1920);
+
+  // Over the picture: both at the bottom right, height stacked above speed.
+  auto areas = gr::export_graph_areas(settings, layout);
+  require(areas.size() == 2U && areas[0].first == ex::Graph::speed &&
+              areas[1].first == ex::Graph::height,
+          "speed first");
+  const auto margin = 0.03 * 1080.0;
+  const auto &speed_area = areas[0].second;
+  const auto &height_area = areas[1].second;
+  require(std::abs(speed_area.right() - (1920.0 - margin)) < 0.5 &&
+              std::abs(speed_area.bottom() - (1080.0 - margin)) < 0.5 &&
+              std::abs(speed_area.width() - 0.6 * 1080.0) < 0.5 &&
+              std::abs(speed_area.height() - 0.18 * 1080.0) < 0.5,
+          "speed graph at its corner, inside the margin");
+  require(std::abs(height_area.right() - speed_area.right()) < 0.5 &&
+              std::abs(height_area.bottom() - (speed_area.top() - 0.015 * 1080.0)) < 0.5,
+          "height stacked above speed");
+
+  // Each its own corner, margin and size.
+  settings.graph(ex::Graph::height).anchor = ex::Anchor{ex::Corner::top_left};
+  settings.graph(ex::Graph::height).margin_x = 0.1;
+  settings.graph(ex::Graph::height).margin_y = 0.2;
+  settings.graph(ex::Graph::height).width = 1.0;
+  settings.graph(ex::Graph::height).height = 0.25;
+  areas = gr::export_graph_areas(settings, layout);
+  require(areas[1].second == QRectF(108.0, 216.0, 1080.0, 270.0),
+          "height at the top left with its own margin and size");
+  settings.graph(ex::Graph::speed).anchor = ex::Anchor{ex::Corner::free, 0.25, 0.5};
+  areas = gr::export_graph_areas(settings, layout);
+  require(areas[0].second.topLeft() == QPointF(480.0, 540.0), "free anchor: the top-left corner");
+  settings.graph(ex::Graph::speed).anchor = ex::Anchor{ex::Corner::bottom_right};
+
+  // Drawing: the line, the cursor and the dot at the record shown.
+  gr::ExportGraphs graphs(settings, track, 10000, 50000);
+  auto *speed = graphs.find(ex::Graph::speed);
+  auto *height = graphs.find(ex::Graph::height);
+  require(speed && height && speed->has_data(), "graphs built");
+  require(speed->minimum() == 0.0 && speed->maximum() >= 36.0, "speed axis from zero, km/h");
+  require(height->minimum() <= 651.0 && height->maximum() >= 655.0, "height axis covers the range");
+  gr::OverlayFrame frame;
+  frame.graphs = &graphs;
+  frame.ticks = 30000;
+  frame.fix_record = track.nearest(30000);
+  const auto paint = [&](const ex::ExportSettings &s, const gr::OverlayFrame &f) {
+    layout = ex::frame_layout(s.aspect, 1920, ex::panel_side(s.placement), s.panel_size);
+    QImage image(layout.width, layout.height, QImage::Format_RGB32);
+    image.fill(Qt::white);
+    QPainter painter(&image);
+    (void)gr::paint_export_overlays(painter, s, layout, f, QStringLiteral("© Test"));
+    painter.end();
+    return image;
+  };
+  auto image = paint(settings, frame);
+  const auto speed_rect = gr::export_graph_areas(settings, layout)[0].second.toRect();
+  const QColor line(0x3b, 0x9b, 0xdb);
+  const QColor cursor(0xf7, 0x67, 0x07);
+  require(count_colour(image, speed_rect, line, 10) > 300, "the speed line is drawn");
+  require(count_colour(image, speed_rect, cursor, 10) > 50, "the cursor is drawn");
+  require(image.pixelColor(speed_rect.left() + 2, speed_rect.top() + 2) == QColor(Qt::white) ||
+              count_colour(image, speed_rect, QColor(Qt::white), 0) < speed_rect.width() * 4,
+          "the background covers the graph");
+  // The cursor moves with the frame: it is further right at 45 s than at 15 s.
+  const auto cursor_x = [&](const std::int64_t ticks) {
+    frame.ticks = ticks;
+    frame.fix_record = track.nearest(ticks);
+    const auto shot = paint(settings, frame);
+    double sum = 0.0;
+    int count = 0;
+    for (int x = speed_rect.left(); x <= speed_rect.right(); ++x) {
+      for (int y = speed_rect.top(); y <= speed_rect.bottom(); ++y) {
+        const auto pixel = shot.pixelColor(x, y);
+        if (std::abs(pixel.red() - cursor.red()) <= 10 &&
+            std::abs(pixel.green() - cursor.green()) <= 10 &&
+            std::abs(pixel.blue() - cursor.blue()) <= 10) {
+          sum += x;
+          ++count;
+        }
+      }
+    }
+    return count > 0 ? sum / count : -1.0;
+  };
+  const auto early = cursor_x(15000);
+  const auto late = cursor_x(45000);
+  require(early > speed_rect.left() && late > early + speed_rect.width() / 2.0,
+          "the cursor follows the frame time");
+  // A 10 s window: the cursor stays at the centre while the window scrolls, and goes to the
+  // sides when the window is held at the start or end of the range.
+  settings.graph(ex::Graph::speed).window_seconds = 10.0;
+  graphs = gr::ExportGraphs(settings, track, 10000, 50000);
+  frame.graphs = &graphs;
+  const auto centre = speed_rect.center().x();
+  const auto middle = cursor_x(30000);
+  require(std::abs(cursor_x(25000) - middle) < 2.0 &&
+              std::abs(middle - centre) < speed_rect.width() / 8.0,
+          "scrolling window: the cursor stays near the centre");
+  require(cursor_x(11000) < centre - speed_rect.width() / 4.0 &&
+              cursor_x(49000) > centre + speed_rect.width() / 4.0,
+          "the window is held at the ends of the range");
+  require(count_colour(paint(settings, frame), speed_rect, line, 10) > 300,
+          "the line is drawn in the window");
+  settings.graph(ex::Graph::speed).window_seconds = 100.0;
+  graphs = gr::ExportGraphs(settings, track, 10000, 50000);
+  require(cursor_x(15000) < centre - speed_rect.width() / 4.0,
+          "a window longer than the range shows the range");
+  settings.graph(ex::Graph::speed).window_seconds.reset();
+  graphs = gr::ExportGraphs(settings, track, 10000, 50000);
+
+  frame.graphs = nullptr;
+  require(count_colour(paint(settings, frame), speed_rect, line, 10) == 0,
+          "no graphs without ExportGraphs");
+  frame.graphs = &graphs;
+
+  // In a right panel: below the map and text, sharing the rest of the height.
+  settings.placement = ex::Placement::right;
+  settings.map.enabled = false;
+  settings.telemetry = false;
+  image = paint(settings, frame);
+  areas = gr::export_graph_areas(settings, layout);
+  require(areas.size() == 2U && layout.panel && areas[0].second.left() >= layout.panel->x &&
+              areas[1].second.top() > areas[0].second.bottom() &&
+              std::abs(areas[1].second.bottom() - (1080.0 - 24.0)) < 0.5,
+          "graphs fill a panel of their own");
+  require(count_colour(image, areas[1].second.toRect(), line, 10) > 300,
+          "the height line is drawn in the panel");
+
+  // No GPS: the graphs are drawn without a line.
+  auto invalid = points;
+  for (auto &point : invalid)
+    point.validity = gb::telemetry::Validity::invalid;
+  const gr::ExportTrack empty_track(invalid, 10000, 50000, 0.001);
+  gr::ExportGraphs empty(settings, empty_track, 10000, 50000);
+  require(!empty.find(ex::Graph::speed)->has_data(), "no valid fix, no data");
+  frame.graphs = &empty;
+  frame.fix_record.reset();
+  require(count_colour(paint(settings, frame), areas[0].second.toRect(), line, 10) == 0,
+          "no line without data");
+}
+
 void test_map_quality() {
   namespace gr = gb::render;
   QImage stripes(256, 256, QImage::Format_ARGB32_Premultiplied);
@@ -531,6 +686,7 @@ int main(int argc, char **argv) {
   try {
     test_panel();
     test_export_overlays();
+    test_export_graphs();
     test_map_quality();
     gb::render::OffscreenRenderer renderer;
     if (!renderer.initialize()) {

@@ -114,6 +114,50 @@ void test_frame_layout() {
         "no panel, no regions");
   }
 
+  {
+    // Graphs share what the map and text leave, one above the other.
+    const auto right = ex::frame_layout({16, 9}, 1920, ex::PanelSide::right, 0.32);
+    const auto all = ex::panel_regions(right, ex::PanelSide::right, true, true, 2);
+    require(all.map && all.text && all.graphs.size() == 2U, "map, text and two graphs");
+    require(all.map->height == right.panel->width - 48 &&
+                all.text->y == all.map->y + all.map->height + 24 &&
+                all.graphs[0].y == all.text->y + all.text->height + 24 &&
+                all.graphs[1].y == all.graphs[0].y + all.graphs[0].height + 24 &&
+                all.graphs[1].y + all.graphs[1].height == 1080 - 24 &&
+                std::abs(all.graphs[0].height - all.graphs[1].height) <= 1 &&
+                all.graphs[0].width == all.text->width,
+            "side panel: map, text, then the graphs splitting the rest of the height");
+    require(all.text->height < all.graphs[0].height * 2 + 24, "text 40 %, graphs 60 %");
+    const auto graphs_only = ex::panel_regions(right, ex::PanelSide::right, false, false, 1);
+    require(!graphs_only.map && !graphs_only.text && graphs_only.graphs.size() == 1U &&
+                graphs_only.graphs[0].height == 1080 - 48,
+            "a graph alone fills the panel");
+    const auto map_graph = ex::panel_regions(right, ex::PanelSide::right, true, false, 2);
+    require(map_graph.map->height == std::min(right.panel->width - 48,
+                                              static_cast<int>(std::lround((1080 - 48) * 0.6))) &&
+                map_graph.graphs.size() == 2U &&
+                map_graph.graphs[0].y == map_graph.map->y + map_graph.map->height + 24,
+            "map and graphs, no text");
+    const auto wide = ex::frame_layout({16, 9}, 1920, ex::PanelSide::right, 0.6);
+    require(ex::panel_regions(wide, ex::PanelSide::right, true, true, 2).map->height ==
+                std::lround((1080 - 48) * 0.45),
+            "with text and graphs, the map takes up to 45 % of the height");
+    const auto bottom = ex::frame_layout({16, 9}, 1920, ex::PanelSide::bottom, 0.3);
+    const auto across = ex::panel_regions(bottom, ex::PanelSide::bottom, true, true, 2);
+    require(across.map && across.text && across.graphs.size() == 2U, "bottom: all parts");
+    require(across.text->x == across.map->x + across.map->width + 24 &&
+                across.graphs[0].x == across.text->x + across.text->width + 24 &&
+                across.graphs[0].x + across.graphs[0].width == 1920 - 24 &&
+                across.graphs[0].y == bottom.panel->y + 24 &&
+                across.graphs[1].y + across.graphs[1].height ==
+                    bottom.panel->y + bottom.panel->height - 24,
+            "bottom panel: map, text, graphs left to right; the graphs split the height");
+    require(ex::panel_regions(right, ex::PanelSide::right, true, true, 0).graphs.empty() &&
+                ex::panel_regions(right, ex::PanelSide::right, true, true, 0).map->height ==
+                    ex::panel_regions(right, ex::PanelSide::right, true, true).map->height,
+            "no graphs: the layout of before");
+  }
+
   const auto presets = ex::width_presets({16, 9});
   require(presets.size() == 4U && presets[1] == 1920 && presets[3] == 3840, "16:9 presets");
   require(ex::width_presets({9, 16})[1] == 608, "9:16 presets follow the height");
@@ -520,6 +564,86 @@ speed = 2.5
   require(error_of({"schema = gb.export/1\n[map]\nahead = 2h\n"}).find("ahead") !=
               std::string::npos,
           "ahead needs minutes or seconds");
+
+  // Graphs.
+  s = combine({"schema = gb.export/1\n"});
+  require(s.shown_graphs().empty(), "no graphs by default");
+  s = combine({R"(schema = gb.export/1
+[layout]
+margin = 0.05
+[height]
+anchor = top-left
+margin = 0.02, 0.1
+size   = 0.8, 0.2
+smooth = no
+color  = #ff0000
+[speed]
+smooth = 5
+window = 2min
+background = #00000080
+)"});
+  require(s.shown_graphs() == std::vector<ex::Graph>{ex::Graph::speed, ex::Graph::height},
+          "both graphs, speed first whatever the order of the sections");
+  const auto &height = s.graph(ex::Graph::height);
+  require(height.anchor == ex::Anchor{ex::Corner::top_left} && height.margin_x == 0.02 &&
+              height.margin_y == 0.1 && height.width == 0.8 && height.height == 0.2 &&
+              height.smooth_seconds == 0.0 && height.line_color == ex::Color{255, 0, 0, 255},
+          "height graph settings");
+  const auto &speed = s.graph(ex::Graph::speed);
+  require(speed.anchor == ex::Anchor{ex::Corner::bottom_right} && !speed.margin_x &&
+              speed.width == 0.6 && speed.height == 0.18 && speed.smooth_seconds == 5.0 &&
+              speed.background == ex::Color{0, 0, 0, 0x80} && speed.window_seconds == 120.0 &&
+              !height.window_seconds,
+          "speed graph defaults and settings");
+  {
+    const auto written = ex::write_export_settings(s);
+    require(written.find("[speed]") != std::string::npos &&
+                written.find("margin       = 0.05\n") != std::string::npos &&
+                written.find("margin       = 0.02, 0.1\n") != std::string::npos &&
+                written.find("smooth       = no") != std::string::npos,
+            "graphs written with every key");
+    const auto again = combine({written});
+    require(again.graph(ex::Graph::height).margin_y == 0.1 &&
+                again.graph(ex::Graph::speed).margin_x == 0.05 &&
+                again.graph(ex::Graph::speed).smooth_seconds == 5.0 &&
+                again.graph(ex::Graph::height).smooth_seconds == 0.0 &&
+                again.graph(ex::Graph::speed).window_seconds == 120.0 &&
+                !again.graph(ex::Graph::height).window_seconds && again.shown_graphs().size() == 2U,
+            "graphs read back");
+  }
+  s = combine({"schema = gb.export/1\n[speed]\n[height]\n",
+               "schema = gb.export/1\n[speed]\nenabled = no\n"});
+  require(s.shown_graphs() == std::vector<ex::Graph>{ex::Graph::height},
+          "enabled = no removes a graph an earlier file added");
+  require(ex::combine_settings({source("a.ini", "schema = gb.export/1\n"),
+                                ex::override_source("--set", {"speed.smooth=2s"})})
+                  .shown_graphs()
+                  .size() == 1U,
+          "--set SECTION.KEY adds the section, as for the map");
+  require(error_of({"schema = gb.export/1\n[speed]\nsize = 0.5\n"}).find("width, height") !=
+              std::string::npos,
+          "graph size needs width and height");
+  require(error_of({"schema = gb.export/1\n[speed]\nmargin = 0.1, 0.2, 0.3\n"}).find("'x, y'") !=
+              std::string::npos,
+          "graph margin is one or two numbers");
+  require(combine({"schema = gb.export/1\n[height]\nwindow = 90s\n"})
+                      .graph(ex::Graph::height)
+                      .window_seconds == 90.0 &&
+              !combine({"schema = gb.export/1\n[height]\nwindow = range\n"})
+                   .graph(ex::Graph::height)
+                   .window_seconds,
+          "graph window: a time or the range");
+  require(error_of({"schema = gb.export/1\n[height]\nwindow = 5s\n"}).find("out of range") !=
+              std::string::npos,
+          "graph window at least 10 s");
+  require(error_of({"schema = gb.export/1\n[height]\nsmooth = 2min\n"}).find("out of range") !=
+              std::string::npos,
+          "smoothing up to a minute");
+  require(error_of({"schema = gb.export/1\n[height]\nwidth = 1\n"}) ==
+              "file1.ini:3: [height] width: unknown key",
+          "unknown graph key");
+  require(combine({ex::example_settings()}).shown_graphs().size() == 2U,
+          "the example shows both graphs");
 
   // Warnings.
   std::vector<std::string> warnings;

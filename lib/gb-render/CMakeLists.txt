@@ -11,6 +11,7 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
   shaders/frame.vert shaders/frame.frag)
 
 add_library(gb_render
+  src/export_graph.cpp
   src/export_overlay.cpp
   src/frame_renderer.cpp
   src/map_painter.cpp

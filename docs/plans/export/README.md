@@ -3,7 +3,7 @@
 Status: In progress (2026-10-31). Capture mode in `gb-player`, with the shared renderer it needs,
 is implemented (ADR-0012). `gb-render` exports video with text and map overlays, over the picture
 or on a panel, across chapters (ADR-0013, [`tools/gb-render`](../../../tools/gb-render/README.md));
-with a fixed or automatic map scale; graphs are not done yet. Stills and
+with a fixed or automatic map scale, and speed and height graphs. Stills and
 contact sheets in `gb-render`, `--show-layout` and prepared tile directories are not planned.
 
 This plan covers exporting videos from GoPro recordings with **`gb-render`**, a command-line

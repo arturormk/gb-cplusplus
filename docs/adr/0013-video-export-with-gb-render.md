@@ -96,4 +96,8 @@ ground width, an optional track over the whole range and an optional circular sh
   with the speed text shows scale well enough for an inset.
 - `--manifest` (`gb.render.manifest/v1`, one line per frame with the GPS record it shows) and
   `--json` (`gb.render/v1` report on stdout) are done (2026-11-01).
-- Not yet done: graphs.
+- Speed and height graphs are done (2026-11-01): `[speed]` and `[height]`, over the whole range
+  or a scrolling `window` with the cursor at the centre, each at its own anchor, margin and size over the picture, sharing the room the
+  map and text leave on a panel. They are drawn by `gb::render::ExportGraph`, which follows the
+  player's `ProfileView` rules (gaps, breaks, centred smoothing) but is not yet shared with it;
+  Capture mode does not preview them.

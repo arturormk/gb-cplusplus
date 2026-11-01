@@ -13,8 +13,8 @@ another explicitly documented format". INI was chosen over JSON and YAML because
 ## Example
 
 `gb-render --example-settings` writes a file like this, with every setting commented. The sections
-in use are implemented (ADR-0013), with the automatic map scale (`[map] width = auto`); `[speed]`
-and `[height]` graphs are still planned.
+in use are implemented (ADR-0013), with the automatic map scale (`[map] width = auto`) and the
+`[speed]` and `[height]` graphs.
 
 ```ini
 ; gb-render export settings
@@ -86,6 +86,16 @@ size    = 0.3           ; overlay only: fraction of the frame height
 anchor  = top-right     ; overlay only
 opacity = 0.9           ; overlay only
 
+[speed]                 ; also [height]; shown when the section is present
+anchor = bottom-right   ; overlay only
+margin = 0.03           ; overlay only: inset from the edges, or x, y; default [layout] margin
+size   = 0.6, 0.18      ; overlay only: width, height
+smooth = 3s             ; centred mean, or no
+window = range          ; or a time (2min) that scrolls with the cursor at the centre
+color  = #3b9bdb
+cursor_color = #f76707
+background   = #0d141ab3
+
 [output]
 codec  = h264           ; h264 or hevc
 crf    = 20
@@ -147,7 +157,12 @@ and view included and the version of `gb-render` in a comment.
   at the same corner are stacked in the order of `[telemetry] fields`, beyond the map when it
   shares the corner.
 - On a panel, anchors are ignored: the map is a square at the top of a side panel or at the left
-  of a top or bottom panel, and the fields are listed beside or below it, shrinking to fit.
+  of a top or bottom panel, and the fields are listed beside or below it, shrinking to fit. The
+  graphs come last (below a side panel's text, right of a top or bottom panel's), speed above
+  height, splitting the height of their region.
+- Over the picture, each graph has its own `anchor`, `margin` (one inset, or `x, y`) and `size`
+  (`width, height`). Height is stacked beyond speed when they share a corner; graphs are not
+  stacked with the map or fields.
 - `[date] format` applies to the `date` field and the date of `datetime`. Month and weekday names
   are never built into the program: `months` (twelve, January first) and `weekdays` (seven, Monday
   first, as ISO 8601) are required when the format uses `month` or `weekday`.

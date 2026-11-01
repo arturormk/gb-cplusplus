@@ -67,8 +67,11 @@ settings validation, combining and `--print-settings`. No separate encoder threa
 ## Phase 4: text and graph overlays
 
 **Text done (2026-10-31)** (ADR-0013): fields with labels, anchors, sizes, two colours and an
-outline, over the picture or on a left, right, top or bottom panel; units and time zone. Graphs
-remain. `--show-layout` is not planned (2026-11-01).
+outline, over the picture or on a left, right, top or bottom panel; units and time zone.
+**Graphs done (2026-11-01)**: `[speed]` and `[height]` over the range, or a scrolling `window`, with a cursor, each with
+its anchor, margin and size over the picture, sharing a panel's remaining room. The painter
+(`ExportGraph` in `gb_render`) follows `ProfileView`'s rules but `ProfileView` was not moved onto
+it. `--show-layout` is not planned (2026-11-01).
 
 - Extract `ProfilePainter` from `ProfileView`, with no visible change. Add
   `TelemetryTextPainter`.

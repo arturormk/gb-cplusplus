@@ -1,5 +1,7 @@
 #include "gb/render/export_overlay.hpp"
 
+#include "gb/render/export_graph.hpp"
+
 #include "gb/geo/mercator.hpp"
 #include "gb/image/exif_writer.hpp"
 
@@ -691,10 +693,52 @@ std::optional<QRectF> export_map_area(const ex::ExportSettings &settings,
   if (settings.placement == ex::Placement::overlay)
     return overlay_map_area(settings, layout);
   const auto regions = ex::panel_regions(layout, ex::panel_side(settings.placement), true,
-                                         settings.telemetry && !settings.fields.empty());
+                                         settings.telemetry && !settings.fields.empty(),
+                                         static_cast<int>(settings.shown_graphs().size()));
   if (!regions.map)
     return std::nullopt;
   return qrect(*regions.map);
+}
+
+std::vector<std::pair<ex::Graph, QRectF>> export_graph_areas(const ex::ExportSettings &settings,
+                                                             const ex::FrameLayout &layout) {
+  std::vector<std::pair<ex::Graph, QRectF>> areas;
+  const auto shown = settings.shown_graphs();
+  if (shown.empty() || settings.placement == ex::Placement::none)
+    return areas;
+  if (settings.placement != ex::Placement::overlay) {
+    const auto regions = ex::panel_regions(
+        layout, ex::panel_side(settings.placement), settings.map.enabled,
+        settings.telemetry && !settings.fields.empty(), static_cast<int>(shown.size()));
+    for (std::size_t index = 0; index < shown.size() && index < regions.graphs.size(); ++index)
+      areas.emplace_back(shown[index], qrect(regions.graphs[index]));
+    return areas;
+  }
+  const auto H = static_cast<double>(layout.height);
+  const auto gap = 0.015 * H;
+  for (const auto which : shown) {
+    const auto &graph = settings.graph(which);
+    const auto width = graph.width * H;
+    const auto height = graph.height * H;
+    const auto &anchor = graph.anchor;
+    if (anchor.corner == ex::Corner::free) {
+      areas.emplace_back(which, QRectF(anchor.x * layout.width, anchor.y * H, width, height));
+      continue;
+    }
+    const auto margin_x = graph.margin_x.value_or(settings.margin) * H;
+    const auto margin_y = graph.margin_y.value_or(settings.margin) * H;
+    const auto x = corner_x(anchor.corner, width, layout, margin_x);
+    auto y = top_corner(anchor.corner) ? margin_y : H - margin_y - height;
+    // Beyond an earlier graph at the same corner.
+    for (const auto &[other, area] : areas) {
+      if (settings.graph(other).anchor.corner != anchor.corner)
+        continue;
+      y = top_corner(anchor.corner) ? std::max(y, area.bottom() + gap)
+                                    : std::min(y, area.top() - gap - height);
+    }
+    areas.emplace_back(which, QRectF(x, y, width, height));
+  }
+  return areas;
 }
 
 MapScene export_map_scene(const ex::ExportSettings &settings, const ex::FrameLayout &layout,
@@ -740,13 +784,20 @@ OverlayResult paint_export_overlays(QPainter &painter, const ex::ExportSettings 
     paint_overlay_fields(painter, settings, layout, fields, map_area);
   } else if (layout.panel) {
     painter.fillRect(qrect(*layout.panel), Qt::black);
-    const auto regions = ex::panel_regions(layout, ex::panel_side(settings.placement),
-                                           settings.map.enabled, !fields.empty());
+    const auto regions =
+        ex::panel_regions(layout, ex::panel_side(settings.placement), settings.map.enabled,
+                          !fields.empty(), static_cast<int>(settings.shown_graphs().size()));
     if (map_area)
       result.missing_tiles = paint_map_box(painter, *map_area, settings, layout, frame.scene,
                                            frame.map_width_metres, attribution, 1.0);
     if (regions.text)
       paint_panel_fields(painter, qrect(*regions.text), settings, layout, fields);
+  }
+  if (frame.graphs != nullptr) {
+    for (const auto &[which, area] : export_graph_areas(settings, layout)) {
+      if (auto *graph = frame.graphs->find(which); graph != nullptr)
+        graph->paint(painter, area, layout, frame.ticks, frame.fix_record);
+    }
   }
   painter.restore();
   return result;

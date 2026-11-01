@@ -13,6 +13,7 @@
 #include "gb/media/tempo.hpp"
 #include "gb/media/timeline.hpp"
 #include "gb/media/writer.hpp"
+#include "gb/render/export_graph.hpp"
 #include "gb/render/export_overlay.hpp"
 #include "gb/render/frame_renderer.hpp"
 #include "gb/render/still.hpp"
@@ -128,8 +129,10 @@ void help() {
          "  --draft                half width (a quarter of the pixels), fastest encoder preset\n"
          "  --dry-run              report what would be done, write nothing\n"
          "  --print-settings       print the combined settings and exit\n"
-         "  --manifest FILE        write a JSON record of every frame written (gb.render.manifest/v1)\n"
-         "  --json                 a JSON report on stdout (gb.render/v1); diagnostics stay on stderr\n"
+         "  --manifest FILE        write a JSON record of every frame written "
+         "(gb.render.manifest/v1)\n"
+         "  --json                 a JSON report on stdout (gb.render/v1); diagnostics stay on "
+         "stderr\n"
          "  --example-settings     print a commented settings file and exit\n"
          "  --decoder-threads N    decoder threads (default: automatic)\n"
          "  --help, --version\n\n"
@@ -899,16 +902,21 @@ int run(const Options &options, int argc, char **argv) {
 
   // Telemetry and the map.
   const auto overlays = settings.placement != ex::Placement::none;
-  const auto needs_track = overlays && (settings.map.enabled || settings.telemetry);
+  const auto shown_graphs = overlays ? settings.shown_graphs() : std::vector<ex::Graph>{};
+  const auto needs_track =
+      overlays && (settings.map.enabled || settings.telemetry || !shown_graphs.empty());
   gb::render::ExportTrack track;
   std::vector<RecordOrigin> origins;
   // The manifest names the GPS record each frame shows, or would show, even without overlays.
   if (needs_track || options.manifest) {
-    track = gb::render::ExportTrack(load_track(timeline, start, end, warnings, origins), start,
-                                    end, static_cast<double>(seconds(1, timeline.time_base)));
+    track = gb::render::ExportTrack(load_track(timeline, start, end, warnings, origins), start, end,
+                                    static_cast<double>(seconds(1, timeline.time_base)));
     if (needs_track && !track.has_usable_route())
       warnings.emplace_back("no valid GPS fix in the range: telemetry shows \"—\"");
   }
+  gb::render::ExportGraphs graphs;
+  if (!shown_graphs.empty())
+    graphs = gb::render::ExportGraphs(settings, track, start, end);
   const auto &provider = *gb::geo::find_provider(options.map_provider);
   const auto attribution = QString::fromStdString(provider.attribution);
   const auto cache_root =
@@ -1004,6 +1012,22 @@ int run(const Options &options, int argc, char **argv) {
                       : std::string("no network"))
               << '\n';
   }
+  if (!shown_graphs.empty()) {
+    std::cerr << "  graphs  ";
+    for (std::size_t index = 0; index < shown_graphs.size(); ++index) {
+      const auto &graph = settings.graph(shown_graphs[index]);
+      const auto range_seconds = static_cast<double>(seconds(end - start, timeline.time_base));
+      std::cerr << (index > 0U ? ", " : "") << ex::graph_name(shown_graphs[index]) << " ("
+                << (graph.window_seconds && *graph.window_seconds < range_seconds
+                        ? ex::minutes_text(*graph.window_seconds) + " window"
+                        : std::string("whole range"))
+                << (graph.smooth_seconds > 0.0
+                        ? ", " + ex::minutes_text(graph.smooth_seconds) + " mean"
+                        : std::string())
+                << ')';
+    }
+    std::cerr << '\n';
+  }
   for (const auto &warning : warnings)
     std::cerr << "gb-render: warning: " << warning << '\n';
 
@@ -1015,18 +1039,18 @@ int run(const Options &options, int argc, char **argv) {
     std::ostringstream out;
     out << "{\n  \"schema\": \"gb.render/v1\",\n  \"version\": " << json_string(kVersion)
         << ",\n  \"recording\": " << json_path(options.recording)
-        << ",\n  \"layout\": " << json_string(source_layout.description)
-        << ",\n  \"chapters\": [";
+        << ",\n  \"layout\": " << json_string(source_layout.description) << ",\n  \"chapters\": [";
     for (std::size_t index = 0; index < timeline.chapters.size(); ++index) {
       const auto &chapter = timeline.chapters[index];
       out << (index == 0U ? "\n    " : ",\n    ") << "{\"number\": " << chapter.number
-          << ", \"path\": " << json_path(chapter.path) << ", \"offset_ticks\": "
-          << chapter.offset_ticks << ", \"duration_ticks\": " << chapter.duration_ticks << '}';
+          << ", \"path\": " << json_path(chapter.path)
+          << ", \"offset_ticks\": " << chapter.offset_ticks
+          << ", \"duration_ticks\": " << chapter.duration_ticks << '}';
     }
     out << "\n  ],\n  \"time_base\": " << json_rational(timeline.time_base)
-        << ",\n  \"frame_rate\": " << json_rational(rate) << ",\n  \"range\": {\"start\": "
-        << position(start) << ", \"end\": " << position(end) << ", \"start_ticks\": " << start
-        << ", \"end_ticks\": " << end << ", \"seconds\": "
+        << ",\n  \"frame_rate\": " << json_rational(rate)
+        << ",\n  \"range\": {\"start\": " << position(start) << ", \"end\": " << position(end)
+        << ", \"start_ticks\": " << start << ", \"end_ticks\": " << end << ", \"seconds\": "
         << json_number(static_cast<double>(seconds(end - start, timeline.time_base)))
         << "},\n  \"speed\": " << json_number(speed)
         << ",\n  \"frames_expected\": " << frames_expected << ",\n  \"output\": {\"path\": "
@@ -1037,8 +1061,8 @@ int run(const Options &options, int argc, char **argv) {
         << json_string(settings.output.codec == ex::Codec::hevc ? "hevc" : "h264")
         << ", \"crf\": " << settings.output.crf
         << ", \"encoder_preset\": " << json_string(settings.output.encoder_preset)
-        << ", \"audio\": " << (audio ? "true" : "false") << ", \"draft\": "
-        << (options.draft ? "true" : "false") << "},\n  \"gps\": ";
+        << ", \"audio\": " << (audio ? "true" : "false")
+        << ", \"draft\": " << (options.draft ? "true" : "false") << "},\n  \"gps\": ";
     if (needs_track || options.manifest) {
       out << "{\"records\": " << track.points().size()
           << ", \"in_range\": " << track.route_points().size()
@@ -1064,12 +1088,24 @@ int run(const Options &options, int argc, char **argv) {
       for (auto zoom = zooms.begin(); zoom != zooms.end(); ++zoom)
         out << (zoom == zooms.begin() ? "" : ", ") << *zoom;
       out << "], \"cached\": " << cached << ", \"to_fetch\": "
-          << (options.map_network ? std::to_string(tile_keys.size() - static_cast<std::size_t>(cached))
-                                  : std::string("null"))
+          << (options.map_network
+                  ? std::to_string(tile_keys.size() - static_cast<std::size_t>(cached))
+                  : std::string("null"))
           << ", \"network\": " << (options.map_network ? "true" : "false") << '}';
     } else {
       out << "null";
     }
+    out << ",\n  \"graphs\": [";
+    for (std::size_t index = 0; index < shown_graphs.size(); ++index) {
+      const auto &graph = settings.graph(shown_graphs[index]);
+      out << (index > 0U ? ", " : "")
+          << "{\"name\": " << json_string(ex::graph_name(shown_graphs[index]))
+          << ", \"smooth_seconds\": " << json_number(graph.smooth_seconds)
+          << ", \"window_seconds\": "
+          << (graph.window_seconds ? json_number(*graph.window_seconds) : std::string("null"))
+          << '}';
+    }
+    out << "]";
     out << ",\n  \"dry_run\": " << (options.dry_run ? "true" : "false")
         << ",\n  \"result\": " << result << ",\n  \"warnings\": " << json_strings(warnings)
         << "\n}\n";
@@ -1099,8 +1135,8 @@ int run(const Options &options, int argc, char **argv) {
           << ", \"offset_ticks\": " << chapter.offset_ticks << '}';
     }
     out << "\n  ],\n  \"time_base\": " << json_rational(timeline.time_base)
-        << ",\n  \"frame_rate\": " << json_rational(rate) << ",\n  \"speed\": "
-        << json_number(speed) << ",\n  \"frames\": [";
+        << ",\n  \"frame_rate\": " << json_rational(rate)
+        << ",\n  \"speed\": " << json_number(speed) << ",\n  \"frames\": [";
   }
 
   TileSet tiles;
@@ -1226,6 +1262,10 @@ int run(const Options &options, int argc, char **argv) {
       const auto *fix = track.fix_at(ticks);
       overlay.fields = gb::render::field_texts(settings, zone, fix, track.distance_at(ticks));
       overlay.scene = scene;
+      overlay.graphs = graphs.empty() ? nullptr : &graphs;
+      overlay.ticks = ticks;
+      if (fix != nullptr)
+        overlay.fix_record = track.nearest(ticks);
       if (scale_curve)
         overlay.map_width_metres = scale_curve->width_at(ticks);
       const auto time = static_cast<double>(seconds(ticks, timeline.time_base));
@@ -1265,8 +1305,8 @@ int run(const Options &options, int argc, char **argv) {
         line << "{\"record\": " << *index << ", \"chapter\": " << origin.chapter
              << ", \"media_time_ticks\": " << origin.media_time_ticks
              << ", \"time_base\": {\"numerator\": " << point.time_base.numerator
-             << ", \"denominator\": " << point.time_base.denominator << "}, \"utc\": "
-             << (point.utc ? json_string(*point.utc) : std::string("null"))
+             << ", \"denominator\": " << point.time_base.denominator
+             << "}, \"utc\": " << (point.utc ? json_string(*point.utc) : std::string("null"))
              << ", \"validity\": " << json_string(gb::telemetry::validity_name(point.validity))
              << ", \"shown\": " << (track.fix_at(ticks) != nullptr ? "true" : "false") << '}';
       } else {
@@ -1333,11 +1373,11 @@ int run(const Options &options, int argc, char **argv) {
     std::cerr << "gb-render: warning: " << warnings[index] << '\n';
   if (options.json) {
     const auto bytes = fs::file_size(options.output);
-    json_report("{\"path\": " + json_path(options.output) + ", \"bytes\": " +
-                std::to_string(bytes) + ", \"frames\": " + std::to_string(written) +
-                ", \"encoding\": " + json_string(writer.description()) +
-                ", \"seconds\": " + json_number(seconds_taken) + ", \"manifest\": " +
-                (manifest ? json_path(manifest->path()) : std::string("null")) + "}");
+    json_report(
+        "{\"path\": " + json_path(options.output) + ", \"bytes\": " + std::to_string(bytes) +
+        ", \"frames\": " + std::to_string(written) + ", \"encoding\": " +
+        json_string(writer.description()) + ", \"seconds\": " + json_number(seconds_taken) +
+        ", \"manifest\": " + (manifest ? json_path(manifest->path()) : std::string("null")) + "}");
   }
   return 0;
 }

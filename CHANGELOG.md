@@ -44,6 +44,11 @@ First public release: a minimum usable product for GoPro MAX 2025 recordings on 
   `--manifest FILE` writes a `gb.render.manifest/v1` record of every frame written: output and
   source times, chapter, and the GPS record the overlays use. CTest checks each frame's record
   against `nearest_point` on a video with synthetic GPS.
+- `gb-render`: `[speed]` and `[height]` graphs, with a cursor at the frame and a dot on the GPS
+  record shown, smoothed as in the player. They show the whole range, or with `window = 2min` a
+  scrolling window with the cursor at the centre, held at the ends of the range. Over the picture each has its own
+  anchor, margin and size, and height stacks above speed at a shared corner; on a panel they share
+  the room the map and text leave, splitting its height.
 - `gb-inspect`: ISO BMFF container and content-based JPEG inspection.
 - `gb-metadata`: GPMF metadata inventory, sample decoding, and raw payload export.
 - `gb-telemetry`: timestamped GPS export to JSON, CSV, GPX, and GeoJSON.

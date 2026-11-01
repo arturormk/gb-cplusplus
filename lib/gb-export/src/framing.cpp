@@ -129,9 +129,11 @@ FrameLayout frame_layout(const AspectRatio frame, const int width, const PanelSi
 }
 
 PanelRegions panel_regions(const FrameLayout &layout, const PanelSide side, const bool map,
-                           const bool text) {
+                           const bool text, const int graphs) {
   PanelRegions regions;
-  if (!layout.panel || side == PanelSide::none || (!map && !text))
+  const auto graph_count = std::clamp(graphs, 0, 2);
+  const auto has_graphs = graph_count > 0;
+  if (!layout.panel || side == PanelSide::none || (!map && !text && !has_graphs))
     return regions;
   const auto margin = static_cast<int>(std::lround(24.0 * layout.height / 1080.0));
   const auto &panel = *layout.panel;
@@ -139,25 +141,53 @@ PanelRegions panel_regions(const FrameLayout &layout, const PanelSide side, cons
                         std::max(0, panel.height - 2 * margin)};
   if (inner.width <= 0 || inner.height <= 0)
     return regions;
-  if (!map) {
-    regions.text = inner;
-    return regions;
-  }
-  if (side == PanelSide::top || side == PanelSide::bottom) {
-    const auto size = text ? std::min(inner.height, inner.width / 2) : inner.height;
-    regions.map = PixelRect{inner.x, inner.y, size, size};
-    if (text && inner.width - size - margin > 0) {
-      regions.text =
-          PixelRect{inner.x + size + margin, inner.y, inner.width - size - margin, inner.height};
+  // Along the panel: down a side panel, across a top or bottom one.
+  const auto vertical = side == PanelSide::left || side == PanelSide::right;
+  const auto length = vertical ? inner.height : inner.width;
+  const auto breadth = vertical ? inner.width : inner.height;
+  // A stretch [offset, offset + size) along the panel, as a rectangle.
+  const auto along = [&](const int offset, const int size) {
+    return vertical ? PixelRect{inner.x, inner.y + offset, inner.width, size}
+                    : PixelRect{inner.x + offset, inner.y, size, inner.height};
+  };
+  const auto others = (text ? 1 : 0) + (has_graphs ? 1 : 0);
+  auto offset = 0;
+  if (map) {
+    int size = std::min(length, breadth);
+    if (others > 0) {
+      const auto share = vertical ? (others == 1 ? 0.6 : 0.45) : (others == 1 ? 0.5 : 1.0 / 3.0);
+      size = std::min(breadth, static_cast<int>(std::lround(length * share)));
     }
-    return regions;
+    regions.map = PixelRect{inner.x, inner.y, size, size};
+    offset = size + margin;
   }
-  const auto size = text ? std::min(inner.width, static_cast<int>(std::lround(inner.height * 0.6)))
-                         : std::min(inner.width, inner.height);
-  regions.map = PixelRect{inner.x, inner.y, size, size};
-  if (text && inner.height - size - margin > 0) {
-    regions.text =
-        PixelRect{inner.x, inner.y + size + margin, inner.width, inner.height - size - margin};
+  auto rest = length - offset;
+  if (others == 0 || rest <= 0)
+    return regions;
+  auto text_size = rest;
+  if (text && has_graphs) {
+    text_size = static_cast<int>(std::lround((rest - margin) * 0.4));
+    if (text_size <= 0)
+      return regions;
+  }
+  if (text) {
+    regions.text = along(offset, text_size);
+    if (!has_graphs)
+      return regions;
+    offset += text_size + margin;
+    rest = length - offset;
+    if (rest <= 0)
+      return regions;
+  }
+  // The graphs, one above the other, sharing the height.
+  const PixelRect area = along(offset, rest);
+  const auto each = (area.height - (graph_count - 1) * margin) / graph_count;
+  if (each <= 0)
+    return regions;
+  for (int index = 0; index < graph_count; ++index) {
+    const auto y = area.y + index * (each + margin);
+    const auto height = index + 1 == graph_count ? area.y + area.height - y : each;
+    regions.graphs.push_back(PixelRect{area.x, y, area.width, height});
   }
   return regions;
 }

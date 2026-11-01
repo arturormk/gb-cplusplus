@@ -114,9 +114,9 @@ constexpr std::array<std::string_view, 8> kFieldNames{"datetime",  "date",     "
                                                       "longitude", "altitude", "speed", "distance"};
 
 const std::set<std::string> &known_sections() {
-  static const std::set<std::string> sections{"",          "range", "view",  "frame",
-                                              "layout",    "units", "text",  "date",
-                                              "telemetry", "map",   "output"};
+  static const std::set<std::string> sections{"",      "range",  "view",  "frame",     "layout",
+                                              "units", "text",   "date",  "telemetry", "map",
+                                              "speed", "height", "output"};
   return sections;
 }
 
@@ -136,6 +136,9 @@ public:
     for (const auto &section : source.document.sections) {
       if (section == "map") {
         map_present_ = true;
+      } else if (section == "speed" || section == "height") {
+        graph_present_[static_cast<std::size_t>(section == "speed" ? Graph::speed
+                                                                   : Graph::height)] = true;
       } else if (section == "telemetry") {
         telemetry_present_ = true;
       } else if (section.rfind("field-", 0) == 0) {
@@ -170,6 +173,10 @@ public:
     }
     s.map.enabled = map_present_ && map_enabled_.value_or(true);
     s.telemetry = telemetry_present_ && telemetry_enabled_.value_or(true);
+    for (const auto graph : kAllGraphs) {
+      const auto index = static_cast<std::size_t>(graph);
+      s.graph(graph).enabled = graph_present_[index] && graph_enabled_[index].value_or(true);
+    }
     if (s.telemetry) {
       std::vector<Field> order;
       if (list_) {
@@ -202,8 +209,9 @@ public:
       for (const auto &key : auto_keys_)
         warnings_->push_back("[map] " + key + " has no effect without width = auto");
     }
-    if (s.placement == Placement::none && (s.map.enabled || s.telemetry) && warnings_ != nullptr)
-      warnings_->push_back("placement = none: the map and telemetry are not drawn");
+    if (s.placement == Placement::none &&
+        (s.map.enabled || s.telemetry || !s.shown_graphs().empty()) && warnings_ != nullptr)
+      warnings_->push_back("placement = none: the map, telemetry and graphs are not drawn");
 
     // Geometry that depends on several keys.
     const auto picture = exporting::picture_aspect(s.aspect, panel_side(s.placement), s.panel_size);
@@ -607,6 +615,75 @@ private:
         m.opacity = number_in(e, 0.05, 1.0);
       else
         unknown(e);
+    } else if (e.section == "speed" || e.section == "height") {
+      const auto graph = e.section == "speed" ? Graph::speed : Graph::height;
+      auto &g = s.graph(graph);
+      if (k == "enabled") {
+        graph_enabled_[static_cast<std::size_t>(graph)] = boolean(e);
+      } else if (k == "anchor") {
+        g.anchor = anchor(e);
+      } else if (k == "margin") {
+        const auto parts = split_list(e.value);
+        std::vector<double> values;
+        for (const auto &part : parts) {
+          const auto value = parse_number(part);
+          if (!value)
+            break;
+          values.push_back(*value);
+        }
+        if (values.size() != parts.size() || (values.size() != 1U && values.size() != 2U))
+          fail(e.line, e.section, k, "expected 'm' or 'x, y', got '" + e.value + "'");
+        for (const auto value : values) {
+          if (value < 0.0 || value > 1.0)
+            fail(e.line, e.section, k, e.value + " is out of range 0 to 1");
+        }
+        g.margin_x = values.front();
+        g.margin_y = values.back();
+      } else if (k == "size") {
+        const auto parts = split_list(e.value);
+        const auto w = parts.size() == 2U ? parse_number(parts[0]) : std::nullopt;
+        const auto h = parts.size() == 2U ? parse_number(parts[1]) : std::nullopt;
+        if (!w || !h)
+          fail(e.line, e.section, k, "expected 'width, height', got '" + e.value + "'");
+        if (*w < 0.1 || *w > 10.0 || *h < 0.05 || *h > 1.0)
+          fail(e.line, e.section, k,
+               e.value + " is out of range: width 0.1 to 10, height 0.05 to 1");
+        g.width = *w;
+        g.height = *h;
+      } else if (k == "smooth") {
+        const auto value = lower(trim(e.value));
+        if (value == "no" || value == "0" || value == "0s") {
+          g.smooth_seconds = 0.0;
+        } else {
+          const auto seconds =
+              parse_minutes(value.ends_with("s") || value.ends_with("min") ? value : value + "s");
+          if (!seconds)
+            fail(e.line, e.section, k, "expected seconds (3s) or no, got '" + e.value + "'");
+          if (*seconds > 60.0)
+            fail(e.line, e.section, k, e.value + " is out of range 0 to 60s");
+          g.smooth_seconds = *seconds;
+        }
+      } else if (k == "window") {
+        if (lower(trim(e.value)) == "range") {
+          g.window_seconds.reset();
+        } else {
+          const auto seconds = parse_minutes(e.value);
+          if (!seconds)
+            fail(e.line, e.section, k,
+                 "expected range, minutes (2, 2min) or seconds (90s), got '" + e.value + "'");
+          if (*seconds < 10.0 || *seconds > 86400.0)
+            fail(e.line, e.section, k, e.value + " is out of range 10s to 1440min");
+          g.window_seconds = *seconds;
+        }
+      } else if (k == "color") {
+        g.line_color = color(e);
+      } else if (k == "cursor_color") {
+        g.cursor_color = color(e);
+      } else if (k == "background") {
+        g.background = color(e);
+      } else {
+        unknown(e);
+      }
     } else if (e.section == "output") {
       auto &o = s.output;
       if (k == "codec") {
@@ -646,6 +723,8 @@ private:
   bool map_present_{};
   std::optional<bool> map_enabled_;
   std::vector<std::string> auto_keys_; // [map] keys that only apply to width = auto
+  std::array<bool, 2> graph_present_{};
+  std::array<std::optional<bool>, 2> graph_enabled_{};
   bool telemetry_present_{};
   std::optional<bool> telemetry_enabled_;
   std::optional<std::vector<Field>> list_;
@@ -1046,6 +1125,17 @@ std::string distance_unit_name(const DistanceUnit unit) {
   return unit == DistanceUnit::mi ? "mi" : "km";
 }
 
+std::string graph_name(const Graph graph) { return graph == Graph::speed ? "speed" : "height"; }
+
+std::vector<Graph> ExportSettings::shown_graphs() const {
+  std::vector<Graph> shown;
+  for (const auto which : kAllGraphs) {
+    if (graph(which).enabled)
+      shown.push_back(which);
+  }
+  return shown;
+}
+
 FrameLayout ExportSettings::frame_layout() const {
   return exporting::frame_layout(aspect, width, panel_side(placement), panel_size);
 }
@@ -1217,6 +1307,26 @@ std::string write_export_settings(const ExportSettings &s, const std::vector<std
     out << "opacity = " << number(m.opacity, 3) << '\n';
   }
 
+  for (const auto which : s.shown_graphs()) {
+    const auto &g = s.graph(which);
+    const auto margin_x = g.margin_x.value_or(s.margin);
+    const auto margin_y = g.margin_y.value_or(s.margin);
+    out << "\n[" << graph_name(which) << "]\n";
+    out << "anchor       = " << anchor_text(g.anchor) << '\n';
+    out << "margin       = " << number(margin_x, 4);
+    if (margin_y != margin_x)
+      out << ", " << number(margin_y, 4);
+    out << '\n';
+    out << "size         = " << number(g.width, 4) << ", " << number(g.height, 4) << '\n';
+    out << "smooth       = " << (g.smooth_seconds > 0.0 ? minutes_text(g.smooth_seconds) : "no")
+        << '\n';
+    out << "window       = " << (g.window_seconds ? minutes_text(*g.window_seconds) : "range")
+        << '\n';
+    out << "color        = " << color_text(g.line_color) << '\n';
+    out << "cursor_color = " << color_text(g.cursor_color) << '\n';
+    out << "background   = " << color_text(g.background) << '\n';
+  }
+
   const auto &o = s.output;
   out << "\n[output]\n";
   out << "codec          = " << (o.codec == Codec::hevc ? "hevc" : "h264") << '\n';
@@ -1308,6 +1418,23 @@ shape   = circle        ; square, or circle (inscribed in the square)
 size    = 0.3           ; overlay only: side of the map
 anchor  = top-right     ; overlay only
 opacity = 0.9           ; overlay only
+
+; Graphs of speed and height against time over the range, with a cursor at the frame shown.
+; In a panel they share what the map and text leave, one above the other, speed first.
+[speed]
+; enabled = no removes a graph that an earlier file added.
+anchor = bottom-right   ; overlay only: a corner, top, bottom, or x, y (0..1)
+margin = 0.03           ; overlay only: inset from the frame edges, or x, y (default [layout] margin)
+size   = 0.6, 0.18      ; overlay only: width, height
+smooth = 3s             ; mean over a centred window, or no for the recorded values
+window = range          ; the whole range, or a time (2min, 90s) that scrolls with the cursor
+; color = #3b9bdb       ; the line
+; cursor_color = #f76707
+; background = #0d141ab3
+
+[height]
+anchor = bottom-right   ; at the same corner as [speed]: stacked above it
+size   = 0.6, 0.18
 
 [output]
 codec          = h264   ; h264 or hevc

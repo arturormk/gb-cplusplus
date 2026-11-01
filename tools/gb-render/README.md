@@ -148,6 +148,47 @@ resolution. `--map-no-network` uses the cache only; missing tiles are drawn as p
 reported, or are an error with `--require-tiles`. Fetching reveals the route's area to the tile
 server, never the recording or its track. `--dry-run` reports the tile count and zoom levels.
 
+## Graphs
+
+```ini
+[speed]                  ; 2D speed, in [units] speed
+anchor = bottom-right    ; over the picture: as for fields (the default: bottom-right)
+margin = 0.03            ; over the picture: inset from the frame edges, or x, y; default [layout] margin
+size   = 0.6, 0.18       ; over the picture: width, height, fractions of the frame height
+smooth = 3s              ; mean over a centred window (up to 60s), or no for the recorded values
+window = range           ; the time across the graph: range, or 2min, 90s (scrolls with the cursor)
+color  = #3b9bdb         ; the line
+cursor_color = #f76707
+background   = #0d141ab3 ; behind the graph; the last two digits are its opacity
+
+[height]                 ; WGS 84 altitude, in [units] altitude
+anchor = top-left
+```
+
+A graph is shown when its section is present; `enabled = no` removes one an earlier file added.
+Each plots its value against the time from the start of the range, with a cursor at the frame and a dot on the GPS record the text and map show. As in `gb-player`'s graph,
+records without a valid fix are left out, the line breaks across them and across steps longer
+than 3 s, and the smoothing never reaches across such a break. Speed starts at zero; the height
+axis is centred on the range's values; the value axis always covers the whole range, so it
+stays put while the graph scrolls. Axis text uses `[text] label_color`.
+
+**Time window.** With `window = range` (the default) the graph shows the whole range and the
+cursor moves across it. With a time (`2min`, `90s`, or a plain number of minutes, 10 s to 24 h)
+shorter than the range, the graph shows that much time and scrolls with the cursor held at the
+centre; near the start or end of the range the window stops at it and the cursor moves to the
+side, as panning the player's graph does.
+
+**Over the picture**, each graph goes to its own `anchor`, inset by its `margin` (`x, y` sets the
+inset from the side and from the top or bottom separately), at its own `size`. When both graphs
+are at the same corner, height is stacked beyond speed, keeping its own side inset. Graphs are not
+stacked with the map or the fields: give them different corners or margins. **On a panel**, the
+graphs share what the map and text leave, speed above height, splitting the height of their
+region: a left or right panel stacks map, text and graphs from the top; a top or bottom panel puts
+them side by side from the left. With text and graphs, the map takes up to 45 % of a side panel's
+height (a third of a top or bottom panel's width), and the text and graphs split the rest 40 : 60;
+a part that is missing leaves its room to the others. `anchor`, `margin` and `size` do not apply
+on a panel.
+
 ## Framing
 
 `[view]` and `[frame]` come from Capture mode. Without them, the export uses the recording's own
@@ -170,7 +211,7 @@ Exit status: 0 done, 1 failure, 2 usage or settings error, 130 cancelled.
 `--json` prints a `gb.render/v1` report on stdout once the job is done: the chapters, the snapped
 range in ticks and positions, the expected frame count, the output, the GPS records, the map
 scale and tile set, the warnings and, after an export (`"result"`), the file, its size, the frames
-written and the encoder. With `--dry-run` the result is `null`. The human report and progress
+written and the encoder, and the graphs shown. With `--dry-run` the result is `null`. The human report and progress
 still go to stderr. A failed or cancelled run prints no JSON, only its exit status.
 
 `--manifest FILE` writes a `gb.render.manifest/v1` record of every frame written, one line each:
@@ -192,8 +233,7 @@ each frame's record against `gb::telemetry::nearest_point` (the M6 gate on synth
 
 ## Not yet
 
-Speed and height graphs are planned in
-[`docs/plans/export/phases.md`](../../docs/plans/export/phases.md).
+Capture mode in `gb-player` does not draw the graphs in its panel preview.
 
 Stills, contact sheets and `--show-layout` are not planned. To preview, render a short segment:
 `--start POS --duration 10 --draft`. Stills come from `gb-player`'s Capture mode.

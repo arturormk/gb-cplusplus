@@ -17,6 +17,7 @@
 #include <optional>
 #include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 // The overlays of a video export (docs/plans/export/settings.md): telemetry text and the route
@@ -93,6 +94,8 @@ struct FieldText {
                                                  const gb::telemetry::GpsPoint *fix,
                                                  std::optional<double> distance_metres);
 
+class ExportGraphs; // gb/render/export_graph.hpp
+
 // Everything that changes from frame to frame.
 struct OverlayFrame {
   std::vector<FieldText> fields;
@@ -100,6 +103,11 @@ struct OverlayFrame {
   MapScene scene;
   // The ground width across the map for an automatic scale; without it, [map] width.
   std::optional<double> map_width_metres;
+  // The graphs, built once for the export; they keep their plots between frames. Without them, no
+  // graphs are drawn.
+  ExportGraphs *graphs{};
+  std::int64_t ticks{};                    // the frame's time on the recording timeline
+  std::optional<std::size_t> fix_record{}; // the track record with a valid fix shown, if any
 };
 
 struct OverlayResult {
@@ -111,6 +119,13 @@ struct OverlayResult {
 // the same corner, which needs the fonts, so it is computed from the same layout as painting).
 [[nodiscard]] std::optional<QRectF> export_map_area(const gb::exporting::ExportSettings &settings,
                                                     const gb::exporting::FrameLayout &layout);
+
+// Where each shown graph goes in the frame, speed first: over the picture, at its anchor inset by
+// its margin, or stacked beyond an earlier graph at the same corner; in a panel, the panel's graph
+// regions. Empty for placement none.
+[[nodiscard]] std::vector<std::pair<gb::exporting::Graph, QRectF>>
+export_graph_areas(const gb::exporting::ExportSettings &settings,
+                   const gb::exporting::FrameLayout &layout);
 
 // The map scene with its zoom for the ground width (`width_metres`, else [map] width), at the
 // frame's tile scale (height / 1080).
