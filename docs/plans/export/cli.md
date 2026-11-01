@@ -2,9 +2,9 @@
 
 Video export is a command-line tool, `gb-render` (the name BLUEPRINT gives the headless renderer).
 What is implemented is listed in [`tools/gb-render/README.md`](../../../tools/gb-render/README.md);
-options it does not list (`--save-settings`, `--manifest`, `--json`) are still planned. Stills,
-contact sheets and `--show-layout` are not planned ([checking](#checking-before-an-export)), nor
-are prepared tile directories (`--prepare-tiles`, `--map-tiles`; [map tiles](#map-tiles)).
+options it does not list (`--manifest`, `--json`) are still planned. `--save-settings` is not
+planned ([repeatability](#command-line)). Stills, contact sheets and `--show-layout` are not
+planned ([checking](#checking-before-an-export)), nor are prepared tile directories (`--prepare-tiles`, `--map-tiles`; [map tiles](#map-tiles)).
 The map scale option is `--map-width DISTANCE`, and overlays are placed with `--placement`.
 The moment, the view and the capture rectangle are chosen in `gb-player`'s
 [Capture mode](capture.md), which also captures stills. Everything else is written down in
@@ -57,9 +57,11 @@ overlay layout can live in one file and output settings in another (`--settings 
 Only the settings people change from export to export are options. Overlay layout is in the file,
 where it can be commented, versioned and shared, and `--set` reaches the rest.
 
-**Repeatability.** `--save-settings FILE` writes the combined settings, including the range and
-view given as options, and the command line to rerun them. Running `gb-render RECORDING
---settings FILE -o OUTPUT` gives the same frames again. The file records the tool version.
+**Repeatability.** `--print-settings > FILE` writes the combined settings, every key written out,
+including the range and view given as options and the `gb-render` version in a comment. Running
+`gb-render RECORDING --settings FILE -o OUTPUT` gives the same frames again. `--duration` is an
+option, not a setting, so it is not written; pass it again or use `--end`. A separate
+`--save-settings FILE` was planned and dropped (2026-11-01): `--print-settings` already does it.
 
 ## Positions in a chaptered recording
 

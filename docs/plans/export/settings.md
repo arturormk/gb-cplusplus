@@ -132,8 +132,8 @@ replaces an earlier one key by key. An overlay is present when its section is pr
 `range.start`, `--view` is `view.mode`, `--codec` is `output.codec`, and `--set SECTION.KEY=VALUE`
 reaches any key.
 
-`--print-settings` (and, later, `--save-settings`) writes the combined result in this format, every key
-explicit, with the range and view included and the version of `gb-render` in a comment.
+`--print-settings` writes the combined result in this format, every key explicit, with the range
+and view included and the version of `gb-render` in a comment.
 `activity` only records which preset the values started from. The values themselves are always
 written out, so a later change to a preset's defaults never changes an export made from a saved
 file.

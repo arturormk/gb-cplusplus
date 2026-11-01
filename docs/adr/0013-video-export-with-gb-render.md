@@ -88,4 +88,6 @@ ground width, an optional track over the whole range and an optional circular sh
 - Stills, contact sheets and `--show-layout` in `gb-render` are not done (amendment,
   2026-11-01). A short `--start`/`--duration` segment with `--draft` previews an export, and
   Capture mode writes stills.
-- Not yet done: graphs, `--save-settings`, `--manifest`, `--json`.
+- `--save-settings` is not done (amendment, 2026-11-01): `--print-settings > FILE` writes the
+  same combined settings.
+- Not yet done: graphs, `--manifest`, `--json`.

@@ -41,7 +41,7 @@ renderer with itself (a crop against the whole canvas), not with `project_equire
 ## Phase 2: stills in `gb-player`
 
 - `lib/gb-export`: the INI parser and writer, settings validation and combining (`--settings`,
-  options, `--set`), `--print-settings`, `--save-settings`, `--example-settings`. Canvas and crop
+  options, `--set`), `--print-settings`, `--example-settings`. Canvas and crop
   rules, aspect ratio and even-size rules.
 - Chapter positions (`c2:00:05:31.400`): parse and format in `gb_media`, and the chapter prefix on
   `gb-player`'s clock.
@@ -121,7 +121,7 @@ tree.
 
 | What | How |
 |---|---|
-| Settings | INI syntax (comments, lists, units, C-locale numbers, size limits), every validation error with file and line (unknown section or key, duplicate key, aspect/size mismatch, crop outside the canvas or of the wrong aspect ratio), combining files, options and `--set`, and `--save-settings` → `--settings` giving identical settings. |
+| Settings | INI syntax (comments, lists, units, C-locale numbers, size limits), every validation error with file and line (unknown section or key, duplicate key, aspect/size mismatch, crop outside the canvas or of the wrong aspect ratio), combining files, options and `--set`, and `--print-settings` → `--settings` giving identical settings. |
 | Framing and layout | Crop and canvas aspect rules, even-size rounding, over and beside rectangles for every aspect ratio and panel side. |
 | GPU vs CPU | Offscreen render of synthetic six-face and equirectangular frames in every mode, against `project_equirectangular`, within a stated tolerance. Skipped, and reported as skipped, without a GL context. |
 | Encoder | For H.264 and HEVC: encode an FFmpeg-generated fixture range, read it back with `video_streams` and `SynchronizedReader`: frame count, exact rebased PTS sequence, frame rate, size, BT.709 tags, no source metadata. |

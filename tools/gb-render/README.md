@@ -16,7 +16,8 @@ gb-render GH010073.MP4 --settings framing.ini --settings ride.ini -o ride.mp4
 `framing.ini` is what `gb-player`'s Capture mode copies or saves: the range, the view and the
 capture rectangle. `ride.ini` describes the overlays and the output. Later files and options win,
 key by key; `--set SECTION.KEY=VALUE` reaches any setting (`--set map.width=2km`).
-`--print-settings` prints the combined result with every key written out.
+`--print-settings` prints the combined result with every key written out; save it to a file to
+repeat an export exactly (`--duration` is not included, so pass it again or use `--end`).
 
 ## Range and chapters
 
@@ -161,7 +162,7 @@ Exit status: 0 done, 1 failure, 2 usage or settings error, 130 cancelled.
 
 ## Not yet
 
-Speed and height graphs, `--save-settings`, `--manifest` and `--json` are planned in
+Speed and height graphs, `--manifest` and `--json` are planned in
 [`docs/plans/export/phases.md`](../../docs/plans/export/phases.md).
 
 Stills, contact sheets and `--show-layout` are not planned. To preview, render a short segment:
