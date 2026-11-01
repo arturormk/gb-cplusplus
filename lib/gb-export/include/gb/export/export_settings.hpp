@@ -87,7 +87,38 @@ struct FieldSettings {
   Anchor anchor;     // overlay only
   Align align{Align::automatic};
   std::optional<double> font_size; // overlay only: replaces [text] font_size for this field
+  bool small{};                    // the value at half its size, about as large as a label
 };
+
+inline constexpr double kSmallValue = 0.5; // a small value's size, relative to the value size
+
+// [date]: how the date and datetime fields write a date. Month and weekday names come from the
+// settings, not from the program: `months` starts at January, `weekdays` at Monday.
+struct DateSettings {
+  std::string format{"YYYY-MM-DD"};
+  std::vector<std::string> months;   // 12 when given
+  std::vector<std::string> weekdays; // 7 when given
+};
+
+// One piece of a date format.
+enum class DatePart { literal, year, year2, month, month2, month_name, day, day2, weekday };
+
+struct DateToken {
+  DatePart part{DatePart::literal};
+  std::string text; // literal only
+  friend bool operator==(const DateToken &, const DateToken &) = default;
+};
+
+// Reads a date format. Codes: YYYY (2026), YY (26), MM (03), M (3), DD (07), D (7); words: year
+// (as YYYY), day (as D), month (a name from `months`), weekday (a name from `weekdays`). Codes may
+// run together (YYYYMMDD). Anything but ASCII letters is written as it is; other letters must be
+// quoted, 'de', with '' for an apostrophe. Throws std::invalid_argument naming what is wrong.
+[[nodiscard]] std::vector<DateToken> parse_date_format(const std::string &format);
+
+// The date in the settings' format. `weekday` is 1 for Monday to 7 for Sunday (ISO 8601). A name
+// missing from the settings is written as its number.
+[[nodiscard]] std::string format_date(const DateSettings &settings, int year, int month, int day,
+                                      int weekday);
 
 struct TextSettings {
   double font_size{0.04}; // value text, fraction of the frame height; panel: the largest size
@@ -111,7 +142,7 @@ struct MapSettings {
   double ahead_seconds{60.0};
   double closest_metres{150.0};
   double widest_metres{100000.0};
-  bool track{true};            // the route over the whole range, travelled and remaining
+  bool track{true}; // the route over the whole range, travelled and remaining
   MapShape shape{MapShape::square};
   double size{0.3}; // overlay: side of the map, fraction of the frame height
   Anchor anchor{Corner::top_right};
@@ -178,6 +209,7 @@ struct ExportSettings {
 
   UnitSettings units;
   TextSettings text;
+  DateSettings date;
   // Shown when [telemetry] or any [field-NAME] section is present, in this order.
   bool telemetry{};
   std::vector<FieldSettings> fields;

@@ -350,6 +350,26 @@ void test_export_overlays() {
               texts[3].value == QStringLiteral("0.10 km") &&
               texts[4].value == QStringLiteral("40.41678° N"),
           "field values in their units");
+  {
+    // [date] format with names from the settings; datetime adds the time. 2026-07-01 is a
+    // Wednesday.
+    auto dated = settings;
+    dated.fields.clear();
+    for (const auto field : {ex::Field::date, ex::Field::datetime}) {
+      ex::FieldSettings f;
+      f.field = field;
+      f.small = field == ex::Field::date;
+      dated.fields.push_back(f);
+    }
+    dated.date.format = "weekday D month YYYY";
+    dated.date.months = {"ene", "feb", "mar", "abr", "may", "jun",
+                         "jul", "ago", "sep", "oct", "nov", "dic"};
+    dated.date.weekdays = {"lun", "mar", "mié", "jue", "vie", "sáb", "dom"};
+    const auto dates = gr::field_texts(dated, zone, track.fix_at(20000), std::nullopt);
+    require(dates[0].value == QStringLiteral("mié 1 jul 2026") && dates[0].small &&
+                dates[1].value == QStringLiteral("mié 1 jul 2026 12:20:30") && !dates[1].small,
+            "date format with names");
+  }
   const auto unknown = gr::field_texts(settings, zone, nullptr, std::nullopt);
   require(std::all_of(unknown.begin(), unknown.end(),
                       [](const auto &text) { return text.value == QStringLiteral("—"); }),

@@ -68,6 +68,12 @@ label     = Speed       ; empty for no label
 anchor    = bottom-left ; a corner, top, bottom, or x, y in fractions of the frame
 align     = auto        ; auto, left, center, right
 font_size = 0.07        ; this field only
+small     = no          ; yes: the value at half size, about as large as a label
+
+[date]
+format   = YYYY-MM-DD   ; codes YYYY YY MM M DD D, words year month day weekday, 'quoted text'
+months   = Jan, Feb, Mar, Apr, May, Jun, Jul, Aug, Sep, Oct, Nov, Dec   ; January first
+weekdays = Mon, Tue, Wed, Thu, Fri, Sat, Sun                            ; Monday first
 
 [map]
 width   = 1.2km         ; ground distance across the map, or auto
@@ -145,6 +151,10 @@ file.
   shares the corner.
 - On a panel, anchors are ignored: the map is a square at the top of a side panel or at the left
   of a top or bottom panel, and the fields are listed beside or below it, shrinking to fit.
+- `[date] format` applies to the `date` field and the date of `datetime`. Month and weekday names
+  are never built into the program: `months` (twelve, January first) and `weekdays` (seven, Monday
+  first, as ISO 8601) are required when the format uses `month` or `weekday`.
+- `[field-NAME] small = yes` draws the value at half its size, about as large as a label.
 - The fields shown are `[telemetry] fields`, followed by any field that only has a `[field-NAME]`
   section. Without a list or field sections, they are date and time, latitude, longitude,
   altitude and speed.

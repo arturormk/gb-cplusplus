@@ -161,8 +161,8 @@ std::vector<MapTileLevel> map_tile_levels(const MapScene &scene) {
   const auto past_half = scene.zoom - std::floor(scene.zoom) - 0.5;
   if (std::abs(past_half) >= kMapLevelBlend)
     return {{nearest, 1.0}};
-  const auto lower = std::clamp(static_cast<int>(std::floor(scene.zoom)), scene.min_zoom,
-                                scene.max_zoom);
+  const auto lower =
+      std::clamp(static_cast<int>(std::floor(scene.zoom)), scene.min_zoom, scene.max_zoom);
   const auto upper = std::clamp(lower + 1, scene.min_zoom, scene.max_zoom);
   if (lower == upper)
     return {{lower, 1.0}};
@@ -219,8 +219,8 @@ MapPaintResult paint_map(QPainter &painter, const QSizeF size, const MapScene &s
 
   if (scene.smooth) {
     for (const auto level : map_tile_levels(scene)) {
-      const auto missing = paint_tiles_filtered(painter, viewport(size, scene, level.zoom), scene,
-                                                level.opacity);
+      const auto missing =
+          paint_tiles_filtered(painter, viewport(size, scene, level.zoom), scene, level.opacity);
       result.missing_tiles = std::max(result.missing_tiles, missing);
     }
   } else {

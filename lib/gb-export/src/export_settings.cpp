@@ -114,8 +114,9 @@ constexpr std::array<std::string_view, 8> kFieldNames{"datetime",  "date",     "
                                                       "longitude", "altitude", "speed", "distance"};
 
 const std::set<std::string> &known_sections() {
-  static const std::set<std::string> sections{"",      "range", "view",      "frame", "layout",
-                                              "units", "text",  "telemetry", "map",   "output"};
+  static const std::set<std::string> sections{"",          "range", "view",  "frame",
+                                              "layout",    "units", "text",  "date",
+                                              "telemetry", "map",   "output"};
   return sections;
 }
 
@@ -183,10 +184,19 @@ public:
       for (const auto field : order)
         s.fields.push_back(field_settings(field));
     }
+    // The format and the names may come from different files.
+    for (const auto &token : parse_date_format(s.date.format)) {
+      if (token.part == DatePart::month_name && s.date.months.empty())
+        throw SettingsValidationError(
+            "[date] format: 'month' needs the month names, January first: months = Jan, Feb, ...");
+      if (token.part == DatePart::weekday && s.date.weekdays.empty())
+        throw SettingsValidationError("[date] format: 'weekday' needs the weekday names, Monday "
+                                      "first: weekdays = Mon, Tue, ...");
+    }
     if (s.map.enabled && s.map.auto_width && s.map.closest_metres > s.map.widest_metres) {
-      throw SettingsValidationError("[map] closest: " + distance_text(s.map.closest_metres) +
-                                    " is wider than widest = " +
-                                    distance_text(s.map.widest_metres));
+      throw SettingsValidationError(
+          "[map] closest: " + distance_text(s.map.closest_metres) +
+          " is wider than widest = " + distance_text(s.map.widest_metres));
     }
     if (s.map.enabled && !s.map.auto_width && !auto_keys_.empty() && warnings_ != nullptr) {
       for (const auto &key : auto_keys_)
@@ -327,6 +337,18 @@ private:
       fail(e.line, e.section, e.key,
            e.value + " is out of range " + distance_text(low) + " to " + distance_text(high));
     return *value;
+  }
+
+  std::vector<std::string> names(const IniEntry &e, const std::size_t count,
+                                 const std::string_view first) const {
+    auto list = split_list(e.value);
+    if (list.size() != count)
+      fail(e.line, e.section, e.key,
+           "expected " + std::to_string(count) + " comma-separated names, " + std::string(first) +
+               " first; got " + std::to_string(list.size()));
+    if (std::any_of(list.begin(), list.end(), [](const std::string &name) { return name.empty(); }))
+      fail(e.line, e.section, e.key, "a name is empty");
+    return list;
   }
 
   [[noreturn]] void unknown(const IniEntry &e) const {
@@ -494,6 +516,23 @@ private:
         t.outline_width = number_in(e, 0.0, 0.5);
       else
         unknown(e);
+    } else if (e.section == "date") {
+      if (k == "format") {
+        const auto format = trim(e.value);
+        try {
+          if (parse_date_format(format).empty())
+            fail(e.line, e.section, k, "the format is empty");
+        } catch (const std::invalid_argument &error) {
+          fail(e.line, e.section, k, error.what());
+        }
+        s.date.format = format;
+      } else if (k == "months") {
+        s.date.months = names(e, 12U, "January");
+      } else if (k == "weekdays") {
+        s.date.weekdays = names(e, 7U, "Monday");
+      } else {
+        unknown(e);
+      }
     } else if (e.section == "telemetry") {
       if (k == "enabled") {
         telemetry_enabled_ = boolean(e);
@@ -527,6 +566,8 @@ private:
         f.align = *align;
       } else if (k == "font_size") {
         f.font_size = number_in(e, 0.005, 0.3);
+      } else if (k == "small") {
+        f.small = boolean(e);
       } else {
         unknown(e);
       }
@@ -553,8 +594,7 @@ private:
       } else if (k == "widest") {
         m.widest_metres = distance(e, 10.0, 2.0e6);
         auto_keys_.push_back(k);
-      }
-      else if (k == "track")
+      } else if (k == "track")
         m.track = boolean(e);
       else if (k == "shape")
         m.shape = choice(e, std::array<std::pair<std::string_view, MapShape>, 2>{
@@ -806,6 +846,147 @@ std::string align_name(const Align align) {
   return "auto";
 }
 
+std::vector<DateToken> parse_date_format(const std::string &format) {
+  std::vector<DateToken> tokens;
+  const auto literal = [&tokens](const std::string &text) {
+    if (tokens.empty() || tokens.back().part != DatePart::literal)
+      tokens.push_back({DatePart::literal, {}});
+    tokens.back().text += text;
+  };
+  const auto is_letter = [](const char c) {
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
+  };
+  std::size_t index = 0;
+  while (index < format.size()) {
+    const auto c = format[index];
+    if (c == '\'') {
+      if (index + 1U < format.size() && format[index + 1U] == '\'') {
+        literal("'");
+        index += 2U;
+        continue;
+      }
+      // Quoted text, where '' is an apostrophe.
+      std::string text;
+      auto at = index + 1U;
+      while (true) {
+        if (at >= format.size())
+          throw std::invalid_argument("a quote is not closed: " + format.substr(index));
+        if (format[at] == '\'') {
+          if (at + 1U < format.size() && format[at + 1U] == '\'') {
+            text += '\'';
+            at += 2U;
+            continue;
+          }
+          break;
+        }
+        text += format[at++];
+      }
+      literal(text);
+      index = at + 1U;
+      continue;
+    }
+    if (!is_letter(c)) {
+      literal(std::string(1, c));
+      ++index;
+      continue;
+    }
+    auto end = index;
+    while (end < format.size() && is_letter(format[end]))
+      ++end;
+    const auto word = format.substr(index, end - index);
+    index = end;
+    static const std::array<std::pair<std::string_view, DatePart>, 4> words{
+        {{"year", DatePart::year},
+         {"month", DatePart::month_name},
+         {"day", DatePart::day},
+         {"weekday", DatePart::weekday}}};
+    const auto named = std::find_if(words.begin(), words.end(),
+                                    [&word](const auto &item) { return item.first == word; });
+    if (named != words.end()) {
+      tokens.push_back({named->second, {}});
+      continue;
+    }
+    // Codes, longest first, which may run together: YYYYMMDD.
+    static const std::array<std::pair<std::string_view, DatePart>, 6> codes{
+        {{"YYYY", DatePart::year},
+         {"YY", DatePart::year2},
+         {"MM", DatePart::month2},
+         {"M", DatePart::month},
+         {"DD", DatePart::day2},
+         {"D", DatePart::day}}};
+    std::vector<DateToken> parts;
+    std::string_view rest(word);
+    while (!rest.empty()) {
+      const auto code = std::find_if(codes.begin(), codes.end(), [rest](const auto &item) {
+        return rest.substr(0, item.first.size()) == item.first;
+      });
+      if (code == codes.end()) {
+        throw std::invalid_argument(
+            "unknown word '" + word +
+            "'; the codes are YYYY, YY, MM, M, DD, D and the words year, month, day, weekday; "
+            "quote other text: '" +
+            word + "'");
+      }
+      parts.push_back({code->second, {}});
+      rest.remove_prefix(code->first.size());
+    }
+    tokens.insert(tokens.end(), parts.begin(), parts.end());
+  }
+  return tokens;
+}
+
+std::string format_date(const DateSettings &settings, const int year, const int month,
+                        const int day, const int weekday) {
+  const auto padded = [](const int value) {
+    const auto text = std::to_string(value);
+    return text.size() < 2U ? "0" + text : text;
+  };
+  const auto name = [](const std::vector<std::string> &list, const int number) {
+    if (number >= 1 && static_cast<std::size_t>(number) <= list.size())
+      return list[static_cast<std::size_t>(number - 1)];
+    return std::to_string(number);
+  };
+  std::vector<DateToken> tokens;
+  try {
+    tokens = parse_date_format(settings.format);
+  } catch (const std::invalid_argument &) {
+    tokens = parse_date_format("YYYY-MM-DD");
+  }
+  std::string text;
+  for (const auto &token : tokens) {
+    switch (token.part) {
+    case DatePart::literal:
+      text += token.text;
+      break;
+    case DatePart::year:
+      text += std::to_string(year);
+      break;
+    case DatePart::year2:
+      text += padded(((year % 100) + 100) % 100);
+      break;
+    case DatePart::month:
+      text += std::to_string(month);
+      break;
+    case DatePart::month2:
+      text += padded(month);
+      break;
+    case DatePart::month_name:
+      text += name(settings.months, month);
+      break;
+    case DatePart::day:
+      text += std::to_string(day);
+      break;
+    case DatePart::day2:
+      text += padded(day);
+      break;
+    case DatePart::weekday:
+      text += name(settings.weekdays, weekday);
+      break;
+    }
+  }
+  return text;
+}
+
 std::string field_name(const Field field) {
   return std::string(kFieldNames[static_cast<std::size_t>(field)]);
 }
@@ -988,6 +1169,19 @@ std::string write_export_settings(const ExportSettings &s, const std::vector<std
   out << "outline_color = " << color_text(t.outline_color) << '\n';
   out << "outline_width = " << number(t.outline_width, 3) << '\n';
 
+  const auto joined = [](const std::vector<std::string> &list) {
+    std::string text;
+    for (const auto &item : list)
+      text += (text.empty() ? "" : ", ") + item;
+    return text;
+  };
+  out << "\n[date]\n";
+  out << "format   = " << s.date.format << '\n';
+  if (!s.date.months.empty())
+    out << "months   = " << joined(s.date.months) << '\n';
+  if (!s.date.weekdays.empty())
+    out << "weekdays = " << joined(s.date.weekdays) << '\n';
+
   if (s.telemetry) {
     out << "\n[telemetry]\n";
     out << "fields = ";
@@ -1001,6 +1195,7 @@ std::string write_export_settings(const ExportSettings &s, const std::vector<std
       out << "align  = " << align_name(f.align) << '\n';
       if (f.font_size)
         out << "font_size = " << number(*f.font_size, 4) << '\n';
+      out << "small  = " << (f.small ? "yes" : "no") << '\n';
     }
   }
 
@@ -1075,6 +1270,16 @@ outline       = yes     ; a border around the text, readable on bright pictures
 outline_color = #000000
 outline_width = 0.08    ; fraction of the text size
 
+[date]
+; How the date and datetime fields write the date. Codes: YYYY 2026, YY 26, MM 03, M 3, DD 07,
+; D 7; words: year (YYYY), day (D), month and weekday (names from the lists below). Other
+; letters go in quotes: weekday D 'de' month 'de' YYYY.
+format   = YYYY-MM-DD
+; format = weekday month day, year
+; months starts at January, weekdays at Monday; needed only when the format uses the names.
+; months   = Jan, Feb, Mar, Apr, May, Jun, Jul, Aug, Sep, Oct, Nov, Dec
+; weekdays = Mon, Tue, Wed, Thu, Fri, Sat, Sun
+
 [telemetry]
 ; datetime, date, time, latitude, longitude, altitude, speed, distance (from the start of the range)
 fields = time, speed, altitude, distance
@@ -1086,6 +1291,7 @@ label  = Speed
 anchor = bottom-left    ; top-left, top, top-right, bottom-left, bottom, bottom-right, or x, y (0..1)
 ; align = auto          ; auto, left, center, right
 ; font_size = 0.07      ; this field only
+; small = yes           ; the value at half size, about as large as a label
 
 [field-time]
 label  =                ; empty: no label

@@ -83,6 +83,7 @@ struct FieldText {
   gb::exporting::Field field{};
   QString label;
   QString value;
+  bool small{}; // the value at half size ([field-NAME] small)
 };
 
 [[nodiscard]] QTimeZone time_zone_for(const std::string &setting); // invalid when unknown

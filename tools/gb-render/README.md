@@ -60,12 +60,27 @@ outline_width = 0.08     ; fraction of the text size
 label     = Velocidad    ; any text; empty for no label
 anchor    = bottom-left
 font_size = 0.08         ; this field only
+small     = no           ; yes: the value at half size, about as large as a label
+
+[date]
+format   = weekday, month day, year      ; default YYYY-MM-DD
+months   = Jan, Feb, Mar, Apr, May, Jun, Jul, Aug, Sep, Oct, Nov, Dec
+weekdays = Mon, Tue, Wed, Thu, Fri, Sat, Sun
 ```
 
 Fields: `datetime`, `date`, `time` (from the GPS UTC time, in `[units] time_zone`), `latitude`,
 `longitude`, `altitude`, `speed` (2D), `distance` (travelled since the start of the range,
 ignoring movements under 3 m). Units: `[units] speed = km/h | mph | m/s | kn`, `altitude = m | ft`,
 `distance = km | mi`, `time_zone = local | utc | +02:00 | Europe/Madrid`.
+
+**Dates.** `[date] format` sets how `date` and `datetime` write the date (`datetime` adds
+`HH:MM:SS`). Codes: `YYYY` (2026), `YY` (26), `MM` (03), `M` (3), `DD` (07), `D` (7), which may run
+together (`YYYYMMDD`); words: `year` (as `YYYY`), `day` (as `D`), `month` and `weekday`, the names
+from `months` and `weekdays`. The names come only from the settings, so any language works:
+`months` lists twelve, **starting at January**, and `weekdays` seven, **starting at Monday**
+(ISO 8601). They are needed only when the format uses `month` or `weekday`. Other characters are
+written as they are, except ASCII letters, which go in quotes: `weekday D 'de' month 'de' YYYY`
+(`''` is an apostrophe).
 
 Values follow the player's rules: the recorded GPS record nearest to the frame, with a valid fix
 within one record interval of it; otherwise `—`, never zero or an interpolated value.

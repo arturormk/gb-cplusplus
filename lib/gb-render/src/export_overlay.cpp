@@ -38,18 +38,31 @@ double unit(const ex::FrameLayout &layout) { return layout.height / 1080.0; }
 struct Fonts {
   QFont label;
   QFont value;
+  QFont small; // a small value
   double label_px{};
   double value_px{};
+  double small_px{};
 };
 
 Fonts fonts_for(const double value_px, const ex::TextSettings &text) {
   Fonts fonts;
   fonts.value_px = std::max(4.0, value_px);
   fonts.label_px = std::max(4.0, value_px * text.label_size);
+  fonts.small_px = std::max(4.0, value_px * ex::kSmallValue);
   fonts.value.setPixelSize(static_cast<int>(std::lround(fonts.value_px)));
   fonts.value.setWeight(QFont::DemiBold);
+  fonts.small = fonts.value;
+  fonts.small.setPixelSize(static_cast<int>(std::lround(fonts.small_px)));
   fonts.label.setPixelSize(static_cast<int>(std::lround(fonts.label_px)));
   return fonts;
+}
+
+const QFont &value_font(const FieldText &field, const Fonts &fonts) {
+  return field.small ? fonts.small : fonts.value;
+}
+
+double value_pixels(const FieldText &field, const Fonts &fonts) {
+  return field.small ? fonts.small_px : fonts.value_px;
 }
 
 bool has_label(const FieldText &field, const ex::TextSettings &text) {
@@ -59,7 +72,7 @@ bool has_label(const FieldText &field, const ex::TextSettings &text) {
 double label_gap(const Fonts &fonts) { return 0.35 * fonts.value_px; }
 
 QSizeF measure(const FieldText &field, const Fonts &fonts, const ex::TextSettings &text) {
-  const QFontMetricsF value(fonts.value);
+  const QFontMetricsF value(value_font(field, fonts));
   const auto value_width = value.horizontalAdvance(field.value);
   if (!has_label(field, text))
     return {value_width, value.height()};
@@ -91,7 +104,9 @@ void draw_text(QPainter &painter, const QPointF baseline, const QString &text, c
 void draw_field_directly(QPainter &painter, const QPointF top_left, const double width,
                          const ex::Align align, const FieldText &field, const Fonts &fonts,
                          const ex::TextSettings &style) {
-  const QFontMetricsF value_metrics(fonts.value);
+  const auto &font = value_font(field, fonts);
+  const auto value_px = value_pixels(field, fonts);
+  const QFontMetricsF value_metrics(font);
   const QFontMetricsF label_metrics(fonts.label);
   const auto x_for = [&](const double line_width) {
     switch (align) {
@@ -110,18 +125,19 @@ void draw_field_directly(QPainter &painter, const QPointF top_left, const double
   const auto value_width = value_metrics.horizontalAdvance(field.value);
   if (!has_label(field, style)) {
     draw_text(painter, QPointF(x_for(value_width), top_left.y() + value_metrics.ascent()),
-              field.value, fonts.value, fonts.value_px, value_color, style);
+              field.value, font, value_px, value_color, style);
     return;
   }
   const auto label_width = label_metrics.horizontalAdvance(field.label);
   if (style.labels == ex::LabelPosition::left) {
     const auto line_height = std::max(value_metrics.height(), label_metrics.height());
-    const auto baseline = top_left.y() + line_height - value_metrics.descent();
+    const auto baseline =
+        top_left.y() + line_height - std::max(value_metrics.descent(), label_metrics.descent());
     const auto x = x_for(label_width + label_gap(fonts) + value_width);
     draw_text(painter, QPointF(x, baseline), field.label, fonts.label, fonts.label_px, label_color,
               style);
-    draw_text(painter, QPointF(x + label_width + label_gap(fonts), baseline), field.value,
-              fonts.value, fonts.value_px, value_color, style);
+    draw_text(painter, QPointF(x + label_width + label_gap(fonts), baseline), field.value, font,
+              value_px, value_color, style);
     return;
   }
   draw_text(painter, QPointF(x_for(label_width), top_left.y() + label_metrics.ascent()),
@@ -129,7 +145,7 @@ void draw_field_directly(QPainter &painter, const QPointF top_left, const double
   draw_text(
       painter,
       QPointF(x_for(value_width), top_left.y() + label_metrics.height() + value_metrics.ascent()),
-      field.value, fonts.value, fonts.value_px, value_color, style);
+      field.value, font, value_px, value_color, style);
 }
 
 // The same, through a cache of drawn fields: values change a few times a second at most, while
@@ -146,17 +162,18 @@ void draw_field(QPainter &painter, const QPointF top_left, const double width,
     draw_field_directly(painter, top_left, width, align, field, fonts, style);
     return;
   }
-  const auto key = QStringLiteral("%1|%2|%3|%4|%5|%6|%7|%8|%9")
-                       .arg(field.label, field.value)
-                       .arg(fonts.value_px)
-                       .arg(fonts.label_px)
-                       .arg(width)
-                       .arg(static_cast<int>(align))
-                       .arg(QString::fromStdString(ex::color_text(style.label_color) +
-                                                   ex::color_text(style.value_color) +
-                                                   ex::color_text(style.outline_color)))
-                       .arg(style.outline ? style.outline_width : -1.0)
-                       .arg(static_cast<int>(style.labels));
+  const auto key =
+      QStringLiteral("%1|%2|%3|%4|%5|%6|%7|%8|%9")
+          .arg(field.label, (field.small ? QStringLiteral("s|") : QString()) + field.value)
+          .arg(fonts.value_px)
+          .arg(fonts.label_px)
+          .arg(width)
+          .arg(static_cast<int>(align))
+          .arg(QString::fromStdString(ex::color_text(style.label_color) +
+                                      ex::color_text(style.value_color) +
+                                      ex::color_text(style.outline_color)))
+          .arg(style.outline ? style.outline_width : -1.0)
+          .arg(static_cast<int>(style.labels));
   auto found = cache.find(key);
   if (found == cache.end()) {
     if (cache.size() >= 512U)
@@ -595,17 +612,23 @@ std::vector<FieldText> field_texts(const ex::ExportSettings &settings, const QTi
         .arg(static_cast<double>(std::abs(value)), 0, 'f', 5)
         .arg(QChar(value < 0.0L ? negative : positive));
   };
+  // [date] format, with the month and weekday names from the settings (dayOfWeek: 1 is Monday).
+  const auto date_text = [&settings, &moment] {
+    const auto date = moment->date();
+    return QString::fromStdString(
+        ex::format_date(settings.date, date.year(), date.month(), date.day(), date.dayOfWeek()));
+  };
   std::vector<FieldText> texts;
   for (const auto &field : settings.fields) {
-    FieldText text{field.field, QString::fromStdString(field.label), kUnknown};
+    FieldText text{field.field, QString::fromStdString(field.label), kUnknown, field.small};
     switch (field.field) {
     case ex::Field::datetime:
       if (moment)
-        text.value = moment->toString(QStringLiteral("yyyy-MM-dd HH:mm:ss"));
+        text.value = date_text() + QLatin1Char(' ') + moment->toString(QStringLiteral("HH:mm:ss"));
       break;
     case ex::Field::date:
       if (moment)
-        text.value = moment->toString(QStringLiteral("yyyy-MM-dd"));
+        text.value = date_text();
       break;
     case ex::Field::time:
       if (moment)
@@ -682,15 +705,13 @@ MapScene export_map_scene(const ex::ExportSettings &settings, const ex::FrameLay
   result.track = settings.map.track;
   result.smooth = true;
   const auto latitude = gb::geo::unproject(scene.center).latitude;
-  result.zoom =
-      map_zoom_for_width(map_size.width(), result.scale,
-                         width_metres.value_or(settings.map.width_metres), latitude);
+  result.zoom = map_zoom_for_width(map_size.width(), result.scale,
+                                   width_metres.value_or(settings.map.width_metres), latitude);
   return result;
 }
 
 std::vector<gb::geo::TileKey> export_map_tiles(const ex::ExportSettings &settings,
-                                               const ex::FrameLayout &layout,
-                                               const MapScene &scene,
+                                               const ex::FrameLayout &layout, const MapScene &scene,
                                                const std::optional<double> width_metres) {
   const auto area = export_map_area(settings, layout);
   if (!area)
@@ -712,8 +733,9 @@ OverlayResult paint_export_overlays(QPainter &painter, const ex::ExportSettings 
   const auto fields = settings.telemetry ? frame.fields : std::vector<FieldText>{};
   if (settings.placement == ex::Placement::overlay) {
     if (map_area) {
-      result.missing_tiles = paint_map_box(painter, *map_area, settings, layout, frame.scene,
-                                           frame.map_width_metres, attribution, settings.map.opacity);
+      result.missing_tiles =
+          paint_map_box(painter, *map_area, settings, layout, frame.scene, frame.map_width_metres,
+                        attribution, settings.map.opacity);
     }
     paint_overlay_fields(painter, settings, layout, fields, map_area);
   } else if (layout.panel) {
@@ -721,9 +743,8 @@ OverlayResult paint_export_overlays(QPainter &painter, const ex::ExportSettings 
     const auto regions = ex::panel_regions(layout, ex::panel_side(settings.placement),
                                            settings.map.enabled, !fields.empty());
     if (map_area)
-      result.missing_tiles =
-          paint_map_box(painter, *map_area, settings, layout, frame.scene,
-                        frame.map_width_metres, attribution, 1.0);
+      result.missing_tiles = paint_map_box(painter, *map_area, settings, layout, frame.scene,
+                                           frame.map_width_metres, attribution, 1.0);
     if (regions.text)
       paint_panel_fields(painter, qrect(*regions.text), settings, layout, fields);
   }

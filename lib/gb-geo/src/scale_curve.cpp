@@ -72,10 +72,9 @@ ScaleCurve::ScaleCurve(const std::vector<RoutePoint> &points, const std::int64_t
   }
 
   const auto start_seconds = static_cast<double>(start) * seconds_per_tick;
-  const auto steps =
-      static_cast<std::size_t>(
-          std::floor(static_cast<double>(end - start) * seconds_per_tick / kScaleStepSeconds)) +
-      1U;
+  const auto steps = static_cast<std::size_t>(std::floor(static_cast<double>(end - start) *
+                                                         seconds_per_tick / kScaleStepSeconds)) +
+                     1U;
   const auto low = std::log2(closest);
   const auto high = std::log2(widest);
   const auto nan = std::numeric_limits<double>::quiet_NaN();
@@ -85,10 +84,9 @@ ScaleCurve::ScaleCurve(const std::vector<RoutePoint> &points, const std::int64_t
   std::vector<double> required(steps, nan);
   for (std::size_t k = 0; k < steps; ++k) {
     const auto t = start_seconds + static_cast<double>(k) * kScaleStepSeconds;
-    const auto after = std::upper_bound(samples.begin(), samples.end(), t,
-                                        [](const double value, const Sample &sample) {
-                                          return value < sample.seconds;
-                                        });
+    const auto after = std::upper_bound(
+        samples.begin(), samples.end(), t,
+        [](const double value, const Sample &sample) { return value < sample.seconds; });
     std::size_t current = 0;
     if (after != samples.begin() && t - std::prev(after)->seconds <= kStaleSeconds)
       current = static_cast<std::size_t>(std::prev(after) - samples.begin());
@@ -152,8 +150,7 @@ ScaleCurve::ScaleCurve(const std::vector<RoutePoint> &points, const std::int64_t
   for (std::size_t k = 1; k < steps; ++k) {
     const auto previous = curve[k - 1U];
     const auto within_band = previous - curve[k] < kDeadBand && curve[k] > low;
-    curve[k] = within_band ? std::max(curve[k], previous)
-                                               : std::max(curve[k], previous - in_step);
+    curve[k] = within_band ? std::max(curve[k], previous) : std::max(curve[k], previous - in_step);
   }
 
   // 5. Round the corners: a Gaussian over a local maximum, so it stays at or above the curve.

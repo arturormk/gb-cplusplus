@@ -794,8 +794,8 @@ int run(const Options &options, int argc, char **argv) {
   }
   std::set<gb::geo::TileKey> tile_keys;
   if (overlays && settings.map.enabled)
-    tile_keys = needed_tiles(settings, layout, track, provider,
-                             scale_curve ? &*scale_curve : nullptr);
+    tile_keys =
+        needed_tiles(settings, layout, track, provider, scale_curve ? &*scale_curve : nullptr);
 
   // Audio.
   std::optional<gb::media::AudioStream> audio;
@@ -856,8 +856,8 @@ int run(const Options &options, int argc, char **argv) {
     if (scale_curve) {
       const auto closest = scale_curve->closest();
       const auto widest = scale_curve->widest();
-      std::cerr << "auto, " << ex::minutes_text(settings.map.ahead_seconds) << " ahead: "
-                << ex::distance_text(closest.metres) << " across at "
+      std::cerr << "auto, " << ex::minutes_text(settings.map.ahead_seconds)
+                << " ahead: " << ex::distance_text(closest.metres) << " across at "
                 << gb::media::format_recording_position(timeline, closest.ticks) << " to "
                 << ex::distance_text(widest.metres) << " at "
                 << gb::media::format_recording_position(timeline, widest.ticks) << "\n"

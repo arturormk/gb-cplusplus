@@ -567,6 +567,79 @@ speed = 2.5
           "panel leaves no picture");
 }
 
+void test_date_format() {
+  ex::DateSettings date;
+  // 2026-03-07 is a Saturday (ISO weekday 6).
+  require(ex::format_date(date, 2026, 3, 7, 6) == "2026-03-07", "default YYYY-MM-DD");
+  date.format = "DD/MM/YY";
+  require(ex::format_date(date, 2026, 3, 7, 6) == "07/03/26", "padded codes");
+  date.format = "YYYYMMDD";
+  require(ex::format_date(date, 2026, 3, 7, 6) == "20260307", "codes run together");
+  date.format = "D.M.YYYY";
+  require(ex::format_date(date, 2026, 3, 7, 6) == "7.3.2026", "unpadded codes");
+  date.format = "weekday month day, year";
+  date.months = {"Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                 "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
+  date.weekdays = {"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"};
+  require(ex::format_date(date, 2026, 3, 7, 6) == "Sat Mar 7, 2026",
+          "names, January and Monday first");
+  require(ex::format_date(date, 2026, 3, 1, 7) == "Sun Mar 1, 2026", "Sunday is the seventh");
+  date.format = "weekday, D 'de' month 'de' YYYY, 'o''clock'";
+  require(ex::format_date(date, 2026, 1, 5, 1) == "Mon, 5 de Jan de 2026, o'clock",
+          "quoted literals and an apostrophe");
+  date.format = "'día' D";
+  require(ex::format_date(date, 2026, 1, 5, 1) == "día 5", "quoted UTF-8 text");
+  throws([] { (void)ex::parse_date_format("YYYY-MM-DD hh"); }, "unknown word");
+  throws([] { (void)ex::parse_date_format("YYY"); }, "YYY is no code");
+  throws([] { (void)ex::parse_date_format("D 'de"); }, "unclosed quote");
+  require(ex::parse_date_format("weekday").front().part == ex::DatePart::weekday, "weekday word");
+}
+
+void test_date_settings() {
+  auto s = combine({"schema = gb.export/1\n"});
+  require(s.date.format == "YYYY-MM-DD" && s.date.months.empty(), "date default");
+  s = combine({R"(schema = gb.export/1
+[date]
+format   = weekday month day, year
+months   = January, February, March, April, May, June, July, August, September, October, November, December
+weekdays = Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday
+[field-date]
+small = yes
+)"});
+  require(s.date.months.size() == 12U && s.date.months[11] == "December" &&
+              s.date.weekdays[6] == "Sunday" && s.fields.size() == 1U && s.fields[0].small,
+          "date settings and a small field");
+  const auto written = ex::write_export_settings(s);
+  const auto again = combine({written});
+  require(again.date.format == s.date.format && again.date.months == s.date.months &&
+              again.date.weekdays == s.date.weekdays && again.fields[0].small &&
+              ex::write_export_settings(again) == written,
+          "date settings round-trip");
+  require(error_of({"schema = gb.export/1\n[date]\nmonths = Jan, Feb, Mar, Apr, Jun, Jul, Aug, "
+                    "Sep, Oct, Nov, Dec\n"})
+                  .find("expected 12") != std::string::npos,
+          "eleven months");
+  require(error_of({"schema = gb.export/1\n[date]\nweekdays = Sun, Mon, Tue\n"}).find("Monday") !=
+              std::string::npos,
+          "three weekdays");
+  require(error_of({"schema = gb.export/1\n[date]\nformat = weekday D\n"}).find("weekdays =") !=
+              std::string::npos,
+          "weekday without names");
+  require(error_of({"schema = gb.export/1\n[date]\nformat = month D\n"}).find("months =") !=
+              std::string::npos,
+          "month without names");
+  require(error_of({"schema = gb.export/1\n[date]\nformat = YYYY-MM-DD hh\n"})
+                  .find("file1.ini:3: [date] format: unknown word 'hh'") == 0U,
+          "unknown word in the format");
+  require(error_of({"schema = gb.export/1\n[field-speed]\nsmall = maybe\n"}).find("yes or no") !=
+              std::string::npos,
+          "small is yes or no");
+  // The names may come from another file than the format.
+  s = combine({"schema = gb.export/1\n[date]\nformat = month\n",
+               "schema = gb.export/1\n[date]\nmonths = 1,2,3,4,5,6,7,8,9,10,11,12\n"});
+  require(ex::format_date(s.date, 2026, 11, 1, 7) == "11", "format and names from two files");
+}
+
 } // namespace
 
 int main() {
@@ -580,6 +653,8 @@ int main() {
     test_settings_writer();
     test_values();
     test_export_settings();
+    test_date_format();
+    test_date_settings();
   } catch (const std::exception &error) {
     std::cerr << "gb_export_tests: " << error.what() << '\n';
     return 1;
