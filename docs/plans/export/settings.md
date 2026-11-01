@@ -83,6 +83,7 @@ crf    = 20
 encoder_preset = medium
 audio  = yes
 audio_bitrate = 192000
+speed  = 1              ; times real time, 1..1000; audio keeps its pitch up to 4, none above
 ```
 
 ## Rules

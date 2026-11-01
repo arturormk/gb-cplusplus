@@ -561,6 +561,8 @@ private:
         o.audio = boolean(e);
       } else if (k == "audio_bitrate") {
         o.audio_bitrate = integer_in(e, 32000, 512000);
+      } else if (k == "speed") {
+        o.speed = number_in(e, 1.0, kMaxSpeed);
       } else {
         unknown(e);
       }
@@ -965,6 +967,7 @@ std::string write_export_settings(const ExportSettings &s, const std::vector<std
   out << "encoder_preset = " << o.encoder_preset << '\n';
   out << "audio          = " << (o.audio ? "yes" : "no") << '\n';
   out << "audio_bitrate  = " << o.audio_bitrate << '\n';
+  out << "speed          = " << number(o.speed, 3) << '\n';
   return out.str();
 }
 
@@ -1041,6 +1044,8 @@ crf            = 20     ; 0..51, lower is better
 encoder_preset = medium ; ultrafast .. veryslow
 audio          = yes
 audio_bitrate  = 192000
+speed          = 1      ; times real time, 1..1000: frames are dropped; audio keeps
+                        ; its pitch up to 4, above that there is no audio
 )";
 }
 

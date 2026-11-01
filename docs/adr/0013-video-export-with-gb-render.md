@@ -52,7 +52,10 @@ ground width, an optional track over the whole range and an optional circular sh
   tagged so, AAC audio, MP4 with `+faststart` or MKV. Nothing is copied from the source: no GPS,
   location atom or camera metadata. Frames are rendered offscreen with the player's shader
   (ADR-0012), composed with QPainter, and encoded in order with their recording PTS rebased to
-  the first frame.
+  the first frame. With `[output] speed` above 1 the export runs faster than real time: frames
+  are dropped on a timestamp grid at the source frame rate, and the audio is time-stretched at
+  its pitch with libavfilter's `atempo` up to 4×, with no audio track above that (amendment,
+  2026-10-31).
 - **Map tiles for an export are fetched**, which amends ADR-0009 ("M6 export … with OSM must use
   only tiles already cached") and BLUEPRINT §9 ("never bulk-fetch official OSM tiles for rendering
   a video"), as the export plan decided. The fetch is the narrowest that gives a complete map:

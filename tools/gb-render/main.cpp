@@ -9,6 +9,7 @@
 #include "gb/media/audio.hpp"
 #include "gb/media/playback.hpp"
 #include "gb/media/position.hpp"
+#include "gb/media/tempo.hpp"
 #include "gb/media/timeline.hpp"
 #include "gb/media/writer.hpp"
 #include "gb/render/export_overlay.hpp"
@@ -25,7 +26,9 @@
 #include <QTimer>
 
 #include <algorithm>
+#include <array>
 #include <atomic>
+#include <charconv>
 #include <chrono>
 #include <clocale>
 #include <cmath>
@@ -261,6 +264,13 @@ long double seconds(const std::int64_t ticks, const gb::media::Rational base) {
 
 std::string clock(const long double value) { return gb::media::format_clock(value); }
 
+// "10×", "2.5×".
+std::string speed_text(const double speed) {
+  std::array<char, 32> text{};
+  const auto end = std::to_chars(text.data(), text.data() + text.size(), speed).ptr;
+  return std::string(text.data(), end) + "×";
+}
+
 // ---- telemetry ----------------------------------------------------------------------------------
 
 // The GPS records of the chapters the range touches, on the recording timeline.
@@ -433,6 +443,44 @@ TileSet load_tiles(const std::set<gb::geo::TileKey> &keys, const gb::geo::TilePr
 
 // ---- audio --------------------------------------------------------------------------------------
 
+// The audio track of the output: source samples go to the writer as they are, or through a
+// pitch-preserving time stretch when the export is faster than real time.
+class AudioOut {
+public:
+  AudioOut(gb::media::VideoWriter &writer, const int rate, const double speed) : writer_(writer) {
+    if (speed > 1.0)
+      stretcher_ = std::make_unique<gb::media::TempoStretcher>(rate, speed);
+  }
+
+  void write(const float *samples, const std::int64_t frames) {
+    if (!stretcher_) {
+      writer_.write_audio(samples, frames);
+      return;
+    }
+    stretcher_->push(samples, frames, stretched_);
+    flush();
+  }
+
+  void finish() {
+    if (!stretcher_)
+      return;
+    stretcher_->finish(stretched_);
+    flush();
+  }
+
+private:
+  void flush() {
+    if (stretched_.empty())
+      return;
+    writer_.write_audio(stretched_.data(), static_cast<std::int64_t>(stretched_.size() / 2U));
+    stretched_.clear();
+  }
+
+  gb::media::VideoWriter &writer_;
+  std::unique_ptr<gb::media::TempoStretcher> stretcher_;
+  std::vector<float> stretched_;
+};
+
 // Feeds the writer the recording's audio from the first frame on, chapter after chapter. Each
 // chapter's audio is placed where its video starts on the timeline, so a chapter whose audio is a
 // little shorter or longer than its video cannot shift the ones after it.
@@ -443,7 +491,7 @@ public:
       : timeline_(timeline), stream_(stream), rate_(rate), first_(first_ticks),
         chapter_(timeline.chapter_at(first_ticks)) {}
 
-  void feed_until(const std::int64_t end_ticks, gb::media::VideoWriter &writer) {
+  void feed_until(const std::int64_t end_ticks, AudioOut &writer) {
     const auto target = sample_at(end_ticks);
     while (written_ < target && chapter_ < timeline_.chapters.size()) {
       const auto chapter_start = sample_at(timeline_.chapters[chapter_].offset_ticks);
@@ -485,7 +533,7 @@ public:
       }
       const auto available = static_cast<std::int64_t>(buffer_.size() / 2U) - offset_;
       const auto count = std::min({available, target - written_, chapter_end - written_});
-      writer.write_audio(buffer_.data() + offset_ * 2, count);
+      writer.write(buffer_.data() + offset_ * 2, count);
       written_ += count;
       offset_ += count;
       if (offset_ * 2 >= static_cast<std::int64_t>(buffer_.size())) {
@@ -527,11 +575,11 @@ private:
     offset_ = 0;
   }
 
-  void write_silence(const std::int64_t frames, gb::media::VideoWriter &writer) {
+  void write_silence(const std::int64_t frames, AudioOut &writer) {
     if (frames <= 0)
       return;
     const std::vector<float> silence(static_cast<std::size_t>(frames) * 2U, 0.0F);
-    writer.write_audio(silence.data(), frames);
+    writer.write(silence.data(), frames);
     written_ += frames;
   }
 
@@ -703,8 +751,9 @@ int run(const Options &options, int argc, char **argv) {
   if (end <= start)
     throw UsageError("the range is empty: the end must come after the start");
   const auto rate = timeline.frame_rate;
-  const auto frames_expected = static_cast<long long>(
-      std::llround(seconds(end - start, timeline.time_base) * rate.numerator / rate.denominator));
+  const auto speed = settings.output.speed;
+  const auto frames_expected = static_cast<long long>(std::llround(
+      seconds(end - start, timeline.time_base) * rate.numerator / rate.denominator / speed));
 
   // Telemetry and the map.
   const auto overlays = settings.placement != ex::Placement::none;
@@ -725,7 +774,8 @@ int run(const Options &options, int argc, char **argv) {
 
   // Audio.
   std::optional<gb::media::AudioStream> audio;
-  if (settings.output.audio) {
+  const auto audio_too_fast = settings.output.audio && speed > ex::kMaxAudioSpeed;
+  if (settings.output.audio && !audio_too_fast) {
     try {
       const auto streams = gb::media::audio_streams(timeline.chapters.front().path);
       const auto selection = gb::media::select_playback_audio(streams);
@@ -750,12 +800,19 @@ int run(const Options &options, int argc, char **argv) {
             << source_layout.description << ")\n"
             << "  range   " << range_text << " (" << clock(seconds(end - start, timeline.time_base))
             << ", about " << frames_expected << " frames at "
-            << static_cast<double>(rate.numerator) / rate.denominator << " fps)\n"
+            << static_cast<double>(rate.numerator) / rate.denominator << " fps"
+            << (speed > 1.0 ? ", " + speed_text(speed) + " real time: " +
+                                  clock(seconds(end - start, timeline.time_base) / speed)
+                            : std::string())
+            << ")\n"
             << "  output  " << layout.width << "×" << layout.height
             << (layout.panel ? " with a " + ex::placement_name(settings.placement) + " panel" : "")
             << ", " << (settings.output.codec == ex::Codec::hevc ? "hevc" : "h264") << " crf "
             << settings.output.crf << " " << settings.output.encoder_preset
-            << (audio ? ", audio" : ", no audio") << '\n';
+            << (audio            ? (speed > 1.0 ? ", audio at its pitch" : ", audio")
+                : audio_too_fast ? ", no audio (faster than " + speed_text(ex::kMaxAudioSpeed) + ")"
+                                 : ", no audio")
+            << '\n';
   std::cerr << framing_note;
   if (needs_track)
     std::cerr << "  GPS     " << track.points().size() << " records, "
@@ -840,7 +897,14 @@ int run(const Options &options, int argc, char **argv) {
     return found == tiles.images.end() ? nullptr : &found->second;
   };
   gb::render::CourseFilter course_filter;
+  std::unique_ptr<AudioOut> audio_out;
   std::unique_ptr<AudioFeed> audio_feed;
+  // Faster than real time, output frame k shows the first source frame at or after
+  // k × speed frame periods, and is written at k frame periods.
+  const auto period_ticks =
+      static_cast<long double>(timeline.time_base.denominator) * rate.denominator /
+      (static_cast<long double>(timeline.time_base.numerator) * rate.numerator);
+  std::int64_t next_output = 0;
 
   auto chapter = timeline.chapter_at(start);
   auto reader = std::make_unique<gb::media::SynchronizedReader>(
@@ -871,11 +935,27 @@ int run(const Options &options, int argc, char **argv) {
       continue;
     if (ticks >= end)
       break;
+    std::int64_t pts = 0;
+    if (speed > 1.0 && first) {
+      const auto slot = static_cast<std::int64_t>(
+          std::floor(static_cast<long double>(ticks - *first) / (period_ticks * speed) + 1e-6L));
+      if (slot < next_output) {
+        last = ticks;
+        continue;
+      }
+      next_output = slot;
+      pts = std::llround(static_cast<long double>(slot) * period_ticks);
+    } else if (first) {
+      pts = ticks - *first;
+    }
     if (!first) {
       first = ticks;
-      if (audio)
+      if (audio) {
+        audio_out = std::make_unique<AudioOut>(writer, audio->sample_rate, speed);
         audio_feed = std::make_unique<AudioFeed>(timeline, audio->index, audio->sample_rate, ticks);
+      }
     }
+    ++next_output;
     last = ticks;
 
     const auto picture =
@@ -911,13 +991,13 @@ int run(const Options &options, int argc, char **argv) {
       missing_tiles_max = std::max(missing_tiles_max, result.missing_tiles);
     }
     painter.end();
-    writer.write_video(frame.constBits(), static_cast<int>(frame.bytesPerLine()), ticks - *first);
+    writer.write_video(frame.constBits(), static_cast<int>(frame.bytesPerLine()), pts);
     if (audio_feed) {
       const auto duration =
           set->duration > 0
               ? gb::media::rescale_ticks(set->duration, set->time_base, timeline.time_base)
               : gb::media::rescale_ticks(1, {rate.denominator, rate.numerator}, timeline.time_base);
-      audio_feed->feed_until(ticks + duration, writer);
+      audio_feed->feed_until(ticks + duration, *audio_out);
     }
     ++written;
 
@@ -945,6 +1025,8 @@ int run(const Options &options, int argc, char **argv) {
   }
   if (written == 0)
     throw std::runtime_error("no frame in the range");
+  if (audio_out)
+    audio_out->finish();
   writer.finish();
   std::error_code error;
   if (options.overwrite)

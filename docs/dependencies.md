@@ -8,8 +8,8 @@ The supported baseline is Ubuntu 22.04 or newer with:
 - CMake 3.22+;
 - Ninja 1.10+; and
 - pkg-config; and
-- FFmpeg 4.4+ development/runtime packages providing libavformat 58+, libavcodec 58+, libavutil
-  56+, and libswscale 5+; and
+- FFmpeg 4.4+ development/runtime packages providing libavformat 58+, libavcodec 58+, libavfilter
+  7+, libavutil 56+, and libswscale 5+; and
 - SDL 2.0.10+ development package (`libsdl2-dev`), used by `gb-player` for audio output only; and
 - Qt 6.2+ development packages providing Core, Gui, Network, QML, Quick, Widgets, and Shader
   Tools, plus
@@ -21,7 +21,7 @@ Exact Ubuntu packages:
 ```sh
 sudo apt update
 sudo apt install build-essential cmake ninja-build pkg-config ffmpeg \
-  libavformat-dev libavcodec-dev libavutil-dev libswscale-dev libsdl2-dev \
+  libavformat-dev libavcodec-dev libavfilter-dev libavutil-dev libswscale-dev libsdl2-dev \
   qt6-base-dev libqt6opengl6-dev qt6-declarative-dev libqt6shadertools6-dev qt6-shader-baker \
   qml6-module-qtqml qml6-module-qtqml-models qml6-module-qtqml-workerscript \
   qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts \
@@ -65,7 +65,8 @@ the selected builds.
 ## FFmpeg review
 
 The implementation is compiled and tested against Ubuntu 22.04 FFmpeg 4.4.2. It uses only public
-libavformat/libavcodec/libavutil/libswscale APIs and the packaged PNG/HEVC/MPEG-4 decoders or
+libavformat/libavcodec/libavfilter/libavutil/libswscale APIs (libavfilter only for the `atempo`
+audio time stretch of faster-than-real-time exports) and the packaged PNG/HEVC/MPEG-4 decoders or
 encoder exercised by tests and private validation. The 2024 `gopromax_opencl` proposal was
 reviewed as format research; it is not present in that build and no FFmpeg source is vendored.
 Primary references reviewed: the

@@ -238,6 +238,13 @@ so next to the fetch count.
 - **One output frame per source frame set.** The output frame rate is the source's exact
   rational rate. The output time base is the source time base, and each frame's PTS is its
   recording time minus the start of the range. No frames are duplicated, dropped or retimed.
+- **Faster than real time** (`[output] speed` above 1): the output keeps the source frame rate
+  and output frame *k* is the first source frame set at or after *k* × `speed` frame periods
+  into the range, written at PTS *k* frame periods, so the others are dropped before they are
+  rendered or encoded (they are still decoded). Telemetry is still looked up at each kept frame's
+  source PTS. Up to 4× the audio is time-stretched at its pitch by FFmpeg's `atempo` filter;
+  faster exports have no audio track, since a stretch that keeps a quarter of the sound or less
+  is no longer listenable.
 - The range is snapped to source frames: the in point to the first frame set whose PTS is not
   before it, the out point to the last whose PTS is before it. `--dry-run` shows the snapped
   range and frame count.

@@ -1,10 +1,15 @@
 #include "gb/media/media.hpp"
+#include "gb/media/tempo.hpp"
 
+#include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstdint>
 #include <exception>
 #include <iostream>
+#include <numbers>
 #include <stdexcept>
+#include <vector>
 
 namespace {
 
@@ -76,8 +81,38 @@ void require(const bool condition, const char *message) {
 
 } // namespace
 
+// atempo keeps the pitch: a 440 Hz tone sped up 3× is a third as long and still 440 Hz.
+void test_tempo_stretch() {
+  constexpr int kRate = 48000;
+  constexpr double kHz = 440.0;
+  std::vector<float> tone(static_cast<std::size_t>(kRate) * 3U * 2U);
+  for (std::size_t frame = 0; frame < tone.size() / 2U; ++frame) {
+    const auto value = static_cast<float>(
+        0.5 * std::sin(2.0 * std::numbers::pi * kHz * static_cast<double>(frame) / kRate));
+    tone[frame * 2U] = value;
+    tone[frame * 2U + 1U] = value;
+  }
+  gb::media::TempoStretcher stretcher(kRate, 3.0);
+  std::vector<float> output;
+  for (std::size_t offset = 0; offset < tone.size(); offset += 2000U) // uneven pushes
+    stretcher.push(
+        tone.data() + offset,
+        static_cast<std::int64_t>(std::min<std::size_t>(2000U, tone.size() - offset) / 2U), output);
+  stretcher.finish(output);
+  const auto frames = static_cast<double>(output.size() / 2U);
+  require(std::abs(frames - kRate) < kRate * 0.02, "stretched length");
+  // Count rising zero crossings over the middle half second of the left channel.
+  std::size_t crossings{};
+  const auto begin = static_cast<std::size_t>(kRate) / 4U;
+  const auto end = begin + static_cast<std::size_t>(kRate) / 2U;
+  for (auto frame = begin + 1U; frame < end; ++frame)
+    crossings += output[(frame - 1U) * 2U] < 0.0F && output[frame * 2U] >= 0.0F ? 1U : 0U;
+  require(std::abs(static_cast<double>(crossings) - kHz / 2.0) <= 4.0, "stretched pitch");
+}
+
 int main() {
   try {
+    test_tempo_stretch();
     const auto front = solid(200, 64, 255U, 0U, 0U);
     const auto rear = solid(200, 64, 0U, 0U, 255U);
     const auto output = gb::media::reconstruct_equirectangular(front, rear, 128, 64, 8);

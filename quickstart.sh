@@ -69,8 +69,8 @@ if [[ "${check_format}" == true ]]; then
   command -v "${CLANG_FORMAT}" >/dev/null 2>&1 || missing_packages+=("${CLANG_FORMAT}")
 fi
 if ! command -v pkg-config >/dev/null 2>&1 ||
-   ! pkg-config --exists libavformat libavcodec libavutil libswscale; then
-  missing_packages+=(libavformat-dev libavcodec-dev libavutil-dev libswscale-dev)
+   ! pkg-config --exists libavformat libavcodec libavfilter libavutil libswscale; then
+  missing_packages+=(libavformat-dev libavcodec-dev libavfilter-dev libavutil-dev libswscale-dev)
 fi
 if ! pkg-config --exists sdl2 2>/dev/null; then
   missing_packages+=(libsdl2-dev)

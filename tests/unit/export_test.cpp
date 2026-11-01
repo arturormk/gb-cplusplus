@@ -462,6 +462,8 @@ fields = datetime, distance
 anchor = 0.1, 0.2
 [map]
 width = 3km
+[output]
+speed = 2.5
 )"});
   const auto written = ex::write_export_settings(s, {"test"});
   const auto again = combine({written});
@@ -469,12 +471,14 @@ width = 3km
   require(again.mode == 0 && near(again.yaw, -12.5) && again.aspect == ex::AspectRatio{4, 3} &&
               again.placement == ex::Placement::right && again.units.speed == ex::SpeedUnit::mph &&
               again.units.time_zone == "Europe/Madrid" && again.fields.size() == 2U &&
-              again.fields[1].anchor.corner == ex::Corner::free,
+              again.fields[1].anchor.corner == ex::Corner::free && near(again.output.speed, 2.5),
           "printed settings keep their values");
 
   // The example is valid.
   s = combine({ex::example_settings()});
-  require(s.map.enabled && s.map.shape == ex::MapShape::circle && s.telemetry, "example settings");
+  require(s.map.enabled && s.map.shape == ex::MapShape::circle && s.telemetry &&
+              near(s.output.speed, 1.0),
+          "example settings");
 
   // --set overrides.
   s = ex::combine_settings({source("a.ini", "schema = gb.export/1\n"),
@@ -510,6 +514,9 @@ width = 3km
   require(error_of({"schema = gb.export/1\n[text]\nfont_size = 2\n"}).find("out of range") !=
               std::string::npos,
           "out of range");
+  require(error_of({"schema = gb.export/1\n[output]\nspeed = 0.5\n"}).find("out of range") !=
+              std::string::npos,
+          "slower than real time");
   require(error_of({"schema = gb.export/1\n[field-heart]\nlabel = x\n"}).find("unknown field") !=
               std::string::npos,
           "unknown field section");

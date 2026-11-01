@@ -1,6 +1,6 @@
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GB_FFMPEG REQUIRED IMPORTED_TARGET
-  libavformat>=58 libavcodec>=58 libavutil>=56 libswscale>=5)
+  libavformat>=58 libavcodec>=58 libavfilter>=7 libavutil>=56 libswscale>=5)
 
 add_library(gb_media
   src/audio.cpp
@@ -11,6 +11,7 @@ add_library(gb_media
   src/playback.cpp
   src/position.cpp
   src/projection.cpp
+  src/tempo.cpp
   src/timeline.cpp
   src/writer.cpp)
 add_library(gb::media ALIAS gb_media)

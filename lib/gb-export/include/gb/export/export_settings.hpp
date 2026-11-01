@@ -130,7 +130,14 @@ struct OutputSettings {
   std::string encoder_preset{"medium"};
   bool audio{true};
   int audio_bitrate{192000};
+  // Playback speed of the output relative to real time (>= 1). Above 1, frames are dropped to
+  // keep the source frame rate, and the audio is time-stretched at its pitch up to
+  // kMaxAudioSpeed; faster exports have no audio track.
+  double speed{1.0};
 };
+
+inline constexpr double kMaxSpeed = 1000.0;
+inline constexpr double kMaxAudioSpeed = 4.0;
 
 struct ExportSettings {
   // [range]: positions as written (gb::media::parse_position checks them).

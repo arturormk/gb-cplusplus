@@ -28,6 +28,9 @@ First public release: a minimum usable product for GoPro MAX 2025 recordings on 
   text colours and an outline; a fixed-width map, square or round, with the route over the whole
   range; ranges across chapters; H.264/HEVC with AAC in MP4 or MKV, with no source metadata; map
   tiles fetched before rendering up to `--max-tiles`. Capture mode gains a top panel.
+- `gb-render`: `[output] speed` exports faster than real time (1–1000×) by dropping frames before
+  they are rendered or encoded, with the audio time-stretched at its pitch up to 4× and no audio
+  track above that. libavfilter is now a build dependency.
 - `gb-inspect`: ISO BMFF container and content-based JPEG inspection.
 - `gb-metadata`: GPMF metadata inventory, sample decoding, and raw payload export.
 - `gb-telemetry`: timestamped GPS export to JSON, CSV, GPX, and GeoJSON.
