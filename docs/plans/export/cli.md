@@ -3,7 +3,8 @@
 Video export is a command-line tool, `gb-render` (the name BLUEPRINT gives the headless renderer).
 What is implemented is listed in [`tools/gb-render/README.md`](../../../tools/gb-render/README.md);
 options it does not list (`--still`, `--contact-sheet`, `--show-layout`, `--save-settings`,
-`--prepare-tiles`, `--map-tiles`, `--manifest`, `--json`, `--map-scale auto`) are still planned.
+`--manifest`, `--json`) are still planned. Prepared tile directories (`--prepare-tiles`,
+`--map-tiles`) are not planned ([map tiles](#map-tiles)).
 The map scale option is `--map-width DISTANCE`, and overlays are placed with `--placement`.
 The moment, the view and the capture rectangle are chosen in `gb-player`'s
 [Capture mode](capture.md), which also captures stills. Everything else is written down in
@@ -28,9 +29,7 @@ settings files and on the command line, so an export can always be repeated exac
 4. **Check the whole range at once.** `--contact-sheet 12` renders 12 frames spread evenly over
    the range into one image, each labelled with its position. This is how to check that an
    automatic map scale behaves well across a ride, without rendering video.
-5. **Fetch the map tiles**, for a long export with a map: `--prepare-tiles DIR`, then
-   `--map-tiles DIR` in the commands below ([map tiles](#map-tiles)).
-6. **Export a short test segment.**
+5. **Export a short test segment.**
 
    ```sh
    gb-render GH010073.MP4 --settings framing.ini --settings ride.ini --duration 10 --draft -o test.mp4
@@ -39,7 +38,7 @@ settings files and on the command line, so an export can always be repeated exac
    `--draft` renders at a quarter of the output area with the fastest encoder preset. Because
    overlay sizes are fractions of the frame height ([settings](settings.md#units-and-sizes)), the
    draft has the same layout as the full export.
-7. **Export.** The same command without `--draft`, with the full range. `--dry-run` first reports
+6. **Export.** The same command without `--draft`, with the full range. `--dry-run` first reports
    what would be done (snapped range, frame count, output size, map tiles to fetch, warnings)
    without writing anything.
 
@@ -61,7 +60,7 @@ overlay layout can live in one file and output settings in another (`--settings 
 | View | `--view MODE` (the `gb-player` names), `--yaw`, `--pitch`, `--roll`, `--fov`, and for flat views `--zoom` and `--pan X,Y`. `--canvas ASPECT`: the aspect ratio of the canvas the crop refers to. |
 | Frame | `--aspect 16:9` (also `4:3`, `1:1`, `9:16`, `W:H`), `--crop X,Y,W,H` in canvas units (the whole canvas by default), `--width W` (height from the aspect ratio) or `--size WxH` (must match it). |
 | Output | `-o FILE`. The container comes from the extension (`.mp4`, `.mkv`, `.jpg`, `.png`). `--codec h264` or `hevc`, `--crf N`, `--encoder-preset NAME`, `--no-audio`, `--audio-bitrate BPS`, `--jpeg-quality Q`, `--gps-exif`, `--overwrite`. |
-| Map | `--map-scale 1.2km` or `--map-scale auto`, `--map-activity walk\|hike\|bicycle\|car\|flight`, and the network options `gb-player` has: `--map-provider`, `--map-no-network`, `--map-cache`. Tile directories: `--prepare-tiles DIR` (fetch and stop), `--map-tiles DIR` (offline export), `--allow-missing-tiles`. Plus `--max-tiles N` and `--require-tiles`. |
+| Map | `--map-scale 1.2km` or `--map-scale auto`, `--map-activity walk\|hike\|bicycle\|car\|flight`, and the network options `gb-player` has: `--map-provider`, `--map-no-network`, `--map-cache`. Plus `--max-tiles N` and `--require-tiles`. |
 | Anything else | `--set SECTION.KEY=VALUE` overrides one setting in the file, for example `--set map.opacity=0.7`. |
 | Checking | `--dry-run`, `--draft`, `--show-layout`, `--print-settings` (prints the combined settings file and exits), `--manifest FILE` (per-frame record, see [pipeline](pipeline.md#timing)), `--json` (machine-readable report on stdout). |
 | Standard | `--help`, `--version`, and the exit codes and stderr diagnostics of the other tools. |
@@ -133,60 +132,25 @@ player does. Nothing is interpolated.
 
 ## Map tiles
 
-Map tiles can be fetched **as a separate step before the export**. This is the recommended way
-for a long export with an automatic map scale, such as a car trip, which needs tiles at several
-zoom levels along the whole route:
-
-```sh
-# 1. Fetch the tiles the export will draw into a directory. Run it again to resume.
-gb-render GH010073.MP4 --settings framing.ini --settings car.ini --prepare-tiles tiles/trip
-
-# 2. Export from that directory only. No network access at all.
-gb-render GH010073.MP4 --settings framing.ini --settings car.ini --map-tiles tiles/trip -o trip.mp4
-```
-
-**`--prepare-tiles DIR`** computes the export exactly as far as the map is concerned: range,
-positions, scale curve, map size. It works out every tile the map overlay will draw, and fetches
-the ones not already in `DIR`. Then it stops, writing no picture or video.
-
-- **Fetching:** tiles come through the same fetcher as `gb-player` (two requests at a time,
-  conditional revalidation, back-off), with progress on stderr. Ctrl+C stops it, and running it
-  again fetches only what is still missing.
-- **Size limit:** `--max-tiles` (default 300) applies here. Above it, the step stops before any
-  request and says how many tiles it would need.
-- **Re-runs:** a tile already in the user's tile cache is copied rather than fetched. Running the
-  step again after changing the settings fetches only the difference.
-- **Contents of `DIR`:** the tiles, in the tile cache's layout (`<provider>/<z>/<x>/<y>.png` with
-  its `.meta` sidecar), and a `tiles.ini`. That file names the provider, its attribution, the
-  number of tiles, when they were fetched, and the `gb-render` version.
-- **Resolution:** the tile set does not depend on the output resolution, because tiles are drawn
-  at a scale tied to the frame height ([pipeline](pipeline.md#map-scale)). So a draft, the
-  stills and the 4K export all use the same directory.
-
-**`--map-tiles DIR`** makes the export use `DIR` and nothing else. It never touches the network
-or the user's tile cache.
-
-- **Check before rendering:** the export first works out its tile set and compares it with `DIR`.
-  Any missing tile is an error, given with the count and the `--prepare-tiles` command that would
-  fetch it. This happens, for example, after a change to the map scale or range. Use
-  `--allow-missing-tiles` to export anyway, with missing tiles drawn as a hatched placeholder.
-- **Provider and attribution:** the provider must match the one in `tiles.ini`. The attribution
-  drawn is the one recorded there.
-- **Old tiles:** stale tiles are used as they are. They are only being reproduced, and a
-  directory prepared once gives the same map every time it is used.
-
-A tile directory is ordinary files. It can be prepared on one machine and used on another, for
-example a headless machine with no network. A relative `DIR` given in a settings file
-(`[map] tiles = tiles/trip`) is taken relative to that file.
-
-**Without a tile directory**, an export fetches its tiles itself, as a first stage before
-rendering. It uses the same rules and limit, and caches them in the user's tile cache, like
-`gb-player` when it shows the map. That is convenient for stills and short segments.
+An export fetches its map tiles itself, as a first stage before rendering. It uses the same
+rules and limit, and caches them in the user's tile cache, like `gb-player` when it shows the map.
 `--map-no-network` makes it cache-only instead, with missing tiles drawn as placeholders.
 `--require-tiles` makes any missing tile an error.
 
-`--dry-run` reports the tile set in every case: how many tiles, at which zoom levels, how many
-are already in the directory or cache, and how many would be fetched.
+To fetch the tiles once and render offline afterwards, run the export (or a `--draft` of it) once
+with the network, then use `--map-no-network --require-tiles`: the tiles stay in the cache, which
+has no eviction.
+
+**Not planned: prepared tile directories** (decided 2026-11-01). Earlier versions of this plan had
+`--prepare-tiles DIR` (fetch the tiles an export draws into a directory and stop) and
+`--map-tiles DIR` (export from that directory only, with a `tiles.ini` recording the provider and
+`--allow-missing-tiles`). The user's tile cache already gives most of that: resumable fetching,
+fetching only the difference after a settings change, and offline rendering. What a directory
+would add, a frozen map that is never revalidated and a set of tiles to move to another machine,
+belongs with future work on supporting other map providers and offline map sources.
+
+`--dry-run` reports the tile set: how many tiles, at which zoom levels, how many
+are already in the cache, and how many would be fetched.
 
 ## Progress and output
 

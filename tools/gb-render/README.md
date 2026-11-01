@@ -161,7 +161,11 @@ Exit status: 0 done, 1 failure, 2 usage or settings error, 130 cancelled.
 
 ## Not yet
 
-Stills and contact sheets (`--still`, `--contact-sheet`), an automatic map scale, prepared tile
-directories (`--prepare-tiles`, `--map-tiles`), speed and height graphs, `--show-layout`,
-`--save-settings`, `--manifest` and `--json` are planned in
+Stills and contact sheets (`--still`, `--contact-sheet`), speed and height graphs,
+`--show-layout`, `--save-settings`, `--manifest` and `--json` are planned in
 [`docs/plans/export/phases.md`](../../docs/plans/export/phases.md).
+
+Prepared tile directories (`--prepare-tiles`, `--map-tiles`) are not planned. Tiles fetched by an
+export stay in the tile cache, so after one run with the network, `--map-no-network
+--require-tiles` renders the same export offline. Fetching tiles ahead of time may come back with
+support for other map providers.

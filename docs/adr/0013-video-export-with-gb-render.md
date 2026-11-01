@@ -71,8 +71,11 @@ ground width, an optional track over the whole range and an optional circular sh
 - An export is reproducible from its settings: the overlays, the course arrow's smoothing (over
   media time) and the map centre depend only on the frame sequence.
 - A long export with a narrow map can need more tiles than the cap. The remedies are a wider map,
-  a shorter range, an explicit `--max-tiles`, or viewing the route in `gb-player` first. Prepared
-  tile directories (`--prepare-tiles`, `--map-tiles`) remain planned.
+  a shorter range, an explicit `--max-tiles`, or viewing the route in `gb-player` first.
+- Prepared tile directories (`--prepare-tiles`, `--map-tiles`) are not done (amendment,
+  2026-11-01). The tile cache already makes a re-run fetch only the missing tiles, and
+  `--map-no-network --require-tiles` renders offline from it. Fetching ahead of time, frozen tile
+  sets and moving tiles between machines are left to future work on map providers.
 - The OSM tile usage policy discourages bulk downloading. A capped fetch of the tiles one export
   shows is a judgement that this is interactive-scale use; if the policy or the provider says
   otherwise, `--map-no-network` and other providers remain, and the default can change.
@@ -82,5 +85,5 @@ ground width, an optional track over the whole range and an optional circular sh
   chapters are read in parallel.
 - Capture mode's panel text and `gb-render`'s panel text are drawn by different painters, so a
   capture and an export of the same panel settings can differ in the text.
-- Not yet done: stills and contact sheets in `gb-render`, the automatic map scale, prepared tile
-  directories, graphs, `--show-layout`, `--save-settings`, `--manifest`, `--json`.
+- Not yet done: stills and contact sheets in `gb-render`, graphs, `--show-layout`,
+  `--save-settings`, `--manifest`, `--json`.

@@ -81,7 +81,7 @@ and `--show-layout` remain.
 the tile stage with `--max-tiles`, `--map-no-network` and `--require-tiles`. **Automatic scale
 done (2026-11-01)**: `[map] width = auto` with `ahead`, `closest` and `widest`
 (`gb::geo::ScaleCurve`), its range in `--dry-run`. Activity presets, a response setting, the scale
-bar, `--contact-sheet` and tile directories remain.
+bar and `--contact-sheet` remain. Tile directories are dropped (2026-11-01, see below).
 
 - Extract `MapPainter` from `MapView`, with no visible change. Add the scale bar and
   `AttributionPainter`. (Done early for Capture mode's side panel: `paint_map` and
@@ -89,11 +89,11 @@ bar, `--contact-sheet` and tile directories remain.
 - Ground distance ↔ zoom conversion in `gb_geo`. The fixed scale, then the automatic scale curve
   in `gb_export`, with the activity presets, its summary in `--dry-run`, and `--contact-sheet`.
 - The tile stage: compute the tiles drawn, fetch missing ones through `TileFetcher` before
-  rendering, `--max-tiles`, `--map-no-network` with placeholders, `--require-tiles`. Tile
-  directories: `--prepare-tiles DIR` (resumable, copies from the user's cache, writes
-  `tiles.ini`) and `--map-tiles DIR` (offline, checked before rendering,
-  `--allow-missing-tiles`). ADR amending
-  ADR-0009 and BLUEPRINT §9.
+  rendering, `--max-tiles`, `--map-no-network` with placeholders, `--require-tiles`. ADR amending
+  ADR-0009 and BLUEPRINT §9. Tile directories (`--prepare-tiles DIR`, `--map-tiles DIR`) are
+  not planned. The user's tile cache already makes a re-run fetch only what is missing, and
+  `--map-no-network --require-tiles` renders offline from it; fetching ahead into a directory
+  is left to future work on map providers ([cli](cli.md#map-tiles)).
 - Tune the activity presets on real recordings: the three-chapter MP4 in `__stuff/export/`, and
   others as they are added. Record the values chosen and why in `research/findings/`.
 
@@ -130,7 +130,7 @@ tree.
 | Chapters | Synthetic chapter files named `GSnnmmmm.360`: continuous PTS across the boundary, telemetry rebased, a chapter with different geometry rejected. |
 | Overlays | Painter output at two resolutions gives the same layout (rectangles scale exactly). Missing data draws "—", not zero. Missing tiles draw the placeholder and are counted. |
 | Map scale | Ground distance ↔ zoom at several latitudes. On synthetic routes: a stop zooms in to the closest limit, a fast straight run zooms out to the widest, a U-turn inside the look-ahead keeps both legs in view at every frame, zoom-in never exceeds the response rate, invalid fixes ahead are ignored, and the curve is identical on recomputation. |
-| Tile stage | The computed tile set for fixed and automatic scales on a synthetic route, with no margin or extra zoom. Against a local test server (as `gb_tiles_tests` does): only uncached tiles are requested, never more than two at a time, and a failure gives a placeholder, not a stalled export. `--prepare-tiles` resumes after an interruption, fetches only the difference after a settings change, and gives the same set at two output resolutions. `--map-tiles` makes no network request (the test server sees none), reports missing tiles before rendering, and refuses a directory from another provider. |
+| Tile stage | The computed tile set for fixed and automatic scales on a synthetic route, with no margin or extra zoom. Against a local test server (as `gb_tiles_tests` does): only uncached tiles are requested, never more than two at a time, and a failure gives a placeholder, not a stalled export. The tile set is the same at two output resolutions. |
 | EXIF | Written GPS IFD parses back to the same values. No EXIF when the option is off. Disabled with no valid fix. |
 | Gate | `gb-render --manifest` on a fixture with synthetic GPS: each frame's record index equals `nearest_point` at its source PTS. On the private samples, the same check plus a visual comparison with the player at chosen timestamps. |
 | CLI | `gb-render` on the fixture: a still, a contact sheet, a short draft clip, a dry run, and the error paths (bad position, existing output without `--overwrite`, `--max-tiles` exceeded, Ctrl+C leaving no partial file). |
@@ -146,8 +146,7 @@ tree.
 - **Export map scale**: always centred, scale as ground distance, fixed or automatic from a
   look-ahead curve computed in advance, with limits.
 - **Map tiles in export**: fetch exactly the tiles drawn, before rendering, through the
-  rate-limited fetcher, up to a limit, optionally as a separate step into a tile directory that
-  the export then uses offline; cache-only on request; placeholders; mandatory
+  rate-limited fetcher, up to a limit; cache-only on request; placeholders; mandatory
   attribution. Amends ADR-0009 and the BLUEPRINT §9 rule against fetching tiles for video
   rendering.
 - **Recording timeline**: how chapters are joined, from the spike 3 measurements.
@@ -163,8 +162,9 @@ tree.
 - **Resolution** is an option and a setting, always at the configured aspect ratio.
 - **Codec**: H.264 or HEVC, chosen with `--codec`.
 - **Map tiles** are fetched and cached when not cached already, within the limits in
-  [pipeline](pipeline.md#map-tiles-in-export). For long exports they can be fetched first into a
-  directory (`--prepare-tiles`), which the export then uses offline (`--map-tiles`).
+  [pipeline](pipeline.md#map-tiles-in-export). Fetching first into a tile directory
+  (`--prepare-tiles`, `--map-tiles`) was planned and then dropped (2026-11-01): the cache covers
+  it, and other map providers are future work.
 - **Map scale** is fixed or automatic (look-ahead with closest and widest limits), and the map
   always tracks the current position.
 - **Chapter positions** are `c2:00:05:31.400`, readable from `gb-player`.

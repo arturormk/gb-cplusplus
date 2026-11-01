@@ -3,8 +3,8 @@
 Status: In progress (2026-10-31). Capture mode in `gb-player`, with the shared renderer it needs,
 is implemented (ADR-0012). `gb-render` exports video with text and map overlays, over the picture
 or on a panel, across chapters (ADR-0013, [`tools/gb-render`](../../../tools/gb-render/README.md));
-with a fixed or automatic map scale; stills, activity presets, prepared tile directories and graphs
-are not done yet.
+with a fixed or automatic map scale; stills, activity presets and graphs are not done yet.
+Prepared tile directories are not planned.
 
 This plan covers exporting stills and videos from GoPro recordings with **`gb-render`**, a
 command-line tool, which is also the headless renderer that BLUEPRINT M6 requires, and with a
@@ -51,7 +51,7 @@ record under `docs/adr/` when the work is done.
 | 6 | Frames are rendered **offscreen on the GPU with the player's shader**, moved into a renderer that `gb-player` and `gb-render` share. The CPU projection stays as the reference and becomes an automated test oracle. (ADR) | [pipeline](pipeline.md#video-renderer) |
 | 7 | Overlays are drawn with **QPainter by painters shared** with the player's map and graph. | [pipeline](pipeline.md#overlay-painters) |
 | 8 | The map **always tracks the current position**, north up. Its scale is a ground distance, **fixed or automatic**: automatic keeps a configurable look-ahead of route in view, within closest and widest limits, from a curve computed in advance, with activity presets. (ADR) | [cli](cli.md#the-map-scale), [pipeline](pipeline.md#map-scale) |
-| 9 | Export **fetches and caches the map tiles it needs**: exactly the tiles it draws, before rendering, through the player's rate-limited fetcher, up to a tile limit. For long exports they can be **fetched first into a tile directory** (`--prepare-tiles DIR`), and the export then runs **offline** from it (`--map-tiles DIR`). `--map-no-network` makes it cache-only, with missing tiles marked. Attribution is always drawn. (ADR, amends ADR-0009 and BLUEPRINT §9) | [pipeline](pipeline.md#map-tiles-in-export) |
+| 9 | Export **fetches and caches the map tiles it needs**: exactly the tiles it draws, before rendering, through the player's rate-limited fetcher, up to a tile limit. Prepared tile directories (`--prepare-tiles`, `--map-tiles`) are not planned (2026-11-01); a run with the network fills the cache, and later runs can be offline. `--map-no-network` makes it cache-only, with missing tiles marked. Attribution is always drawn. (ADR, amends ADR-0009 and BLUEPRINT §9) | [pipeline](pipeline.md#map-tiles-in-export) |
 | 10 | **One output frame per source frame**, at the source's exact frame rate and with its PTS rebased to the start of the range. No frame-rate conversion in the first version. | [pipeline](pipeline.md#timing) |
 | 11 | A range over several chapters is read through a **sequence reader** that rebases each chapter's video, audio and telemetry onto one recording timeline. Chapters were measured to be exactly contiguous on a three-chapter MP4 recording. (ADR) | [pipeline](pipeline.md#chapter-sequences) |
 | 12 | GPS EXIF in stills is **off by default** and taken only from a recorded fix, never interpolated. Exported videos carry **no location metadata** of any kind. (ADR) | [pipeline](pipeline.md#still-writer) |

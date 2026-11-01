@@ -203,31 +203,25 @@ of BLUEPRINT explicitly.
    levels along the way, so it needs more tiles than a fixed one. Because tiles are drawn at a
    scale tied to the frame height, the set is the same at every output resolution.
 2. **Fetched in a separate stage.** The tile stage runs before rendering, never inside the frame
-   loop, which keeps the render deterministic. It can run on its own with
-   `--prepare-tiles DIR`, which fills a tile directory and stops
-   ([cli](cli.md#map-tiles)). An export with `--map-tiles DIR` then runs with no network at all.
-   Without a directory, the same stage runs at the start of the export, against the user's tile
-   cache.
-3. **Cache first.** Tiles already present are used. When fetching into the user's cache, stale
-   tiles are revalidated with a conditional request, as in the player. A prepared directory is
-   used as it is, stale or not, so it reproduces the same map every time.
+   loop, which keeps the render deterministic. It runs at the start of the export, against the
+   user's tile cache. Prepared tile directories (`--prepare-tiles DIR`, `--map-tiles DIR`) are
+   not planned ([cli](cli.md#map-tiles)).
+3. **Cache first.** Tiles already present are used. Stale tiles are revalidated with a
+   conditional request, as in the player.
 4. **Through the same `TileFetcher`**, so the same rules apply: the project User-Agent, at most
    two requests at a time, HTTP caching rules, and the failure back-off. There is no separate,
-   faster download path. A tile directory uses the `gb_geo` `TileCache` layout, so the fetcher
-   writes into it unchanged, and `tiles.ini` records the provider and its attribution.
+   faster download path.
 5. **A cap.** `--dry-run` reports how many tiles are present and how many would be fetched.
    Above `--max-tiles` (proposed default: 300), the tile stage stops before any request, with the
    count and the suggestion of a wider closest limit or a smaller map. A fixed 1 km-wide map
    along a 30 km route needs very roughly 200 tiles.
-6. **Missing tiles.** With `--map-tiles`, a tile missing from the directory is an error before
-   rendering starts, unless `--allow-missing-tiles` is given. With `--map-no-network`, or a
-   failed fetch, a missing tile is drawn as a visible hatched placeholder, never left blank or
-   filled from another zoom without saying so, and the count is reported. `--require-tiles`
+6. **Missing tiles.** With `--map-no-network`, or a failed fetch, a missing tile is drawn as a
+   visible hatched placeholder, never left blank or filled from another zoom without saying so,
+   and the count is reported. `--require-tiles`
    makes that an error instead. Fetching is on by default, as in `gb-player`. BLUEPRINT §12 asks
    analysis tools to avoid the network by default, and `gb-render` is not an analysis tool. The
    ADR records this.
-7. **Attribution** is always drawn when the map is on, from the provider, or from `tiles.ini`
-   for a tile directory.
+7. **Attribution** is always drawn when the map is on, from the provider.
 
 Only tile addresses are sent, as when viewing the map, never the recording or its track. The
 tile requests do reveal the route's area to the tile server, and `--dry-run` and the report say
