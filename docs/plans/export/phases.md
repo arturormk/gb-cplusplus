@@ -81,22 +81,24 @@ remain. `--show-layout` is not planned (2026-11-01).
 **Fixed scale done (2026-10-31)** (ADR-0013): `[map] width`, `track`, `shape = square | circle`,
 the tile stage with `--max-tiles`, `--map-no-network` and `--require-tiles`. **Automatic scale
 done (2026-11-01)**: `[map] width = auto` with `ahead`, `closest` and `widest`
-(`gb::geo::ScaleCurve`), its range in `--dry-run`. Activity presets, a response setting, the scale
-bar remain. `--contact-sheet` and tile directories are dropped (2026-11-01, see below).
+(`gb::geo::ScaleCurve`), its range in `--dry-run`. Phase 5 is complete for v1.0. Activity
+presets, a response setting, the scale bar, `--contact-sheet` and tile directories are not
+planned (2026-11-01): the presets would depend on speed, terrain, distance and map detail, so
+`ahead`, `closest` and `widest` are set by hand; the fixed zoom rates work on real recordings so
+far, and a setting waits for a case that needs it; and the moving map with the speed text shows
+scale well enough for an inset.
 
-- Extract `MapPainter` from `MapView`, with no visible change. Add the scale bar and
-  `AttributionPainter`. (Done early for Capture mode's side panel: `paint_map` and
-  `paint_attribution` in `gb_render`, which the map pane now draws with; no scale bar yet.)
-- Ground distance ↔ zoom conversion in `gb_geo`. The fixed scale, then the automatic scale curve
-  in `gb_export`, with the activity presets and its summary in `--dry-run`.
+- Extract `MapPainter` from `MapView`, with no visible change, and `AttributionPainter`. (Done
+  early for Capture mode's side panel: `paint_map` and `paint_attribution` in `gb_render`, which
+  the map pane now draws with.)
+- Ground distance ↔ zoom conversion in `gb_geo`. The fixed scale, then the automatic scale curve,
+  with its summary in `--dry-run`.
 - The tile stage: compute the tiles drawn, fetch missing ones through `TileFetcher` before
   rendering, `--max-tiles`, `--map-no-network` with placeholders, `--require-tiles`. ADR amending
   ADR-0009 and BLUEPRINT §9. Tile directories (`--prepare-tiles DIR`, `--map-tiles DIR`) are
   not planned. The user's tile cache already makes a re-run fetch only what is missing, and
   `--map-no-network --require-tiles` renders offline from it; fetching ahead into a directory
   is left to future work on map providers ([cli](cli.md#map-tiles)).
-- Tune the activity presets on real recordings: the three-chapter MP4 in `__stuff/export/`, and
-  others as they are added. Record the values chosen and why in `research/findings/`.
 
 ## Phase 6: ranges across chapters
 
@@ -130,7 +132,7 @@ tree.
 | Range snapping | In and out points between frames and inside a GOP give the documented first and last frames. |
 | Chapters | Synthetic chapter files named `GSnnmmmm.360`: continuous PTS across the boundary, telemetry rebased, a chapter with different geometry rejected. |
 | Overlays | Painter output at two resolutions gives the same layout (rectangles scale exactly). Missing data draws "—", not zero. Missing tiles draw the placeholder and are counted. |
-| Map scale | Ground distance ↔ zoom at several latitudes. On synthetic routes: a stop zooms in to the closest limit, a fast straight run zooms out to the widest, a U-turn inside the look-ahead keeps both legs in view at every frame, zoom-in never exceeds the response rate, invalid fixes ahead are ignored, and the curve is identical on recomputation. |
+| Map scale | Ground distance ↔ zoom at several latitudes. On synthetic routes: a stop zooms in to the closest limit, a fast straight run zooms out to the widest, a U-turn inside the look-ahead keeps both legs in view at every frame, zoom-in never exceeds the fixed zoom-in rate, invalid fixes ahead are ignored, and the curve is identical on recomputation. |
 | Tile stage | The computed tile set for fixed and automatic scales on a synthetic route, with no margin or extra zoom. Against a local test server (as `gb_tiles_tests` does): only uncached tiles are requested, never more than two at a time, and a failure gives a placeholder, not a stalled export. The tile set is the same at two output resolutions. |
 | EXIF | Written GPS IFD parses back to the same values. No EXIF when the option is off. Disabled with no valid fix. |
 | Gate | `gb-render --manifest` on a fixture with synthetic GPS: each frame's record index equals `nearest_point` at its source PTS. On the private samples, the same check plus a visual comparison with the player at chosen timestamps. |

@@ -114,7 +114,7 @@ drawing moves into plain painter classes that take a `QPainter`, a target rectan
 a scene description:
 
 - `MapPainter`: tiles, route runs (travelled and remaining), current marker and course arrow,
-  scale bar, attribution. Its scene is center, zoom, route, current record and the tile source. This is
+  attribution. Its scene is center, zoom, route, current record and the tile source. This is
   BLUEPRINT §9's reusable map scene: "UI and offscreen output should interpret this same scene".
 - `ProfilePainter`: height or speed against time, with a cursor and the current-record dot. For
   export, its time window is the export range.
@@ -178,7 +178,8 @@ records only:
    ahead, the requirement is the closest limit.
 2. Clamp to the closest and widest limits.
 3. Smooth in log scale, in media time, with two rules: the map is never narrower than required
-   (the route ahead stays in view), and it zooms in no faster than the response setting allows.
+   (the route ahead stays in view), and it zooms in no faster than a fixed rate
+   (`gb::geo::kScaleZoomInRate`).
    Because the whole curve is known, zooming out starts ahead of the moment it is needed instead
    of jumping at it. A small dead band stops the map from breathing with GPS noise.
 4. Where the current record has no valid fix, hold the last value.

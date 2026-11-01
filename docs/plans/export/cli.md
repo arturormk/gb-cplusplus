@@ -49,7 +49,7 @@ overlay layout can live in one file and output settings in another (`--settings 
 | View | `--view MODE` (the `gb-player` names), `--yaw`, `--pitch`, `--roll`, `--fov`, and for flat views `--zoom` and `--pan X,Y`. `--canvas ASPECT`: the aspect ratio of the canvas the crop refers to. |
 | Frame | `--aspect 16:9` (also `4:3`, `1:1`, `9:16`, `W:H`), `--crop X,Y,W,H` in canvas units (the whole canvas by default), `--width W` (height from the aspect ratio) or `--size WxH` (must match it). |
 | Output | `-o FILE`. The container comes from the extension (`.mp4`, `.mkv`). `--codec h264` or `hevc`, `--crf N`, `--encoder-preset NAME`, `--no-audio`, `--audio-bitrate BPS`, `--overwrite`. |
-| Map | `--map-scale 1.2km` or `--map-scale auto`, `--map-activity walk\|hike\|bicycle\|car\|flight`, and the network options `gb-player` has: `--map-provider`, `--map-no-network`, `--map-cache`. Plus `--max-tiles N` and `--require-tiles`. |
+| Map | `--map-width 1.2km` or `--map-width auto`, and the network options `gb-player` has: `--map-provider`, `--map-no-network`, `--map-cache`. Plus `--max-tiles N` and `--require-tiles`. |
 | Anything else | `--set SECTION.KEY=VALUE` overrides one setting in the file, for example `--set map.opacity=0.7`. |
 | Checking | `--dry-run`, `--draft`, `--print-settings` (prints the combined settings file and exits), `--manifest FILE` (per-frame record, see [pipeline](pipeline.md#timing)), `--json` (machine-readable report on stdout). |
 | Standard | `--help`, `--version`, and the exit codes and stderr diagnostics of the other tools. |
@@ -93,27 +93,24 @@ at that time.
 
 The map always tracks the current position: centred on the recorded position of the frame, north
 up. What is chosen is how much ground it shows, which suits a walk very differently from a flight.
-Scale is the **ground distance across the map** (`1.2km`, `800m`), drawn as a scale bar. It does
-not depend on the overlay size or the output resolution.
+Scale is the **ground distance across the map** (`1.2km`, `800m`). It does not depend on the
+overlay size or the output resolution. No scale bar is drawn: the moving map, its detail and the
+speed text show the scale well enough for an inset.
 
-- **Fixed:** `scale = 1.2km`.
+- **Fixed:** `width = 1.2km`.
 - **Automatic:** at each frame, the map shows the recorded route for a **look-ahead time** into
   the future (for example 30 s), plus a margin. Driving into a roundabout, the map widens as the
   exits come into the look-ahead. Stopping while walking the dog, the route ahead shrinks to a
   point and the map closes in. **Closest and widest limits** keep it from zooming into a single
-  building or out to a continent. A **response** time sets how quickly it zooms back in. It
-  zooms out in time, because the whole curve is computed before rendering
+  building or out to a continent (`ahead`, `closest`, `widest`). It zooms back in slowly, at a
+  fixed rate, and zooms out in time, because the whole curve is computed before rendering
   ([pipeline](pipeline.md#map-scale)).
 
-**Activity presets** give starting values. They are guesses until tuned on real recordings:
-
-| Preset | Look-ahead | Closest | Widest |
-|---|---:|---:|---:|
-| Walk | 60 s | 150 m | 1 km |
-| Hike | 120 s | 300 m | 3 km |
-| Bicycle | 45 s | 400 m | 5 km |
-| Car | 30 s | 500 m | 15 km |
-| Flight | 120 s | 5 km | 200 km |
+**Not planned** (decided 2026-11-01): **activity presets** (`walk`, `hike`, `bicycle`, `car`,
+`flight` with starting values for the three settings), because good values depend on the speed,
+the terrain, the total distance and the map detail, not on the activity alone; a **response**
+setting for the zoom-in rate, until a real recording shows the fixed rate does not work; and the
+**scale bar**.
 
 `--dry-run` reports the automatic scale's range over the export and the times of its widest and
 closest points. A `--draft` export, with `[output] speed` above 1 for a long range, shows it.

@@ -90,4 +90,8 @@ ground width, an optional track over the whole range and an optional circular sh
   Capture mode writes stills.
 - `--save-settings` is not done (amendment, 2026-11-01): `--print-settings > FILE` writes the
   same combined settings.
+- Map activity presets, a zoom-in response setting and a scale bar are not done (amendment,
+  2026-11-01). Good look-ahead and limits depend on speed, terrain, distance and map detail, so
+  they are set by hand; the fixed zoom rates suit the recordings tried so far; and the moving map
+  with the speed text shows scale well enough for an inset.
 - Not yet done: graphs, `--manifest`, `--json`.
