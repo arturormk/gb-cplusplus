@@ -50,8 +50,11 @@ Plan: [`plans/lens-modes.md`](plans/lens-modes.md).
 
 ### Packaging and release
 
-- [ ] `.deb` and `.rpm` packages from the `release` workflow for even minors (ADR-0010 §7, the
-      placeholder in `.github/workflows/release.yml`).
+- [x] `.deb` and `.rpm` packages from the `release` workflow for even minors (ADR-0010 §7):
+      a draft release with both packages and `SHA256SUMS`, published by hand. `quickstart.sh`
+      builds and installs them locally.
+- [ ] Review the first draft (`v1.0`): install the `.deb` on Ubuntu and the `.rpm` on Fedora
+      before publishing it.
 - [ ] Better README screenshots: a MAX `.360` in a spherical view instead of the flat MP4, and a
       Capture mode or `gb-render` frame.
 - [ ] `VERSION` to `1.0`, a 1.0 section in `CHANGELOG.md`, tag `v1.0`.

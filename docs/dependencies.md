@@ -64,7 +64,10 @@ the selected builds.
 
 ## FFmpeg review
 
-The implementation is compiled and tested against Ubuntu 22.04 FFmpeg 4.4.2. It uses only public
+The implementation is compiled and tested against Ubuntu 22.04 FFmpeg 4.4.2. Release RPMs are
+also built and tested on Fedora against `ffmpeg-free` (libavcodec 63), whose API differences are
+handled by `LIBAVUTIL_VERSION_INT` checks; that package has no H.264/HEVC encoders, so `gb-render`
+exports on Fedora need FFmpeg from RPM Fusion. It uses only public
 libavformat/libavcodec/libavfilter/libavutil/libswscale APIs (libavfilter only for the `atempo`
 audio time stretch of faster-than-real-time exports) and the packaged PNG/HEVC/MPEG-4 decoders or
 encoder exercised by tests and private validation. The 2024 `gopromax_opencl` proposal was

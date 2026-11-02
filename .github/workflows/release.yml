@@ -5,11 +5,14 @@ on:
     tags: ['v*']
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  release:
+  version:
     runs-on: ubuntu-22.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      release: ${{ steps.version.outputs.release }}
     steps:
       # actions/checkout v7.0.1; immutable upstream commit.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -17,22 +20,35 @@ jobs:
           # Full history: odd-minor versions count commits (ADR-0010).
           fetch-depth: 0
       - name: Check tag against VERSION
+        id: version
         run: |
           version="$(cmake -P cmake/GbVersion.cmake)"
           if [[ "${GITHUB_REF_NAME}" != "v${version}" ]]; then
             echo "::error::Tag ${GITHUB_REF_NAME} does not match the derived version v${version}"
             exit 1
           fi
-          echo "GB_VERSION=${version}" >> "${GITHUB_ENV}"
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
           # Only even minors are releases; odd-minor tags just mark development versions.
           minor="$(cut -d. -f2 <<< "${version}")"
           if (( minor % 2 == 0 )); then
-            echo "GB_RELEASE=true" >> "${GITHUB_ENV}"
+            echo "release=true" >> "${GITHUB_OUTPUT}"
           else
+            echo "release=false" >> "${GITHUB_OUTPUT}"
             echo "::notice::v${version} is a development version; no release is published"
           fi
+
+  # Debian/Ubuntu package, built on the oldest supported Ubuntu so its library versions are the
+  # minimum ones.
+  deb:
+    needs: version
+    if: needs.version.outputs.release == 'true'
+    runs-on: ubuntu-22.04
+    steps:
+      # actions/checkout v7.0.1; immutable upstream commit.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
       - name: Install dependencies
-        if: env.GB_RELEASE == 'true'
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
@@ -41,21 +57,103 @@ jobs:
             qml6-module-qtqml qml6-module-qtqml-models qml6-module-qtqml-workerscript \
             qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts \
             qml6-module-qtquick-nativestyle qml6-module-qtquick-templates \
-            qml6-module-qtquick-window libsdl2-dev
+            qml6-module-qtquick-window libsdl2-dev dpkg-dev
       - name: Configure
-        if: env.GB_RELEASE == 'true'
         run: cmake --preset dev -DGB_WARNINGS_AS_ERRORS=ON
       - name: Build
-        if: env.GB_RELEASE == 'true'
         run: cmake --build --preset dev
       - name: Test
-        if: env.GB_RELEASE == 'true'
         run: ctest --preset dev
-      # .deb/.rpm packages will be attached here once packaging lands (ADR-0010).
-      - name: Publish GitHub release
-        if: env.GB_RELEASE == 'true'
+      - name: Build release
+        run: |
+          cmake --preset release -DGB_WARNINGS_AS_ERRORS=ON
+          cmake --build --preset release
+      - name: Package
+        run: cpack --config build/release/CPackConfig.cmake -G DEB -B build/release/packages
+      # actions/upload-artifact v7.0.2; immutable upstream commit.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: package-deb
+          path: build/release/packages/*.deb
+          if-no-files-found: error
+
+  # RPM package, built on Fedora so it requires Fedora's library sonames and package names.
+  rpm:
+    needs: version
+    if: needs.version.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    container: fedora:45
+    steps:
+      - name: Install dependencies
+        run: |
+          dnf install -y --setopt=install_weak_deps=False \
+            gcc-c++ cmake ninja-build pkgconf-pkg-config git rpm-build \
+            ffmpeg-free ffmpeg-free-devel \
+            qt6-qtbase-devel qt6-qtdeclarative-devel qt6-qtshadertools-devel SDL2-devel
+      # actions/checkout v7.0.1; immutable upstream commit.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+      - name: Trust the checkout
+        # The workspace is owned by another user than the container's root.
+        run: git config --global --add safe.directory "${GITHUB_WORKSPACE}"
+      - name: Configure
+        run: cmake --preset dev
+      - name: Build
+        run: cmake --build --preset dev
+      - name: Test
+        # The container has no offscreen OpenGL and ffmpeg-free has no libx264, so gb-render's
+        # video exports skip, and the tests that read their output would fail. The deb job runs
+        # them on Ubuntu.
+        run: >-
+          ctest --preset dev
+          -E '^gb_render_(export|export_readback|refuses_existing_output|manifest|manifest_gate)$'
+      - name: Build release
+        run: |
+          cmake --preset release
+          cmake --build --preset release
+      - name: Package
+        run: cpack --config build/release/CPackConfig.cmake -G RPM -B build/release/packages
+      # actions/upload-artifact v7.0.2; immutable upstream commit.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: package-rpm
+          path: build/release/packages/*.rpm
+          if-no-files-found: error
+
+  # The release is created as a draft: drafts and their files are visible only to maintainers
+  # until someone publishes the release on GitHub (ADR-0010 §7).
+  release:
+    needs: [version, deb, rpm]
+    if: needs.version.outputs.release == 'true'
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      # actions/download-artifact v8.0.2; immutable upstream commit.
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          pattern: package-*
+          path: packages
+          merge-multiple: true
+      - name: Checksums
+        working-directory: packages
+        run: |
+          sha256sum -- *.deb *.rpm > SHA256SUMS
+          cat SHA256SUMS
+      - name: Create draft release
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
-          gh release create "${GITHUB_REF_NAME}" --title "gb-cplusplus ${GITHUB_REF_NAME}" \
-            --generate-notes
+          if draft="$(gh release view "${GITHUB_REF_NAME}" --json isDraft --jq .isDraft 2>/dev/null)"; then
+            # A rerun refreshes the files of a draft, but never touches a published release.
+            if [[ "${draft}" != true ]]; then
+              echo "::error::Release ${GITHUB_REF_NAME} is already published; not replacing its files"
+              exit 1
+            fi
+            gh release upload "${GITHUB_REF_NAME}" packages/* --clobber
+          else
+            gh release create "${GITHUB_REF_NAME}" packages/* --draft --verify-tag \
+              --title "gb-cplusplus ${GITHUB_REF_NAME}" --generate-notes
+          fi

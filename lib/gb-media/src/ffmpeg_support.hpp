@@ -9,6 +9,7 @@ extern "C" {
 #include <libswscale/swscale.h>
 }
 
+#include <cstdint>
 #include <filesystem>
 #include <memory>
 #include <string>
@@ -43,5 +44,15 @@ using ScalePtr = std::unique_ptr<SwsContext, ScaleCloser>;
 [[nodiscard]] ColorMetadata color_metadata(const AVFrame &frame);
 [[nodiscard]] VideoStream describe_video_stream(const AVStream &stream, int index);
 [[nodiscard]] CodecPtr open_decoder(const AVStream &stream, int threads);
+
+// The frame's duration in its stream time base. FFmpeg 5.1 (libavutil 57.30) added
+// AVFrame::duration and FFmpeg 7 removed pkt_duration; Ubuntu 22.04 has FFmpeg 4.4.
+[[nodiscard]] inline std::int64_t frame_duration(const AVFrame &frame) {
+#if LIBAVUTIL_VERSION_INT >= AV_VERSION_INT(57, 30, 100)
+  return frame.duration;
+#else
+  return frame.pkt_duration;
+#endif
+}
 
 } // namespace gb::media::detail

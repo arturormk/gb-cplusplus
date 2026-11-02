@@ -31,9 +31,13 @@ for `--version`, and `gb-player` sends it in the map tile User-Agent.
    `release` workflow refuses a tag that differs from `cmake -P cmake/GbVersion.cmake`. Only
    even-minor tags (`v1.0`, `v1.0.1`, `v1.2`) build, test and publish a GitHub release. Odd-minor
    tags only mark development versions and never produce release artifacts.
-7. **Packaging follows even minors.** Even-minor releases will also publish `.deb` and `.rpm`
-   packages. This is deferred until before 1.0. `GB_VERSION_IS_RELEASE` is exported for the
-   packaging step.
+7. **Packaging follows even minors.** Even-minor releases also publish `.deb` and `.rpm`
+   packages, built by CPack (`cmake/GbPackaging.cmake`) from the `release` preset. The `.deb` is
+   built on Ubuntu 22.04 and the `.rpm` in a Fedora container, so each requires the library
+   sonames and package names of its own family. The `release` workflow attaches both, with a
+   `SHA256SUMS` file, to a **draft** release: nothing is public until a maintainer reviews the
+   draft and publishes it on GitHub. A rerun refreshes the files of a draft and refuses to touch a
+   published release. `./quickstart.sh` builds the same packages locally (amended 2026-11-02).
 
 ## Consequences
 

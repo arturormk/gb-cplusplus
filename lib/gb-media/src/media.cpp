@@ -34,7 +34,7 @@ RgbFrame convert_frame(const AVFrame &source, const int stream_index,
   result.stream_index = stream_index;
   result.requested_pts = requested_pts;
   result.pts = source.best_effort_timestamp;
-  result.duration = source.pkt_duration;
+  result.duration = detail::frame_duration(source);
   result.time_base = {time_base.num, time_base.den};
   result.source_color = color_metadata(source);
 

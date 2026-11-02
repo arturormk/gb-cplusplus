@@ -222,7 +222,7 @@ struct SynchronizedReader::Impl {
     }
     result.stream_index = decoder.stream->index;
     result.pts = relative_pts(decoder, *frame);
-    result.duration = frame->pkt_duration;
+    result.duration = detail::frame_duration(*frame);
     result.time_base = {decoder.stream->time_base.num, decoder.stream->time_base.den};
     result.source_color = color_metadata(*frame);
     // Mirror the CPU reference conversion: BT.709 when declared, otherwise BT.601.

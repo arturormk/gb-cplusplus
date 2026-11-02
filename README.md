@@ -33,8 +33,12 @@ For the quickest setup, run:
 
 The script detects missing Ubuntu build packages, installs them through
 `apt-get`, builds and tests the project, installs user-facing binaries under `build/dev/install`,
-and prints their paths relative to the directory from which it was invoked. Use
-`./quickstart.sh --help` for automation-friendly options.
+and prints their paths relative to the directory from which it was invoked. Run from a terminal,
+it also offers to build `.deb` and `.rpm` packages from a Release build (in
+`build/release/packages`) and, when the system uses that format, to install or reinstall the
+package system-wide; files dropped from the new package are removed on update. Use
+`./quickstart.sh --help` for automation-friendly options such as `--package deb,rpm` and
+`--install-package`.
 
 To run the individual build steps manually on Ubuntu 22.04 or newer, install `build-essential`,
 `cmake`, `ninja-build`, `pkg-config`, `ffmpeg`, and the FFmpeg/Qt development packages listed in
