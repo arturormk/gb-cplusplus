@@ -1,6 +1,6 @@
 # Dependencies
 
-## Required now (M0 through M5)
+## Required now (M0 through M6)
 
 The supported baseline is Ubuntu 22.04 or newer with:
 

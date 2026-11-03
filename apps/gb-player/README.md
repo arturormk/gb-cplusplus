@@ -104,9 +104,8 @@ Capture mode.
 - **Range**: the current position as a chapter position (`c2:00:05:31.400`), and *Set start* /
   *Set end*, which only go into the settings.
 - **Settings**: the framing as `gb.export/1` INI text (`[range]`, `[view]`, `[frame]`, and with a
-  panel `[layout]`, `[units]`, `[map] scale` and `[telemetry]`), updated live, with **Copy** and **Save as…**. They are meant for a `gb-render`
-  video export (see [`docs/plans/export/`](../../docs/plans/export/README.md); `gb-render` itself
-  is not implemented yet).
+  panel `[layout]`, `[units]`, `[map] scale` and `[telemetry]`), updated live, with **Copy** and **Save as…**. They are meant for a video export with
+  [`gb-render`](../../tools/gb-render/README.md), which reads them with `--settings`.
 
 | Input (Capture mode) | Action |
 |---|---|
@@ -258,7 +257,8 @@ for diagnosing playback that falls behind its audio; see
   software backend, decoding, presentation and telemetry still work, but no image is shown.
 - Audio: the first mono or stereo stream plays through SDL2 (`--no-audio` disables it). The MAX
   four-channel spatial track is not rendered. Hardware decoding (VA-API), edit lists,
-  a joined timeline across chapters, and video export are not implemented.
+  and a joined timeline across chapters are not implemented. Video export is done by
+  [`gb-render`](../../tools/gb-render/README.md), not by the player.
 - Capture mode needs an OpenGL 3.3 (or OpenGL ES 3.0) context for offscreen rendering. Captures
   have no overlays; those are for `gb-render`.
 - Photos: only the first JPEG codestream is shown; other MPF entries are ignored. The APP6

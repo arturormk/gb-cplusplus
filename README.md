@@ -6,9 +6,10 @@
 [![tools/ built with Codex](https://img.shields.io/badge/tools%2F_built_with-Codex-412991?logo=openai&logoColor=white)](https://openai.com/codex)
 
 `gb-cplusplus` is the C++20/Linux implementation of an independent open-source toolkit for
-advanced GoPro camera users. Its current laboratory tools inspect containers and GPMF, extract
-timestamped GPS telemetry, and diagnose media/GPS clock relationships. GoBro is a provisional
-public-facing name and is not affiliated with, endorsed by, or sponsored by GoPro.
+advanced GoPro camera users. It provides a desktop player for original recordings and photos, a
+video exporter with map and telemetry overlays, and laboratory tools that inspect containers and
+GPMF, extract timestamped GPS telemetry, and diagnose media/GPS clock relationships. GoBro is a
+provisional public-facing name and is not affiliated with, endorsed by, or sponsored by GoPro.
 
 The M0 baseline, M1 container/metadata laboratory, M2 telemetry/timing laboratory, and M3 native
 video reconstruction/projection laboratory are complete, and the M4 player baseline and M5 map
@@ -18,7 +19,11 @@ original MAX `.360` recordings directly, with GPU spherical viewing, accurate se
 telemetry and metadata panels, synchronized audio that plays only during stable playback (never
 while scrubbing or seeking), a live OpenStreetMap route map with click-to-seek, and performance
 diagnostics. It also opens MAX JPEG photos, with spherical viewing for 360° and superwide photos,
-their EXIF position on the map, and their capture settings.
+their EXIF position on the map, and their capture settings. Its Capture mode frames stills and
+saves the framing as settings for `gb-render`, which exports video (H.264 or HEVC, MP4 or MKV)
+with telemetry text, a route map and speed/height graphs, over the picture or on a side panel,
+across chapters. The M6 export milestone is in progress; see
+[`docs/TODO-Before-V1.0.md`](docs/TODO-Before-V1.0.md).
 
 ![gb-player playing a GoPro recording of a dirt track, with the OpenStreetMap route map and the
 synchronized GPS telemetry panel on the right](docs/screenshots/gb-player.jpg)
