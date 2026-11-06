@@ -32,6 +32,10 @@ recordings read-only and plays them without conversion:
   `GP__nnnn.JPG`, are shown flat with zoom and pan. There is no transport, timeline, height/speed
   graph or audio. See [Photos](#photos) and ADR-0011.
 
+![gb-player playing a GoPro recording of a walk along a gravel track, with the OpenStreetMap
+route map, the synchronized GPS telemetry panel and the height graph on the
+right](../../docs/screenshots/gb-player.jpg)
+
 ## Use
 
 ```sh

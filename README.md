@@ -25,8 +25,13 @@ with telemetry text, a route map and speed/height graphs, over the picture or on
 across chapters. The M6 export milestone is in progress; see
 [`docs/TODO-Before-V1.0.md`](docs/TODO-Before-V1.0.md).
 
-![gb-player playing a GoPro recording of a dirt track, with the OpenStreetMap route map and the
-synchronized GPS telemetry panel on the right](docs/screenshots/gb-player.jpg)
+![gb-player playing a GoPro recording of a walk along a gravel track, with the OpenStreetMap
+route map, the synchronized GPS telemetry panel and the height graph on the
+right](docs/screenshots/gb-player.jpg)
+
+![A frame exported by gb-render: a ride along a dirt road with the clock, speed, altitude and
+distance drawn over the picture and a round OpenStreetMap route map in the top right
+corner](docs/screenshots/gb-render.jpg)
 
 ## Build and test
 

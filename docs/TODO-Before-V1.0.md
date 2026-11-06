@@ -55,8 +55,8 @@ Plan: [`plans/lens-modes.md`](plans/lens-modes.md).
       builds and installs them locally.
 - [ ] Review the first draft (`v1.0`): install the `.deb` on Ubuntu and the `.rpm` on Fedora
       before publishing it.
-- [ ] Better README screenshots: a MAX `.360` in a spherical view instead of the flat MP4, and a
-      Capture mode or `gb-render` frame.
+- [ ] Better README screenshots: a MAX `.360` in a spherical view instead of the flat MP4. (A
+      `gb-render` frame is in place.)
 - [ ] `VERSION` to `1.0`, a 1.0 section in `CHANGELOG.md`, tag `v1.0`.
 
 ## To decide: do before v1.0 or drop explicitly

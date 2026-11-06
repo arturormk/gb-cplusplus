@@ -6,6 +6,9 @@ settings files and options, so it can be repeated exactly. The design is in
 [`docs/plans/export/`](../../docs/plans/export/README.md) and
 [ADR-0013](../../docs/adr/0013-video-export-with-gb-render.md).
 
+![A frame exported by gb-render: the clock, speed, altitude and distance drawn over the picture
+and a round OpenStreetMap route map in the top right corner](../../docs/screenshots/gb-render.jpg)
+
 ```sh
 gb-render --example-settings > ride.ini          # a commented settings file to start from
 gb-render GH010073.MP4 --settings framing.ini --settings ride.ini --dry-run
