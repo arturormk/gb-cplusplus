@@ -46,6 +46,17 @@ qt_add_resources(gb_player "gb_player_resources"
     qml/Timeline.qml
     qml/ToggleButton.qml)
 
+# Application icon: icons/gb-player.svg is the source; the PNGs are rendered from it with
+# `rsvg-convert -w N -h N`, so no SVG image plugin is needed at run time.
+set(GB_PLAYER_ICON_SIZES 16 24 32 48 64 128 256)
+set(GB_PLAYER_ICON_FILES)
+foreach(size IN LISTS GB_PLAYER_ICON_SIZES)
+  list(APPEND GB_PLAYER_ICON_FILES icons/gb-player-${size}.png)
+endforeach()
+qt_add_resources(gb_player "gb_player_icons"
+  PREFIX "/"
+  FILES ${GB_PLAYER_ICON_FILES})
+
 target_link_libraries(gb_player PRIVATE
   gb::render gb::exporting gb::media gb::telemetry gb::container gb::image gb::metadata gb::geo gb::tiles gb_project_options
   Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::Widgets PkgConfig::GB_SDL2)
@@ -54,3 +65,13 @@ target_compile_definitions(gb_player PRIVATE
   GB_PLAYER_DISPLAY_NAME="${GB_PLAYER_DISPLAY_NAME}")
 
 install(TARGETS gb_player RUNTIME DESTINATION bin)
+
+# Desktop integration: launcher entry and the icon in the hicolor theme.
+configure_file(icons/gb-player.desktop.in "${CMAKE_CURRENT_BINARY_DIR}/gb-player.desktop" @ONLY)
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/gb-player.desktop" DESTINATION share/applications)
+install(FILES icons/gb-player.svg DESTINATION share/icons/hicolor/scalable/apps)
+foreach(size IN LISTS GB_PLAYER_ICON_SIZES)
+  install(FILES icons/gb-player-${size}.png
+    DESTINATION share/icons/hicolor/${size}x${size}/apps
+    RENAME gb-player.png)
+endforeach()

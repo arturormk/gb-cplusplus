@@ -17,6 +17,7 @@
 #include <QTimer>
 
 #include <QElapsedTimer>
+#include <QIcon>
 #include <QImage>
 
 #include <algorithm>
@@ -273,6 +274,13 @@ int main(int argc, char **argv) {
   QCoreApplication::setApplicationName(QStringLiteral("gb-player"));
   QCoreApplication::setApplicationVersion(QStringLiteral(GB_PLAYER_VERSION));
   QCoreApplication::setOrganizationName(QStringLiteral("gb"));
+  // Wayland compositors find the icon through the desktop entry; X11 uses the window icon.
+  QGuiApplication::setDesktopFileName(QStringLiteral("gb-player"));
+  QIcon icon;
+  for (const int size : {16, 24, 32, 48, 64, 128, 256}) {
+    icon.addFile(QStringLiteral(":/icons/gb-player-%1.png").arg(size), QSize(size, size));
+  }
+  QApplication::setWindowIcon(icon);
   qmlRegisterType<VideoView>("Gb.Player", 1, 0, "VideoView");
   qmlRegisterType<MapView>("Gb.Player", 1, 0, "MapView");
   qmlRegisterType<PanelPreview>("Gb.Player", 1, 0, "PanelPreview");

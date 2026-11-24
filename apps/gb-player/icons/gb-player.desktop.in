@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=@GB_PLAYER_DISPLAY_NAME@
+GenericName=360° Video and Photo Player
+Comment=Play GoPro recordings and photos with spherical viewing, telemetry and a route map
+Exec=gb-player %f
+Icon=gb-player
+Terminal=false
+Categories=AudioVideo;Video;Player;Qt;
+MimeType=video/mp4;image/jpeg;
+Keywords=GoPro;360;spherical;panorama;GPS;telemetry;video;photo;
+StartupWMClass=gb-player
