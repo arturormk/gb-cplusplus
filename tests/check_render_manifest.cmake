@@ -11,6 +11,12 @@ foreach(variable MANIFEST GB_TIME RECORDING)
   endif()
 endforeach()
 
+# gb_render_manifest skips without an OpenGL context and writes no manifest.
+if(NOT EXISTS "${MANIFEST}")
+  message("manifest gate: skipped, no manifest (offscreen rendering is unavailable)")
+  return()
+endif()
+
 file(READ "${MANIFEST}" manifest)
 string(JSON schema GET "${manifest}" schema)
 if(NOT schema STREQUAL "gb.render.manifest/v1")

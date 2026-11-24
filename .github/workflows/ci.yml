@@ -38,10 +38,13 @@ jobs:
             qml6-module-qtqml qml6-module-qtqml-models qml6-module-qtqml-workerscript \
             qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts \
             qml6-module-qtquick-nativestyle qml6-module-qtquick-templates \
-            qml6-module-qtquick-window libsdl2-dev
+            qml6-module-qtquick-window libsdl2-dev \
+            xvfb xauth libgl1-mesa-dri libegl1 libglx-mesa0
       - name: Configure
         run: cmake --preset dev -DGB_WARNINGS_AS_ERRORS=ON
       - name: Build
         run: cmake --build --preset dev
+      # Qt's offscreen platform makes its OpenGL contexts through GLX, so the render and capture
+      # tests need an X server; Xvfb with Mesa llvmpipe gives them one without a GPU.
       - name: Test
-        run: ctest --preset dev
+        run: xvfb-run -a ctest --preset dev

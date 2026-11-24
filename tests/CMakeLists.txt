@@ -418,10 +418,14 @@ set_tests_properties(gb_render_export PROPERTIES
   SKIP_REGULAR_EXPRESSION "offscreen rendering is unavailable"
   PASS_REGULAR_EXPRESSION "wrote .*export.mp4 .*50 frames, libx264 320.+180, aac 48000 Hz, mp4")
 # The export is read back: 50 frames at 25 fps from 0, two seconds of audio, no source metadata.
+# CTest runs a fixture's dependents when its setup is skipped, not only when it passes: without
+# an OpenGL context gb_render_export writes nothing, and the tests that read its output skip too.
 add_test(NAME gb_render_export_readback
-  COMMAND gb_frames --list --json "${GB_CLI_FIXTURE_DIR}/export.mp4")
+  COMMAND sh -c "test -f \"$1\" || { echo 'skipped: no export (offscreen rendering is unavailable)'; exit 77; }; exec \"$0\" --list --json \"$1\""
+    "$<TARGET_FILE:gb_frames>" "${GB_CLI_FIXTURE_DIR}/export.mp4")
 set_tests_properties(gb_render_export_readback PROPERTIES
   FIXTURES_REQUIRED gb_render_output
+  SKIP_RETURN_CODE 77
   PASS_REGULAR_EXPRESSION "\"width\": 320.*\"height\": 180")
 add_test(NAME gb_render_refuses_existing_output
   COMMAND gb_render_tool "${GB_CLI_FIXTURE_DIR}/audio-gating.mp4" --duration 1
@@ -429,6 +433,7 @@ add_test(NAME gb_render_refuses_existing_output
 set_tests_properties(gb_render_refuses_existing_output PROPERTIES
   FIXTURES_REQUIRED gb_render_output
   ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+  SKIP_REGULAR_EXPRESSION "offscreen rendering is unavailable"
   PASS_REGULAR_EXPRESSION "exists; use --overwrite")
 add_test(NAME gb_render_rejects_bad_range
   COMMAND gb_render_tool "${GB_CLI_FIXTURE_DIR}/audio-gating.mp4" --start c2:00:00:01 --dry-run)
@@ -473,6 +478,7 @@ add_test(NAME gb_render_manifest_gate
     -P "${CMAKE_CURRENT_SOURCE_DIR}/check_render_manifest.cmake")
 set_tests_properties(gb_render_manifest_gate PROPERTIES
   FIXTURES_REQUIRED gb_render_manifest_output
+  SKIP_REGULAR_EXPRESSION "manifest gate: skipped"
   PASS_REGULAR_EXPRESSION "manifest gate: 25 frames match nearest_point")
 add_test(NAME gb_render_rejects_manifest_dry_run
   COMMAND gb_render_tool "${GB_CLI_FIXTURE_DIR}/render-gps.mp4" --dry-run
